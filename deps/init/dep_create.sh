@@ -122,6 +122,9 @@ function get_os_release() {
         version_ge "12" && compat_centos9 && return
         version_ge "9" && compat_centos7 && return
         ;;
+      kali)
+        compat_centos9 && return
+        ;;
       fedora)
         version_ge "33" && compat_centos7 && return
         ;;
@@ -180,6 +183,9 @@ function get_os_release() {
       debian)
         version_ge "12" && compat_centos9 && return
         version_ge "9" && compat_centos7 && return
+        ;;
+      kali)
+        compat_centos9 && return
         ;;
       kylin)
         version_ge "V10" && compat_centos8 && return
