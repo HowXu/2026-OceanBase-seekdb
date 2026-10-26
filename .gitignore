@@ -264,3 +264,5 @@ seekdb_data/
 
 /deps/android/
 /deps/wasm/
+
+run_temp/

@@ -28,6 +28,7 @@ LINUX_RELEASES = {
     "anolis": ((23, "el9"), (8, "el8"), (7, "el7")),
     "ubuntu": ((22.04, "el9"), (16.04, "el7")),
     "debian": ((12, "el9"), (9, "el7")),
+    "kali": ((0, "el9"),),  # Rolling release; VERSION_ID is not a Debian version.
     "fedora": ((33, "el7"),),
     "kylin": ((10, "el8"),),
     "openEuler": ((22, "el9"),),

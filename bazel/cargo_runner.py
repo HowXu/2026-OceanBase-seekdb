@@ -84,6 +84,10 @@ if target:
     # MSVC Rust targets use link.exe syntax, not the C compiler's syntax.
     if not target.endswith("_msvc"):
         environment["CARGO_TARGET_" + target.upper() + "_LINKER"] = str(cc)
+    if target.endswith("_unknown_linux_gnu"):
+        # Match the C++ toolchain; bundled GNU ld cannot read modern glibc's RELR sections.
+        flags = "CARGO_TARGET_" + target.upper() + "_RUSTFLAGS"
+        environment[flags] = (environment.get(flags, "") + " -C link-arg=-fuse-ld=lld").strip()
 command = args.command[1:] if args.command[:1] == ["--"] else args.command
 for index, argument in enumerate(command):
     for key in ("CARGO_WORKSPACE", "CARGO_TARGET_DIR", "CARGO"):
