@@ -131,6 +131,11 @@ public:
 };
 
 /**
+ * @brief The name of a type, as it is shown by a describe.
+ */
+const char *type_name(Type type);
+
+/**
  * @brief Infer the type of a single textual value.
  */
 Type infer_type(const std::string &text);

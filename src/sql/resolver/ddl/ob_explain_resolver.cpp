@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/ddl/ob_explain_resolver.h"
 #include "sql/resolver/ob_resolver.h"
+#include "sql/parser/ob_parser.h"
+#include "sql/engine/basic/ob_file_scan_utils.h"
 
 using namespace oceanbase;
 using namespace sql;
@@ -26,6 +28,88 @@ const static int64_t EXPLAIN_DISPLAY_OPTION = 1;
 const static int64_t EXPLAIN_INTO_TABLE = 2;
 const static int64_t EXPLAIN_STMT_ID = 3;
 const static int64_t EXPLAIN_CHILD_STMT = 4;
+namespace {
+
+void append_quoted_text(std::string &sql, const common::ObString &value)
+{
+  sql.append("'");
+  for (int64_t i = 0; i < value.length(); ++i) {
+    const char item = value.ptr()[i];
+    if ('\\' == item || '\'' == item) {
+      sql.push_back('\\');
+    }
+    sql.push_back(item);
+  }
+  sql.append("'");
+}
+
+} // namespace
+
+int ObExplainResolver::resolve_file_table_columns(ObStmt *child_stmt)
+{
+  int ret = OB_SUCCESS;
+  const ObFileTableDef *table_def = NULL;
+  if (OB_ISNULL(child_stmt) || !child_stmt->is_select_stmt()) {
+    ret = OB_NOT_SUPPORTED;
+  } else {
+    ObSelectStmt *select_stmt = static_cast<ObSelectStmt *>(child_stmt);
+    common::ObIArray<TableItem *> &table_items = select_stmt->get_table_items();
+    for (int64_t i = 0; OB_SUCC(ret) && i < table_items.count(); ++i) {
+      TableItem *table_item = table_items.at(i);
+      if (OB_NOT_NULL(table_item) && table_item->is_file_table()
+          && OB_NOT_NULL(table_item->file_table_def_)) {
+        table_def = table_item->file_table_def_;
+        break;
+      }
+    }
+    if (OB_ISNULL(table_def)) {
+      ret = OB_NOT_SUPPORTED;
+    }
+  }
+  if (OB_SUCC(ret)) {
+    // the columns of the file, in the shape of a describe
+    std::string sql;
+    for (int64_t i = 0; OB_SUCC(ret) && i < table_def->columns_.count(); ++i) {
+      const ObFileTableColumnDef &column = table_def->columns_.at(i);
+      if (i > 0) {
+        sql.append(" UNION ALL ");
+      }
+      sql.append("SELECT ");
+      append_quoted_text(sql, column.name_);
+      sql.append(" AS column_name, ");
+      sql.append("'");
+      sql.append(file_sql::type_name(static_cast<file_sql::Type>(column.type_)));
+      sql.append("'");
+      sql.append(" AS column_type, ");
+      sql.append(column.nullable_ ? "'YES'" : "'NO'");
+      sql.append(" AS `null`, NULL AS `key`, NULL AS `default`, NULL AS `extra` FROM dual");
+    }
+    ParseResult parse_result;
+    ObParser parser(*allocator_, session_info_->get_sql_mode(), session_info_->get_charsets4parser());
+    if (OB_FAIL(parser.parse(common::ObString(sql.c_str(), sql.length()), parse_result))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("cannot parse the columns of the file", K(ret));
+    } else {
+      ObResolver resolver(params_);
+      ObStmt *column_stmt = NULL;
+      if (OB_FAIL(resolver.resolve(ObResolver::IS_NOT_PREPARED_STMT,
+                                  *parse_result.result_tree_,
+                                  column_stmt))) {
+      } else if (OB_ISNULL(column_stmt)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        stmt_ = column_stmt;
+      }
+      parser.free_result(parse_result);
+    }
+  }
+  if (OB_NOT_SUPPORTED == ret) {
+    // the statement does not read a file, the plan is the answer
+    ret = OB_SUCCESS;
+  }
+  return ret;
+}
+
 int ObExplainResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
@@ -64,6 +148,10 @@ int ObExplainResolver::resolve(const ParseNode &parse_tree)
         LOG_WARN("failed to generate stmt for child stmt");
       } else {
         explain_stmt->set_explain_query_stmt(static_cast<ObDMLStmt *>(child_stmt));
+        if (OB_SUCC(ret) && 1 == parse_tree.value_) {
+          /* a describe asks for the columns, not for a plan */
+          ret = resolve_file_table_columns(child_stmt);
+        }
         ParseNode *format = parse_tree.children_[EXPLAIN_FORMAT];
         if (NULL != format) {
           switch (format->type_) {

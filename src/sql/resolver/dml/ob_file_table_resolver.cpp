@@ -42,24 +42,6 @@ enum ObFileTableFunctionId
   FILE_TABLE_GLOB = 5,
 };
 
-static const char *file_table_type_name(const int32_t type)
-{
-  switch (type) {
-    case static_cast<int32_t>(file_sql::Type::Boolean):
-      return "BOOLEAN";
-    case static_cast<int32_t>(file_sql::Type::Bigint):
-      return "BIGINT";
-    case static_cast<int32_t>(file_sql::Type::Double):
-      return "DOUBLE";
-    case static_cast<int32_t>(file_sql::Type::Date):
-      return "DATE";
-    case static_cast<int32_t>(file_sql::Type::Datetime):
-      return "DATETIME";
-    default:
-      return "VARCHAR";
-  }
-}
-
 static int file_table_type_to_obj_meta(const int32_t file_type,
                                        ObObjMeta &meta,
                                        ObAccuracy &accuracy)

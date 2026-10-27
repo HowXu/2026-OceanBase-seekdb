@@ -1324,6 +1324,26 @@ private:
 // Public interface
 // ---------------------------------------------------------------------------
 
+const char *type_name(Type type)
+{
+  switch (type) {
+    case Type::Boolean:
+      return "BOOLEAN";
+    case Type::Bigint:
+      return "BIGINT";
+    case Type::Double:
+      return "DOUBLE";
+    case Type::Date:
+      return "DATE";
+    case Type::Datetime:
+      return "DATETIME";
+    case Type::Null:
+      return "NULL";
+    default:
+      return "VARCHAR";
+  }
+}
+
 Type infer_type(const std::string &text)
 {
   const std::string value = trim(text);
