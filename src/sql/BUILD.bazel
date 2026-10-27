@@ -227,6 +227,18 @@ cc_library(
     visibility = ["//src/observer:__pkg__"],
 )
 
+# Test-only access does not change the production SQL header boundary.
+seekdb_test_interface(
+    name = "ai_function_test_headers",
+    deps = [
+        ":sql_unit_test_interface",
+        "@seekdb_3rd_headers//:curl_headers",
+        "//src/share:json_access",
+    ],
+    tags = ["manual"],
+    visibility = ["//unittest/sql/engine/expr:__pkg__"],
+)
+
 # Private means private to the SQL module, not private to one Unity action.
 # Submodule header owners are visible only through this SQL-internal seam.
 cc_library(

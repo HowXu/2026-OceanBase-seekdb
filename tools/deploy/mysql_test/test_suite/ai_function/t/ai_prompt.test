@@ -29,7 +29,7 @@ select ai_prompt(json_object("a","1"));
 --error 5083
 select ai_prompt('{0}+{1}={2} 吗？请回答true或false',1);
 
-# 表达式支持类型  支持任意数量的输入，要求都是varchar长度内的字符串，不支持其他类型，不允许输入null
+# 模板支持字符串与 TEXT/BLOB；参数还支持 JSON，不允许输入 SQL NULL
 # test  
 --disable_warnings
 drop table if exists t1;
@@ -48,7 +48,7 @@ select ai_prompt(c) from t1;
 drop table t1;
 
 
-# text/blob/longtext 模板支持
+# 数字模板仍不支持；TEXT/BLOB 模板读取真实文本内容
 --disable_warnings
 drop table if exists t1;
 --enable_warnings
