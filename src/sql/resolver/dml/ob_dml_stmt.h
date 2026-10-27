@@ -129,6 +129,47 @@ struct ObValuesTableDef {
                        K(access_type_), K(is_const_), K(column_types_));
 };
 
+/**
+ * @brief One column of a file table.
+ *
+ * The type is the type of the value in the file, it is one of the values of
+ * the file_sql::Type enumeration.
+ */
+struct ObFileTableColumnDef
+{
+  ObFileTableColumnDef() : name_(), type_(0), nullable_(false), scale_(0) {}
+  common::ObString name_;
+  int32_t type_;
+  bool nullable_;
+  int32_t scale_;
+};
+
+/**
+ * @brief The description of a file table.
+ *
+ * The definition holds the serialized file_sql::Definition, it describes the
+ * columns of the file and remembers the state of the file when the schema was
+ * inferred so that a modified file is detected while it is read.
+ */
+struct ObFileTableDef
+{
+  ObFileTableDef()
+    : path_(), pattern_(), root_(), is_glob_(false), definition_(), columns_() {}
+
+  int deep_copy(const ObFileTableDef &src, common::ObIAllocator *allocator);
+
+  // the canonical path of the file
+  common::ObString path_;
+  // the pattern of a glob table
+  common::ObString pattern_;
+  // the only directory the file may live in, the value of secure_file_priv
+  common::ObString root_;
+  bool is_glob_;
+  // the serialized file_sql::Definition, empty for a glob table
+  common::ObString definition_;
+  common::ObSEArray<ObFileTableColumnDef, 8, common::ModulePageAllocator, true> columns_;
+};
+
 struct TableItem
 {
   TableItem()
@@ -156,6 +197,7 @@ struct TableItem
     table_type_ = MAX_TABLE_TYPE;
     values_table_def_ = NULL;
     sample_info_ = nullptr;
+    file_table_def_ = nullptr;
   }
 
   virtual TO_STRING_KV(N_TID, table_id_,
@@ -190,6 +232,7 @@ struct TableItem
     JSON_TABLE,
     VALUES_TABLE,
     LATERAL_TABLE,
+    FILE_TABLE,
   };
 
   /**
@@ -224,6 +267,7 @@ struct TableItem
   bool is_function_table() const { return FUNCTION_TABLE == type_; }
   bool is_json_table() const { return JSON_TABLE == type_; }  // json_table_def_->table_type_ == MulModeTableType::OB_ORA_JSON_TABLE_TYPE
   bool is_values_table() const { return VALUES_TABLE == type_; }//used to mark values statement: values row(1,2), row(3,4);
+  bool is_file_table() const { return FILE_TABLE == type_; }
 
   bool is_lateral_table() const { return LATERAL_TABLE == type_; }
   bool is_extended_all_or_user_sys_view() const
@@ -263,6 +307,9 @@ struct TableItem
   int deep_copy_values_table_def(const ObValuesTableDef& table_def,
                                  ObIRawExprCopier &expr_copier,
                                  ObIAllocator* allocator);
+  int deep_copy_file_table_def(const ObFileTableDef& table_def,
+                               ObIRawExprCopier &expr_copier,
+                               ObIAllocator* allocator);
   virtual bool has_for_update() const { return for_update_; }
   // if real table id, it is valid for all threads,
   // else if generated id, it is unique just during the thread session
@@ -303,6 +350,8 @@ struct TableItem
   ObJsonTableDef *json_table_def_;
   // values table
   ObValuesTableDef *values_table_def_;
+  // file table
+  ObFileTableDef *file_table_def_;
   // sample scan infos
   SampleInfo *sample_info_;
 };

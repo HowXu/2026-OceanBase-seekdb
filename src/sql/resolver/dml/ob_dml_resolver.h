@@ -205,6 +205,8 @@ public:
   int resolve_joined_table_item(const ParseNode &parse_node, JoinedTable *&joined_table);
   int resolve_function_table_item(const ParseNode &table_node,
                                   TableItem *&table_item);
+  int resolve_file_table_item(const ParseNode &table_node,
+                               TableItem *&table_item);
   int resolve_json_table_item(const ParseNode &table_node,
                               TableItem *&table_item);
   int resolve_unnest_item(const ParseNode &table_node, TableItem *&table_item);
@@ -626,6 +628,17 @@ protected:
                                          const ObString &column_name,
                                          uint64_t column_id,
                                          ColumnItem *&col_item);
+  int resolve_file_table_column_item(const TableItem &table_item,
+                                      ObIArray<ColumnItem> &col_items);
+  int resolve_file_table_column_item(const TableItem &table_item,
+                                      const common::ObString &column_name,
+                                      ColumnItem *&col_item);
+  int resolve_file_table_column_item(const TableItem &table_item,
+                                      const common::ObObjMeta &meta_type,
+                                      const common::ObAccuracy &accuracy,
+                                      const ObString &column_name,
+                                      uint64_t column_id,
+                                      ColumnItem *&col_item);
   int resolve_generated_table_column_item(const TableItem &table_item,
                                           const common::ObString &column_name,
                                           ColumnItem *&col_item,

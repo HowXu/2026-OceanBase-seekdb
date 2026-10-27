@@ -116,10 +116,14 @@ cc_library(
     deps = [
         "//src/oblib:common_sql_mode",
         "//src/query:_sql_parser_types",
+        "//src/share:cache",
     ],
     includes = ["."],
     tags = ["manual"],
-    visibility = ["//src/sql:__subpackages__"],
+    visibility = [
+        "//src/sql:__subpackages__",
+        "//unittest/sql:__subpackages__",
+    ],
 )
 
 # The Observer retrieval composition target needs the concrete boolean-query
@@ -173,6 +177,7 @@ cc_library(
     ],
     copts = C_COPTS,
     tags = ["manual"],
+    visibility = ["//unittest/sql/parser:__pkg__"],
 )
 
 cc_library(
@@ -208,6 +213,7 @@ cc_library(
     ],
     copts = CXX_COPTS,
     tags = ["manual"],
+    visibility = ["//unittest/sql/parser:__pkg__"],
 )
 
 cc_library(

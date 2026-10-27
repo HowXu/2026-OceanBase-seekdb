@@ -143,6 +143,12 @@ public:
   static int check_function_table_column_exist(const TableItem &table_item,
                                                ObResolverParams &params,
                                                const ObString &column_name);
+  static int get_all_file_table_column_names(const TableItem &table_item,
+                                              ObResolverParams &params,
+                                              ObIArray<ObString> &column_names);
+  static int check_file_table_column_exist(const TableItem &table_item,
+                                           ObResolverParams &params,
+                                           const ObString &column_name);
   static int check_json_table_column_exists(const TableItem &table_item,
                                            ObResolverParams &params,
                                            const ObString &column_name,

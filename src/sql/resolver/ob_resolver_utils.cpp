@@ -210,6 +210,40 @@ int ObResolverUtils::check_function_table_column_exist(const TableItem &table_it
   return ret;
 }
 
+int ObResolverUtils::get_all_file_table_column_names(const TableItem &table_item,
+                                                      ObResolverParams &params,
+                                                      ObIArray<ObString> &column_names)
+{
+  int ret = OB_SUCCESS;
+  CK (OB_LIKELY(table_item.is_file_table()));
+  CK (OB_NOT_NULL(table_item.file_table_def_));
+  const ObFileTableDef &table_def = *table_item.file_table_def_;
+  for (int64_t i = 0; OB_SUCC(ret) && i < table_def.columns_.count(); ++i) {
+    ret = column_names.push_back(table_def.columns_.at(i).name_);
+  }
+  return ret;
+}
+
+int ObResolverUtils::check_file_table_column_exist(const TableItem &table_item,
+                                                   ObResolverParams &params,
+                                                   const ObString &column_name)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<ObString, 16> column_names;
+  bool exist = false;
+  OZ (get_all_file_table_column_names(table_item, params, column_names));
+  for (int64_t i = 0; OB_SUCC(ret) && i < column_names.count(); ++i) {
+    if (ObCharset::case_insensitive_equal(column_names.at(i), column_name)) {
+      exist = true;
+      break;
+    }
+  }
+  if (!exist) {
+    ret = OB_ERR_BAD_FIELD_ERROR;
+  }
+  return ret;
+}
+
 
 
 int ObResolverUtils::check_json_table_column_exists(const TableItem &table_item,

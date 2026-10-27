@@ -1067,6 +1067,7 @@ SQL_UNITY_GROUPS = [
             "src/sql/optimizer/ob_log_granule_iterator.cpp",
             "src/sql/optimizer/ob_log_group_by.cpp",
             "src/sql/optimizer/ob_log_insert.cpp",
+            "src/sql/optimizer/ob_log_file_table.cpp",
             "src/sql/optimizer/ob_log_join.cpp",
             "src/sql/optimizer/ob_log_join_filter.cpp",
             "src/sql/optimizer/ob_log_json_table.cpp",
@@ -1374,6 +1375,7 @@ SQL_UNITY_GROUPS = [
             "src/sql/resolver/dml/ob_delete_stmt.cpp",
             "src/sql/resolver/dml/ob_dml_resolver.cpp",
             "src/sql/resolver/dml/ob_dml_stmt.cpp",
+            "src/sql/resolver/dml/ob_file_table_resolver.cpp",
             "src/sql/resolver/dml/ob_group_by_checker.cpp",
             "src/sql/resolver/dml/ob_insert_resolver.cpp",
             "src/sql/resolver/dml/ob_insert_stmt.cpp",
@@ -1514,6 +1516,7 @@ SQL_UNITY_GROUPS = [
         srcs = [
             "src/sql/engine/basic/ob_file_scan_utils.cpp",
             "src/sql/engine/basic/ob_file_parquet_scan.cpp",
+            "src/sql/engine/basic/ob_file_table_op.cpp",
         ],
     ),
 ]

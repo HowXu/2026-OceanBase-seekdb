@@ -2701,6 +2701,10 @@ int ObDMLResolver::resolve_table(const ParseNode &parse_tree,
         OZ (resolve_function_table_item(*table_node, table_item));
         break;
       }
+      case T_FILE_TABLE_EXPRESSION: {
+        OZ (resolve_file_table_item(*table_node, table_item));
+        break;
+      }
       case T_JSON_TABLE_EXPRESSION: {
         OZ (resolve_json_table_item(*table_node, table_item));
         break;
@@ -3079,6 +3083,9 @@ int ObDMLResolver::resolve_single_table_column_item(const TableItem &table_item,
     }
   } else if (table_item.is_function_table()) {
     if (OB_FAIL(resolve_function_table_column_item(table_item, column_name, col_item))) {
+    }
+  } else if (table_item.is_file_table()) {
+    if (OB_FAIL(resolve_file_table_column_item(table_item, column_name, col_item))) {
     }
   } else if (table_item.is_json_table()) {
     if (OB_FAIL(resolve_json_table_column_item(table_item, column_name, col_item))) {
@@ -8371,6 +8378,10 @@ int ObDMLResolver::get_columns_from_table_item(const TableItem *table_item, ObIA
     OZ (ObResolverUtils::get_all_function_table_column_names(*table_item,
                                                              params_,
                                                              column_names));
+  } else if (table_item->is_file_table()) {
+    OZ (ObResolverUtils::get_all_file_table_column_names(*table_item,
+                                                        params_,
+                                                        column_names));
   } else if (table_item->is_basic_table() || table_item->is_fake_cte_table()) {
     /**
      * LINK_TABLE and CTE_TABLE is same as BASIC_TABLE or ALIAS_TABLE
