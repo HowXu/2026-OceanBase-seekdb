@@ -52,7 +52,7 @@ OK
 
 覆盖了省略 Ollama key、非对象/无效 JSON、HTTP 错误、断连、全 NULL、逐行变化维度、重复/缺失 index、跨批次失败，以及失败后继续执行普通 SQL。
 
-自写 Mock/Python 测试随归档提交保留，按提测要求在下一提交删除，可从 Git 历史恢复：
+自写 Mock/Python 测试已归档于 `ecac503b1`，并从后续提测版本删除。需要时可从该提交恢复：
 
 ```text
 unittest/sql/engine/expr/mock_ai_service.py
@@ -92,4 +92,4 @@ python3 build.py test //unittest/sql/engine/expr:test_ai_function_utils \
 - 验证结束后停止本次启动的测试实例。
 - 本地 Mock 使用端口 `8000`，由测试启动并关闭。
 
-提测前后均可通过 Git 历史恢复自写 Mock/Python 回归文件；它们不是生产实现依赖。
+题目指定路径的 C++ 单测和既有 mysqltest 修改保留；本次清理只移除上述两个自写 Mock/Python 文件。它们不是生产实现依赖。
