@@ -1508,6 +1508,14 @@ SQL_UNITY_GROUPS = [
             "src/sql/tablelock/ob_mysql_lock_table_executor.cpp",
         ],
     ),
+    struct(
+        name = "ob_sql_engine_file_sql",
+        language = "c++",
+        srcs = [
+            "src/sql/engine/basic/ob_file_scan_utils.cpp",
+            "src/sql/engine/basic/ob_file_parquet_scan.cpp",
+        ],
+    ),
 ]
 
 SQL_SIMD_UNITY_GROUPS = [

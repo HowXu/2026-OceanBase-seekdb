@@ -171,6 +171,14 @@ cc_library(
 # engine. Expose only the two concrete SQL types needed to bind that engine;
 # the rest of SQL's implementation headers remain SQL-private.
 cc_library(
+    name = "file_sql_test_headers",
+    testonly = True,
+    deps = [":sql_runtime_interface"],
+    tags = ["manual"],
+    visibility = ["//unittest/sql/engine/basic:__pkg__"],
+)
+
+cc_library(
     name = "sql_retrieval_composition_headers",
     hdrs = _SQL_RETRIEVAL_COMPOSITION_HEADERS,
     deps = [

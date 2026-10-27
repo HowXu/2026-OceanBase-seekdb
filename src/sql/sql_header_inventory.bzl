@@ -196,6 +196,8 @@ SQL_INTERFACE_CLOSURE_HEADERS = [
     "engine/basic/ob_batch_result_holder.h",
     "engine/basic/ob_chunk_datum_store.h",
     "engine/basic/ob_chunk_row_store.h",
+    "engine/basic/ob_file_parquet_scan.h",
+    "engine/basic/ob_file_scan_utils.h",
     "engine/basic/ob_pushdown_filter.h",
     "engine/basic/ob_ra_row_store.h",
     "engine/basic/ob_sql_mem_callback.h",
