@@ -1,0 +1,6 @@
+select json_extract(ai_prompt('{0}', json_object('a', 1)), '$.args[0].a');
+json_extract(ai_prompt('{0}', json_object('a', 1)), '$.args[0].a')
+1
+select json_extract(ai_prompt('{0}', json_array('x', 2)), '$.args[0][1]');
+json_extract(ai_prompt('{0}', json_array('x', 2)), '$.args[0][1]')
+2

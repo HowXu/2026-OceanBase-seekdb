@@ -1,0 +1,3 @@
+connection default;
+select json_extract(ai_prompt('{0}', json_object('a', 1)), '$.args[0].a');
+select json_extract(ai_prompt('{0}', json_array('x', 2)), '$.args[0][1]');
