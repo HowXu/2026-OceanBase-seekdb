@@ -84,8 +84,29 @@ COPY ordinary_table TO '/data/out.csv' (delimiter ';', quote '"', escape '"', he
 | --- | --- |
 | `src/sql/engine/basic/ob_file_scan_utils.{h,cpp}` | CSV/JSON 解析、类型推断、路径校验、扫描与导出 |
 | `src/sql/engine/basic/ob_file_parquet_scan.{h,cpp}` | Parquet 读取（thrift compact、页编码、Snappy） |
-| `src/sql/engine/basic/ob_file_sql_engine.{h,cpp}` | 与 SQL 引擎的衔接：解析、计划、执行 |
+| `src/sql/engine/basic/ob_file_table_op.{h,cpp}` | 把文件里的行变成算子的数据行 |
+| `src/sql/optimizer/ob_log_file_table.{h,cpp}` | 文件表的逻辑算子 |
 | `src/sql/resolver/dml/ob_file_table_resolver.cpp` | 文件表的解析：推断列结构、生成列元数据 |
+| `src/sql/parser/sql_parser_mysql_mode.y` | `read_csv` 等函数在 FROM 子句中的语法、命名参数、`COPY` 语句 |
 | `unittest/sql/parser/test_file_sql_parser.cpp` | 语法单元测试 |
 | `unittest/sql/engine/basic/test_file_scan_utils.cpp` | 扫描、推断、安全与导出的单元测试 |
 | `tools/deploy/mysql_test/test_suite/file_sql/` | mysqltest 用例 |
+
+## 现状
+
+已经实现并有测试覆盖：
+
+- CSV、JSON Lines、Parquet 的读取，列结构推断，行流式返回
+- 类型推断的七种类型、宽化规则、数值边界与非法日期
+- `enable_file_sql` 开关与 `secure_file_priv` 校验，符号链接逃逸的拦截，文件被改写时的报错
+- `read_csv`、`read_json`、`read_ndjson`、`read_parquet`、`glob` 在 FROM 子句中的语法，命名参数，`COPY` 语句的语法
+- 算子与优化器路径：文件表可以参与过滤、聚合、排序与 JOIN
+
+尚未实现：
+
+- `DESCRIBE SELECT * FROM read_csv(...)` 目前返回的是执行计划，尚未返回列元数据
+- `COPY` 的导出尚未接到执行器上，语句可以解析但不会写出文件
+
+这两项都在计划算子与执行器一层，需要在 `ObLogSelectInto` 的旁边增加一条写入 CSV 的路径，
+并把文件表解析出来的列元数据交给 `ObExplainResolver`。
+
