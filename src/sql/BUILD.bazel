@@ -178,6 +178,18 @@ cc_library(
     visibility = ["//unittest/sql/engine/basic:__pkg__"],
 )
 
+# The file scan library does not depend on the engine, the unit test compiles
+# it on its own so that it does not have to build the whole server.
+exports_files(
+    [
+        "engine/basic/ob_file_parquet_scan.cpp",
+        "engine/basic/ob_file_parquet_scan.h",
+        "engine/basic/ob_file_scan_utils.cpp",
+        "engine/basic/ob_file_scan_utils.h",
+    ],
+    visibility = ["//unittest/sql/engine/basic:__pkg__"],
+)
+
 cc_library(
     name = "sql_retrieval_composition_headers",
     hdrs = _SQL_RETRIEVAL_COMPOSITION_HEADERS,

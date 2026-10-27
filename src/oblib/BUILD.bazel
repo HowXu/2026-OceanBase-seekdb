@@ -1272,5 +1272,8 @@ cc_library(
         "//conditions:default": [],
     }),
     linkopts = sanity_linkopts(),
-    visibility = ["//unittest/oblib:__pkg__"],
+    visibility = [
+        "//unittest/oblib:__pkg__",
+        "//unittest/sql:__subpackages__",
+    ],
 )
