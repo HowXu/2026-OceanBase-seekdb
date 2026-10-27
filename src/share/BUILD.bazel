@@ -598,36 +598,6 @@ grouped_unity_cc_library(
     ],
 )
 
-_LOCATION_UNITY_GROUP = select_unity_sources(
-    SHARE_UNITY_GROUPS,
-    "location",
-    [
-        "src/share/location_cache/ob_location_struct.cpp",
-    ],
-)
-
-grouped_unity_cc_library(
-    name = "location",
-    unity_groups = [_LOCATION_UNITY_GROUP],
-    public_hdrs = ["location_cache/ob_location_struct.h"],
-    deps = [
-        ":cache",
-        ":core_types",
-        ":ls_restore_status",
-        "//src/oblib:oblib_foundation",
-    ],
-    implementation_deps = [
-        ":task_control",
-        "//src/oblib:oblib_base",
-    ],
-    features = ["layering_check"],
-    tags = ["manual"],
-    visibility = [
-        "//src:__subpackages__",
-        "//unittest:__subpackages__",
-    ],
-)
-
 _RESOURCE_LIMIT_CALCULATOR_UNITY_GROUP = select_unity_sources(
     SHARE_UNITY_GROUPS,
     "resource_limit_calculator",
@@ -1595,7 +1565,6 @@ _SHARE_NATIVE_UNITY_SOURCES = unity_group_sources(
     _IO_UNITY_GROUP,
     _CONFIG_UNITY_GROUP,
     _LS_RESTORE_STATUS_UNITY_GROUP,
-    _LOCATION_UNITY_GROUP,
     _RESOURCE_LIMIT_CALCULATOR_UNITY_GROUP,
     _SCHEMA_FOUNDATION_TYPES_UNITY_GROUP,
     _SCHEMA_LIST_ROW_VALUES_UNITY_GROUP,
@@ -1643,7 +1612,6 @@ _SHARE_RUNTIME_DEPS = _SHARE_RUNTIME_GENERATED_DEPS + [
     ":lob_read_service",
     ":lob_runtime",
     ":lob_read_context",
-    ":location",
     ":ls_restore_status",
     ":object_cast",
     ":pl_integer_type",

@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "observer/ob_server_runtime_access.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "observer/mysql/obmp_query.h"
@@ -916,7 +916,7 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
       // Retry needs to meet the following conditions:
       // 1. rs.open execution failed
       // 2. No result was returned to the client, this execution has no side effects
-      // 3. need_retry(result, ret): schema or location cache invalidation
+      // 3. need_retry(result, ret): schema invalidation or stale tablet access
       // 4. less than retry count limit
       if (OB_UNLIKELY(retry_ctrl_.need_retry())) {
         if (OB_TRANSACTION_SET_VIOLATION != ret && OB_REPLICA_NOT_READABLE != ret && OB_TRY_LOCK_ROW_CONFLICT != ret) {
@@ -1062,10 +1062,10 @@ int ObMPQuery::check_readonly_stmt(ObMySQLResultSet &result)
     //Through setting /*+read_consistency()*/ hint
     //or specify session-level ob_read_consistency = 2
     // to set weak consistency read
-    const int64_t table_count = DAS_CTX(result.get_exec_context()).get_table_loc_list().size();
+    const int64_t table_count = DAS_CTX(result.get_exec_context()).get_table_accesses().size();
     if (0 == table_count) {
       //This case is special, jdbc will send a special statement select @@session.tx_read_only when sending the query statement;
-      //For convenience of obtest testing, the restriction on the select statement for no table_locations needs to be removed
+      //For convenience of obtest testing, the restriction on the select statement for no table_access_plans needs to be removed
     } else if (OB_FAIL(result.get_read_consistency(consistency))) {
     } else if (WEAK != consistency) {
       ret = OB_ERR_READ_ONLY;

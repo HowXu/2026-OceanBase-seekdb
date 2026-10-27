@@ -4621,7 +4621,7 @@ int ObSPIService::inner_fetch_with_retry(ObPLExecCtx *ctx,
         if (can_retry) {
           retry_guard.test();
         }
-      // NOTE: cursor fetch failed can not retry, we only use this to refresh location cache.
+      // NOTE: cursor fetch failed can not retry, we only use this to record access errors.
       // actully, this function only called by cursor, so `for_cursor` just in case.
       } while (RETRY_TYPE_NONE != retry_ctrl.get_retry_type() && !for_cursor);
       session->get_retry_info_for_update().clear();

@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "share/ob_io_device_helper.h"
-#include "config_bridge.h"
-#include "config_checkers.h"
+#include "rust/config.h"
+#include "rust/config/config_checkers.h"
 #ifndef _WIN32
 #include <unistd.h>
 #include "share/rc/ob_server_runtime.h"
@@ -2399,7 +2399,6 @@ int ObServer::init_sql()
                                              ObSQLSessionMgr::SCHEDULE_PERIOD, true))) {
   } else {
     LOG_INFO("init sql session mgr done");
-    LOG_INFO("init sql location cache done");
   }
 
   if (OB_SUCC(ret)) {

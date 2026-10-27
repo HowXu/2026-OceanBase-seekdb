@@ -80,7 +80,6 @@ SQL_RUNTIME_NATIVE_DEPS = [
     "//src/share:io",
     "//src/share:json_access",
     "//src/share:lob_runtime",
-    "//src/share:location",
     "//src/share:memory_support",
     "//src/share:object_cast",
     "//src/share:object_cast_runtime_interface",
