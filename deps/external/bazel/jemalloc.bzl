@@ -27,7 +27,7 @@ def _jemalloc_build_impl(ctx):
     cargo_target = ctx.actions.declare_directory("jemalloc/cargo-work")
 
     platform = target_platform(ctx)
-    command = """export CFLAGS='-O2 -fPIC'
+    command = """export CFLAGS='-O2 -fPIC -fuse-ld=lld'
 export MAKEFLAGS=
 export JEMALLOC_SYS_OUTPUT_DIR="$PWD/$1"
 export JEMALLOC_SYS_CONFIGURE_ARGS='--with-jemalloc-prefix=je_'
