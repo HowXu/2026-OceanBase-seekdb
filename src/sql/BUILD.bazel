@@ -182,6 +182,19 @@ cc_library(
     visibility = ["//src/observer:__pkg__"],
 )
 
+# Test-only access does not change the production SQL header boundary.
+cc_library(
+    name = "ai_function_test_headers",
+    testonly = True,
+    deps = [
+        ":sql_runtime_internal_headers",
+        "//bazel/third_party:curl_headers",
+        "//src/share:json_access",
+    ],
+    tags = ["manual"],
+    visibility = ["//unittest/sql/engine/expr:__pkg__"],
+)
+
 # Private means private to the SQL module, not private to one Unity action.
 # Submodule header owners are visible only through this SQL-internal seam.
 cc_library(

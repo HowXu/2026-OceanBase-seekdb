@@ -13,7 +13,22 @@ class MockAIHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
         self.requests.append((self.path, body))
-        if self.path == '/generate':
+        if self.path == '/root-array':
+            result = []
+        elif self.path == '/root-null':
+            result = None
+        elif self.path == '/http-error':
+            self.send_error(400)
+            return
+        elif self.path == '/disconnect':
+            self.connection.close()
+            return
+        elif self.path == '/invalid-json':
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b'{not-json')
+            return
+        elif self.path == '/generate':
             assert body.get('stream') is False
             assert self.headers.get_content_type() == 'application/json'
             result = {'response': body['prompt']}
@@ -31,6 +46,8 @@ class MockAIHandler(BaseHTTPRequestHandler):
                 vectors[0] = [None] * dimension
             if self.path == '/embed-short':
                 vectors[0] = vectors[0][:-1]
+            if self.path == '/embed-late-bad' and sum(path == self.path for path, _ in self.requests) > 1:
+                vectors[0] = [None] * dimension
             if self.path == '/embed-ollama':
                 result = {'embeddings': vectors}
             else:
@@ -38,12 +55,26 @@ class MockAIHandler(BaseHTTPRequestHandler):
                                    for i, v in reversed(list(enumerate(vectors)))]}
                 if self.path == '/embed-duplicate' and len(vectors) > 1:
                     result['data'][0]['index'] = result['data'][1]['index']
+                if self.path == '/embed-missing':
+                    result['data'].pop()
+                if self.path == '/embed-index-type':
+                    result['data'][0]['index'] = '0'
+                if self.path == '/embed-shape':
+                    result['data'] = {}
         elif self.path.startswith('/rerank'):
             # Deliberately unsorted results, with ties and numeric integer scores.
             result = {'results': [{'index': i, 'relevance_score': len(text) % 3}
                                   for i, text in reversed(list(enumerate(body['documents'])))]}
             if self.path == '/rerank-bad':
                 result['results'][0]['index'] = len(body['documents'])
+            elif self.path == '/rerank-duplicate':
+                result['results'][0]['index'] = result['results'][-1]['index']
+            elif self.path == '/rerank-missing':
+                result['results'].pop()
+            elif self.path == '/rerank-score':
+                result['results'][0]['relevance_score'] = None
+            elif self.path == '/rerank-shape':
+                result['results'] = {}
         else:
             self.send_error(404)
             return

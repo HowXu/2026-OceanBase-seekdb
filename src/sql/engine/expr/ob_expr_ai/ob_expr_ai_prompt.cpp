@@ -122,8 +122,6 @@ int ObExprAIPrompt::eval_ai_prompt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
           ret = OB_ERR_INVALID_TYPE_FOR_OP;
         } else if (OB_FAIL(args_array->array_append(json_value))) {
         }
-      } else if (datum->is_null()) {
-        ret = OB_ERR_INVALID_TYPE_FOR_OP;
       }
     }
   }
