@@ -22,13 +22,13 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
-#include <fstream>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "sql/engine/basic/ob_file_parquet_scan.h"
 #include "sql/engine/basic/ob_file_scan_utils.h"
+#include "sql/engine/basic/file_sql_file_access.h"
 
 namespace oceanbase {
 namespace sql {
@@ -1692,18 +1692,10 @@ void parse_page_header(CompactReader &reader, PageHeader &header)
 class FileReader
 {
 public:
-  void open(const std::string &path)
+  void open(const std::shared_ptr<LocalFile> &file)
   {
-    stream_.open(path, std::ios::binary);
-    if (!stream_.good()) {
-      throw Error("cannot open file: " + path);
-    }
-    stream_.seekg(0, std::ios::end);
-    std::streampos end = stream_.tellg();
-    if (end < 0) {
-      throw Error("cannot read file: " + path);
-    }
-    size_ = (uint64_t)end;
+    file_ = file;
+    size_ = file_->identity().size;
   }
 
   uint64_t size() const { return size_; }
@@ -1713,19 +1705,13 @@ public:
     if (offset > size_ || length > size_ - offset) {
       throw Error("corrupt parquet file");
     }
-    stream_.clear();
-    stream_.seekg((std::streamoff)offset);
-    stream_.read((char *)data, (std::streamsize)length);
-    if (!stream_.good() && !stream_.eof()) {
-      throw Error("corrupt parquet file");
-    }
-    if ((size_t)stream_.gcount() != length) {
+    if (file_->read_at(offset, data, length) != length) {
       throw Error("corrupt parquet file");
     }
   }
 
 private:
-  std::ifstream stream_;
+  std::shared_ptr<LocalFile> file_;
   uint64_t size_ = 0;
 };
 
@@ -1961,7 +1947,7 @@ private:
 class ParquetScanner::ParquetScannerImpl
 {
 public:
-  void open(const std::string &path);
+  void open(const std::shared_ptr<LocalFile> &file);
   const std::vector<ParquetColumn> &schema() const { return schema_; }
   uint64_t row_count() const { return num_rows_; }
   void set_projection(const std::vector<int> &projection);
@@ -1984,9 +1970,10 @@ private:
   std::vector<std::unique_ptr<ColumnStream>> streams_;
 };
 
-void ParquetScanner::ParquetScannerImpl::open(const std::string &path)
+void ParquetScanner::ParquetScannerImpl::open(const std::shared_ptr<LocalFile> &file)
 {
-  file_.open(path);
+  file_.open(file);
+  const std::string &path = file->path();
   uint64_t size = file_.size();
   if (size < 12) {
     throw Error("not a parquet file: " + path);
@@ -2158,9 +2145,9 @@ ParquetScanner::~ParquetScanner()
 {
 }
 
-void ParquetScanner::open(const std::string &path)
+void ParquetScanner::open(const std::shared_ptr<LocalFile> &file)
 {
-  impl_->open(path);
+  impl_->open(file);
 }
 
 const std::vector<ParquetColumn> &ParquetScanner::schema() const

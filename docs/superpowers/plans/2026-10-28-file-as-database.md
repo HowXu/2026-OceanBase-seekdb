@@ -240,11 +240,13 @@ void validate_unchanged(const FileIdentity &expected) const;
 
 `LocalFile` 析构关闭其唯一拥有的 fd；禁止复制。ByteSource 和 Parquet FileReader 持有同一授权打开的文件对象/共享所有权，不能校验一个 fd 后重新按路径打开另一个文件。
 
-- [ ] **1. 先加失败测试。** 在现有 `mutation_and_security` 外单列测试：推断后用相同长度、恢复 mtime 的新 inode 替换文件；含嵌入 NUL 的路径；符号链接目录逃逸；打开后原路径被换为指向外部的链接；EOF 前后截断。预期明确失败，外部文件字节不变。替换测试使用 `rename`，不要把普通覆写当成 inode 替换。
-- [ ] **2. 运行新测试确认现有大小/mtime 检查的不足。** 命令为扫描单测配合 `--gtest_filter='FileScanTest.*security*:FileScanTest.*replacement*:FileScanTest.*mutation*'`。
-- [ ] **3. 实现句柄路径。** 拒绝 NUL；固定授权 root 的目录句柄；逐组件解析路径，目录使用 `openat(..., O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)`；文件使用 `openat(..., O_RDONLY | O_NOFOLLOW | O_CLOEXEC)` 并 `fstat` 要求普通文件。拒绝 `..` 逃逸；不因新封装改变现有 secure_file_priv 禁用语义。允许的内部符号链接需在授权 root 内安全解析并限制跳转次数，不能不加区分地接受 realpath 后重开。
-- [ ] **4. 连接推断、扫描、重扫和 EOF 的身份检查。** Definition 增加完整身份信息并更新其当前版本内的序列化/反序列化；读句柄身份与目录项身份均需验证，检测已打开后原路径替换。JSONL/CSV/Parquet 全部走相同检查。格式辅助库不读取 SQL 会话，当前权限复核留给任务 5/6 的 SQL 边界。
-- [ ] **5. 完整跑扫描测试；循环失败路径并比较 `/proc/self/fd` 数量；更新独立编译列表后提交。** `fix(sql): bind file scans to authorized descriptors and identities`。
+- [x] **1. 先加失败测试。** 在现有 `mutation_and_security` 外单列测试：推断后用相同长度、恢复 mtime 的新 inode 替换文件；含嵌入 NUL 的路径；符号链接目录逃逸；打开后原路径被换为指向外部的链接；EOF 前后截断。预期明确失败，外部文件字节不变。替换测试使用 `rename`，不要把普通覆写当成 inode 替换。
+- [x] **2. 运行新测试确认现有大小/mtime 检查的不足。** 命令为扫描单测配合 `--gtest_filter='FileScanTest.*security*:FileScanTest.*replacement*:FileScanTest.*mutation*'`。
+- [x] **3. 实现句柄路径。** 拒绝 NUL；固定授权 root 的目录句柄；逐组件解析路径，目录使用 `openat(..., O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)`；文件使用 `openat(..., O_RDONLY | O_NOFOLLOW | O_CLOEXEC)` 并 `fstat` 要求普通文件。拒绝 `..` 逃逸；不因新封装改变现有 secure_file_priv 禁用语义。允许的内部符号链接需在授权 root 内安全解析并限制跳转次数，不能不加区分地接受 realpath 后重开。
+- [x] **4. 连接推断、扫描、重扫和 EOF 的身份检查。** Definition 增加完整身份信息并更新其当前版本内的序列化/反序列化；读句柄身份与目录项身份均需验证，检测已打开后原路径替换。JSONL/CSV/Parquet 全部走相同检查。格式辅助库不读取 SQL 会话，当前权限复核留给任务 5/6 的 SQL 边界。
+- [x] **5. 完整跑扫描测试；循环失败路径并比较 `/proc/self/fd` 数量；更新独立编译列表后提交。** `fix(sql): bind file scans to authorized descriptors and identities`。
+
+**执行记录（任务 3）：** 四个新增安全用例先失败，证明旧逻辑不能识别同大小/mtime 的替换及恢复 mtime 的改写，也未拒绝路径 NUL。新增 move-only LocalFile，按授权 root 及规范化路径逐组件 openat/O_NOFOLLOW；CSV/JSONL/Parquet 推断和读取共享同一打开句柄，不按裸路径重开读取。持有句柄与当前目录项均校验 device/inode/size/mtime_ns/ctime_ns，推断完成、扫描前后及重扫复核。glob 以受约束目录句柄枚举，异常用 RAII 关闭 DIR。新增所有权、只读/CLOEXEC、边界、FIFO、目录替换及 128 次失败路径的 fd 回收测试。普通 GTest 21/21 通过，独立 CMake ASan/UBSan CTest 通过；源码清单与原版 8 个文件完整性检查通过，用户文档哈希不变。尚未接入当前 SQL 会话权限复核（任务 5/6），COPY 发布仍待任务 9；无服务端 SQL 验证。
 
 ## Task 4: 对记录、元数据、解压和容器分配施加预算
 

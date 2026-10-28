@@ -16,6 +16,7 @@
 
 #include "sql/engine/basic/ob_file_scan_utils.h"
 #include "sql/engine/basic/ob_file_parquet_scan.h"
+#include "sql/engine/basic/file_sql_file_access.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -29,6 +30,7 @@
 
 #include <dirent.h>
 #include <fnmatch.h>
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -300,39 +302,16 @@ std::string basename_of(const std::string &path)
   return (slash == std::string::npos) ? path : path.substr(slash + 1);
 }
 
-/**
- * @brief The identity of a file, used to detect that it changed.
- */
-struct Fingerprint {
-  uint64_t size = 0;
-  int64_t mtime_ns = 0;
-};
-
 bool stat_path(const std::string &path, struct stat &info)
 {
   return ::stat(path.c_str(), &info) == 0;
 }
 
-Fingerprint fingerprint_of(const std::string &path)
-{
-  struct stat info;
-  if (!stat_path(path, info)) {
-    throw Error("cannot stat the file " + path);
-  }
-  Fingerprint fingerprint;
-  fingerprint.size = static_cast<uint64_t>(info.st_size);
-#if defined(__APPLE__) || defined(__FreeBSD__)
-  fingerprint.mtime_ns = static_cast<int64_t>(info.st_mtimespec.tv_sec) * 1000000000
-                         + static_cast<int64_t>(info.st_mtimespec.tv_nsec);
-#else
-  fingerprint.mtime_ns = static_cast<int64_t>(info.st_mtim.tv_sec) * 1000000000
-                         + static_cast<int64_t>(info.st_mtim.tv_nsec);
-#endif
-  return fingerprint;
-}
-
 std::string canonical_path(const std::string &path)
 {
+  if (path.find('\0') != std::string::npos) {
+    throw Error("file SQL path contains NUL");
+  }
   char buffer[PATH_MAX];
   if (::realpath(path.c_str(), buffer) == nullptr) {
     throw Error("cannot resolve the path " + path);
@@ -360,7 +339,7 @@ bool is_regular_file(const std::string &path)
 
 bool is_within(const std::string &path, const std::string &root)
 {
-  if (path == root) {
+  if (root == "/" || path == root) {
     return true;
   }
   if (path.size() <= root.size()) {
@@ -408,12 +387,7 @@ std::vector<std::string> unique_names(const std::vector<std::string> &raw_names)
  */
 class ByteSource {
 public:
-  explicit ByteSource(const std::string &path) : stream_(path.c_str(), std::ios::binary)
-  {
-    if (!stream_.good()) {
-      throw Error("cannot open the file " + path);
-    }
-  }
+  explicit ByteSource(const std::shared_ptr<LocalFile> &file) : file_(file) {}
 
   int peek()
   {
@@ -432,10 +406,22 @@ public:
     return item;
   }
 
+  bool read_line(std::string &line)
+  {
+    line.clear();
+    int item;
+    while ((item = get()) >= 0) {
+      if (item == '\n') {
+        return true;
+      }
+      line.push_back(static_cast<char>(item));
+    }
+    return !line.empty();
+  }
+
   void rewind()
   {
-    stream_.clear();
-    stream_.seekg(0, std::ios::beg);
+    offset_ = 0;
     position_ = 0;
     buffer_.clear();
   }
@@ -444,14 +430,15 @@ private:
   bool fill()
   {
     buffer_.resize(64 * 1024);
-    stream_.read(buffer_.data(), static_cast<std::streamsize>(buffer_.size()));
-    const std::streamsize count = stream_.gcount();
-    buffer_.resize(static_cast<size_t>(count));
+    const size_t count = file_->read_at(offset_, buffer_.data(), buffer_.size());
+    offset_ += count;
+    buffer_.resize(count);
     position_ = 0;
     return count > 0;
   }
 
-  std::ifstream stream_;
+  std::shared_ptr<LocalFile> file_;
+  uint64_t offset_ = 0;
   std::vector<char> buffer_;
   size_t position_ = 0;
 };
@@ -465,7 +452,8 @@ private:
  */
 class CsvRecordReader {
 public:
-  CsvRecordReader(const std::string &path, const Options &options) : path_(path), options_(options), source_(path)
+  CsvRecordReader(const std::shared_ptr<LocalFile> &file, const Options &options)
+      : path_(file->path()), options_(options), source_(file)
   {
     skip_bom();
   }
@@ -915,8 +903,9 @@ public:
 
 class CsvRowProducer : public RowProducer {
 public:
-  CsvRowProducer(const Definition &definition, const std::vector<int> &projection)
-      : definition_(definition), projection_(projection), reader_(definition.path, definition.options)
+  CsvRowProducer(const Definition &definition, const std::vector<int> &projection,
+                 const std::shared_ptr<LocalFile> &file)
+      : definition_(definition), projection_(projection), reader_(file, definition.options)
   {
     if (definition_.options.header) {
       skip_header();
@@ -970,19 +959,19 @@ private:
 
 class JsonRowProducer : public RowProducer {
 public:
-  JsonRowProducer(const Definition &definition, const std::vector<int> &projection)
-      : definition_(definition), projection_(projection), path_(definition.path)
+  JsonRowProducer(const Definition &definition, const std::vector<int> &projection,
+                  const std::shared_ptr<LocalFile> &file)
+      : definition_(definition), projection_(projection), source_(file)
   {
     for (size_t index = 0; index < definition_.columns.size(); ++index) {
       names_.push_back(lowercase(definition_.columns[index].name));
     }
-    open();
   }
 
   bool next_row(std::vector<Cell> &cells) override
   {
     std::string line;
-    while (std::getline(stream_, line)) {
+    while (source_.read_line(line)) {
       if (!line.empty() && line[line.size() - 1] == '\r') {
         line.erase(line.size() - 1);
       }
@@ -1015,34 +1004,22 @@ public:
     return false;
   }
 
-  void reset() override
-  {
-    stream_.close();
-    open();
-  }
+  void reset() override { source_.rewind(); }
 
 private:
-  void open()
-  {
-    stream_.open(path_.c_str(), std::ios::binary);
-    if (!stream_.good()) {
-      throw Error("cannot open the file " + path_);
-    }
-  }
-
   Definition definition_;
   std::vector<int> projection_;
   std::vector<std::string> names_;
-  std::string path_;
-  std::ifstream stream_;
+  ByteSource source_;
 };
 
 class ParquetRowProducer : public RowProducer {
 public:
-  ParquetRowProducer(const Definition &definition, const std::vector<int> &projection)
+  ParquetRowProducer(const Definition &definition, const std::vector<int> &projection,
+                     const std::shared_ptr<LocalFile> &file)
       : definition_(definition), projection_(projection)
   {
-    scanner_.open(definition.path);
+    scanner_.open(file);
     scanner_.set_projection(projection);
   }
 
@@ -1108,10 +1085,10 @@ void consume_csv_row(const std::vector<std::string> &values,
   }
 }
 
-void infer_csv(const std::string &path, Definition &definition)
+void infer_csv(const std::shared_ptr<LocalFile> &file, Definition &definition)
 {
   const Options &options = definition.options;
-  CsvRecordReader reader(path, options);
+  CsvRecordReader reader(file, options);
   std::vector<std::string> values;
   std::vector<bool> quoted;
   const bool has_record = reader.next_record(values, quoted);
@@ -1151,12 +1128,9 @@ void infer_csv(const std::string &path, Definition &definition)
   }
 }
 
-void infer_json(const std::string &path, Definition &definition)
+void infer_json(const std::shared_ptr<LocalFile> &file, Definition &definition)
 {
-  std::ifstream stream(path.c_str(), std::ios::binary);
-  if (!stream.good()) {
-    throw Error("cannot open the file " + path);
-  }
+  ByteSource source(file);
   std::vector<std::string> names;
   std::map<std::string, size_t> lookup;
   std::vector<Type> types;
@@ -1165,7 +1139,7 @@ void infer_json(const std::string &path, Definition &definition)
   std::vector<int> occurrences;
   size_t row_count = 0;
   std::string line;
-  while (std::getline(stream, line)) {
+  while (source.read_line(line)) {
     if (!line.empty() && line[line.size() - 1] == '\r') {
       line.erase(line.size() - 1);
     }
@@ -1224,10 +1198,10 @@ void infer_json(const std::string &path, Definition &definition)
   }
 }
 
-void infer_parquet(const std::string &path, Definition &definition)
+void infer_parquet(const std::shared_ptr<LocalFile> &file, Definition &definition)
 {
   ParquetScanner scanner;
-  scanner.open(path);
+  scanner.open(file);
   definition.columns.clear();
   const std::vector<ParquetColumn> &schema = scanner.schema();
   for (size_t index = 0; index < schema.size(); ++index) {
@@ -1442,71 +1416,72 @@ Definition infer(const std::string &path, const std::string &root, const Options
   if (options.sample_size != -1) {
     throw Error("only sample_size = -1 is supported");
   }
-  const std::string resolved = resolve_within_root(path, root);
-  if (!is_regular_file(resolved)) {
-    throw Error("the path " + path + " is not a regular file");
-  }
+  auto file = std::make_shared<LocalFile>(LocalFile::open_read(path, root));
   Definition definition;
-  definition.path = resolved;
+  definition.path = file->path();
   definition.options = options;
-  definition.options.format = resolve_format(resolved, options);
-  const Fingerprint fingerprint = fingerprint_of(resolved);
-  definition.file_size = fingerprint.size;
-  definition.file_mtime_ns = fingerprint.mtime_ns;
+  definition.options.format = resolve_format(definition.path, options);
+  const FileIdentity identity = file->identity();
+  definition.file_size = identity.size;
+  definition.file_mtime_ns = identity.mtime_ns;
+  definition.file_device = identity.device;
+  definition.file_inode = identity.inode;
+  definition.file_ctime_ns = identity.ctime_ns;
   switch (definition.options.format) {
     case Format::Csv:
-      infer_csv(resolved, definition);
+      infer_csv(file, definition);
       break;
     case Format::Json:
-      infer_json(resolved, definition);
+      infer_json(file, definition);
       break;
     case Format::Parquet:
-      infer_parquet(resolved, definition);
+      infer_parquet(file, definition);
       break;
     default:
       throw Error("the file format is not supported");
   }
+  file->validate_unchanged(identity);
   return definition;
 }
 
 std::vector<std::string> discover(const std::string &pattern, const std::string &root)
 {
-  if (root.empty() || root == "NULL") {
-    throw Error("the directory allowed to read files from is not configured");
+  if (pattern.find('\0') != std::string::npos) {
+    throw Error("file SQL glob pattern contains NUL");
   }
-  const std::string canonical_root = canonical_path(root);
-  if (!is_directory(canonical_root)) {
-    throw Error("the directory allowed to read files from is not a directory");
-  }
-  const std::string directory = directory_of(pattern);
+  auto directory = LocalFile::open_directory(directory_of(pattern), root);
+  const auto identity = directory.identity();
   const std::string mask = basename_of(pattern);
-  const std::string canonical_directory = canonical_path(directory);
-  if (!is_within(canonical_directory, canonical_root)) {
-    throw Error("the pattern " + pattern + " is outside of the directory allowed to read files from");
+  const int fd = ::fcntl(directory.descriptor(), F_DUPFD_CLOEXEC, 0);
+  if (fd < 0) {
+    throw Error("cannot duplicate file SQL directory descriptor");
   }
-  DIR *handle = ::opendir(canonical_directory.c_str());
-  if (handle == nullptr) {
-    throw Error("cannot list the directory " + canonical_directory);
+  DIR *raw_handle = ::fdopendir(fd);
+  if (raw_handle == nullptr) {
+    ::close(fd);
+    throw Error("cannot list the directory " + directory.path());
   }
+  const auto close_directory = [](DIR *handle) { ::closedir(handle); };
+  std::unique_ptr<DIR, decltype(close_directory)> handle(raw_handle, close_directory);
   std::vector<std::string> matches;
-  struct dirent *entry = nullptr;
-  while ((entry = ::readdir(handle)) != nullptr) {
+  while (true) {
+    errno = 0;
+    struct dirent *entry = ::readdir(handle.get());
+    if (entry == nullptr) {
+      if (errno != 0) {
+        throw Error("cannot read the directory " + directory.path());
+      }
+      break;
+    }
     const std::string name(entry->d_name);
-    if (name == "." || name == "..") {
+    if (name == "." || name == ".." || (!mask.empty() && ::fnmatch(mask.c_str(), name.c_str(), 0) != 0)) {
       continue;
     }
-    if (!mask.empty() && ::fnmatch(mask.c_str(), name.c_str(), 0) != 0) {
-      continue;
-    }
-    const std::string candidate = canonical_directory + "/" + name;
-    const std::string resolved = canonical_path(candidate);
-    if (!is_within(resolved, canonical_root)) {
-      ::closedir(handle);
-      throw Error("the file " + candidate + " is outside of the directory allowed to read files from");
-    }
-    matches.push_back(resolved);
+    const std::string candidate = directory.path() + "/" + name;
+    auto file = LocalFile::open_read(candidate, root);
+    matches.push_back(file.path());
   }
-  ::closedir(handle);
+  directory.validate_unchanged(identity);
   std::sort(matches.begin(), matches.end());
   return matches;
 }
@@ -1515,7 +1490,7 @@ std::string Definition::serialize() const
 {
   std::string blob;
   append_u32(blob, 0x46445346u); // "FSDF"
-  append_u32(blob, 1);
+  append_u32(blob, 2);
   append_string(blob, path);
   append_u32(blob, static_cast<uint32_t>(options.format));
   blob.push_back(options.header ? '\1' : '\0');
@@ -1526,6 +1501,9 @@ std::string Definition::serialize() const
   append_i64(blob, options.sample_size);
   append_u64(blob, file_size);
   append_i64(blob, file_mtime_ns);
+  append_u64(blob, file_device);
+  append_u64(blob, file_inode);
+  append_i64(blob, file_ctime_ns);
   append_u32(blob, static_cast<uint32_t>(columns.size()));
   for (size_t index = 0; index < columns.size(); ++index) {
     append_string(blob, columns[index].name);
@@ -1542,7 +1520,7 @@ Definition Definition::deserialize(const std::string &blob)
   if (reader.u32() != 0x46445346u) {
     throw Error("the serialized definition has an unknown format");
   }
-  if (reader.u32() != 1) {
+  if (reader.u32() != 2) {
     throw Error("the serialized definition has an unknown version");
   }
   Definition definition;
@@ -1556,6 +1534,9 @@ Definition Definition::deserialize(const std::string &blob)
   definition.options.sample_size = reader.i64();
   definition.file_size = reader.u64();
   definition.file_mtime_ns = reader.i64();
+  definition.file_device = reader.u64();
+  definition.file_inode = reader.u64();
+  definition.file_ctime_ns = reader.i64();
   const uint32_t count = reader.u32();
   for (uint32_t index = 0; index < count; ++index) {
     Column column;
@@ -1578,17 +1559,17 @@ public:
         throw Error("the column projection is out of range");
       }
     }
-    path_ = resolve_within_root(definition_.path, root_);
+    file_ = std::make_shared<LocalFile>(LocalFile::open_read(definition_.path, root_));
     check_unchanged();
     switch (definition_.options.format) {
       case Format::Csv:
-        producer_.reset(new CsvRowProducer(definition_, projection_));
+        producer_.reset(new CsvRowProducer(definition_, projection_, file_));
         break;
       case Format::Json:
-        producer_.reset(new JsonRowProducer(definition_, projection_));
+        producer_.reset(new JsonRowProducer(definition_, projection_, file_));
         break;
       case Format::Parquet:
-        producer_.reset(new ParquetRowProducer(definition_, projection_));
+        producer_.reset(new ParquetRowProducer(definition_, projection_, file_));
         break;
       default:
         throw Error("the file format is not supported");
@@ -1600,7 +1581,9 @@ public:
     check_unchanged();
     row.clear();
     std::vector<Cell> cells;
-    if (!producer_->next_row(cells)) {
+    const bool has_row = producer_->next_row(cells);
+    check_unchanged();
+    if (!has_row) {
       return false;
     }
     row.swap(cells);
@@ -1616,16 +1599,15 @@ public:
 private:
   void check_unchanged()
   {
-    const Fingerprint fingerprint = fingerprint_of(path_);
-    if (fingerprint.size != definition_.file_size || fingerprint.mtime_ns != definition_.file_mtime_ns) {
-      throw Error("the file " + definition_.path + " has been modified since it was read");
-    }
+    const FileIdentity expected{definition_.file_device, definition_.file_inode,
+                                definition_.file_size, definition_.file_mtime_ns, definition_.file_ctime_ns};
+    file_->validate_unchanged(expected);
   }
 
   Definition definition_;
   std::string root_;
   std::vector<int> projection_;
-  std::string path_;
+  std::shared_ptr<LocalFile> file_;
   std::unique_ptr<RowProducer> producer_;
 };
 

@@ -118,6 +118,9 @@ public:
   std::vector<Column> columns;
   uint64_t file_size = 0;
   int64_t file_mtime_ns = 0;
+  uint64_t file_device = 0;
+  uint64_t file_inode = 0;
+  int64_t file_ctime_ns = 0;
 
   /**
    * @brief Serialize the definition into a binary blob.

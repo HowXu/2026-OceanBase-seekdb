@@ -26,6 +26,8 @@ namespace oceanbase {
 namespace sql {
 namespace file_sql {
 
+class LocalFile;
+
 /**
  * @brief One column of a parquet file.
  */
@@ -55,7 +57,7 @@ public:
    * @brief Open the file and read its footer.
    * @throw Error when the file is not a valid parquet file
    */
-  void open(const std::string &path);
+  void open(const std::shared_ptr<LocalFile> &file);
 
   /**
    * @brief The columns of the file, in file order.
