@@ -122,7 +122,7 @@ PY
 
 **Interfaces:** 沿用协作者 `Definition infer(const std::string &, const std::string &, const Options &)`、`Scan(const Definition &, const std::string &, const std::vector<int> &)`、`bool Scan::next(std::vector<Cell> &)`、`void Scan::rescan()`、`CsvWriter` 和类型函数；后续任务不改变调用方的基本使用方式。
 
-- [ ] **1. 先引入测试，运行并确认缺少功能源/头文件的红灯。** 从固定提交读取测试正文到 `unittest/sql/engine/basic/test_file_scan_utils.cpp`，不迁移 `test_main.cpp`。创建下述 CMakeLists 并执行独立配置/构建命令；预期 CMake 报扫描生产源不存在，或编译器报找不到 `sql/engine/basic/ob_file_scan_utils.h`。
+- [x] **1. 先引入测试，运行并确认缺少功能源/头文件的红灯。** 从固定提交读取测试正文到 `unittest/sql/engine/basic/test_file_scan_utils.cpp`，不迁移 `test_main.cpp`。创建下述 CMakeLists 并执行独立配置/构建命令；预期 CMake 报扫描生产源不存在，或编译器报找不到 `sql/engine/basic/ob_file_scan_utils.h`。
 
 ```bash
 git show 3381bcbfd:unittest/sql/engine/basic/test_file_scan_utils.cpp
@@ -130,7 +130,7 @@ git show 3381bcbfd:unittest/sql/engine/basic/test_file_scan_utils.cpp
 
 使用 write 工具保存该已检查正文，而不是 checkout 整个目录。配置/构建的失败须确认为本功能文件缺失，而非 GTest 或编译器等环境缺失；引入生产文件后转绿。
 
-- [ ] **2. 逐一迁移四个扫描文件。** 对下列每个路径使用 `git show 3381bcbfd:<path>` 读取并保存，不覆盖既有文件；不拷贝协作者的构建脚本或夹具：
+- [x] **2. 逐一迁移四个扫描文件。** 对下列每个路径使用 `git show 3381bcbfd:<path>` 读取并保存，不覆盖既有文件；不拷贝协作者的构建脚本或夹具：
 
 ```text
 src/sql/engine/basic/ob_file_scan_utils.h
@@ -139,7 +139,7 @@ src/sql/engine/basic/ob_file_parquet_scan.h
 src/sql/engine/basic/ob_file_parquet_scan.cpp
 ```
 
-- [ ] **3. 加入 CMake 构建。** 两个 `.cpp` 进入 CMake 转换器读取的 `SQL_STANDALONE_SOURCES`，不改头归属清单和 Bazel 规则。源码清单检查精确反映增加的两个 standalone 文件。
+- [x] **3. 加入 CMake 构建。** 两个 `.cpp` 进入 CMake 转换器读取的 `SQL_STANDALONE_SOURCES`，不改头归属清单和 Bazel 规则。源码清单检查精确反映增加的两个 standalone 文件。
 
 `unittest/CMakeLists.txt` 只包含 `add_subdirectory(sql)`，`unittest/sql/CMakeLists.txt` 此时只包含 `add_subdirectory(engine/basic)`。扫描目录 CMakeLists 同时支持根工程接入和独立配置：
 
@@ -176,7 +176,7 @@ add_test(NAME file_scan_utils COMMAND test_file_scan_utils)
 
 不要同时再链接 oceanbase 到独立扫描测试，否则会重复引入扫描实现。
 
-- [ ] **4. 运行独立扫描单测，预期现有七个测试通过；若不通过，先使用 systematic-debugging，不改断言绕过。** 另运行：
+- [x] **4. 运行独立扫描单测，预期现有七个测试通过；若不通过，先使用 systematic-debugging，不改断言绕过。** 另运行：
 
 ```bash
 python3 tools/module_check/sql_source_ownership_check.py .
@@ -187,7 +187,9 @@ git diff --check
 
 归属检查先保存迁移前结果；既有问题单独记录，新增缺失归属或重复归属必须清零。
 
-- [ ] **5. 提交仅本任务文件。** `feat(sql): port file scan utilities to the competition baseline`。保留失败/通过输出，记录没有进行 SQL 端验证。
+- [x] **5. 提交仅本任务文件。** `feat(sql): port file scan utilities to the competition baseline`。保留失败/通过输出，记录没有进行 SQL 端验证。
+
+**执行记录（任务 1）：** 隔离 worktree `.worktrees/file-as-database`，分支 `feat/file-as-database-cmake`。先配置 CMake，确认因扫描生产源缺失失败；逐文件迁移后配置、构建、CTest 成功，GTest 7/7 通过。源码清单检查及 CMake 清单生成成功；生成器有既存 Python AST 弃用警告。比赛原版 file_sql 的 8 个文件逐字节未变；未运行服务端 SQL。GTest 使用主工作区已有依赖，未复制/改动依赖目录。
 
 ## Task 2: 用原始 Parquet 夹具验证解码，禁止替换数据
 
