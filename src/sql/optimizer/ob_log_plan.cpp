@@ -19,6 +19,7 @@
 #include "ob_log_plan.h"
 #include "sql/optimizer/ob_pwj_comparer.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
+#include "sql/optimizer/ob_log_file_table.h"
 #include "sql/optimizer/ob_log_table_scan.h"
 #include "sql/optimizer/ob_log_join_filter.h"
 #include "sql/optimizer/ob_log_sort.h"
@@ -2251,6 +2252,31 @@ int ObLogPlan::allocate_function_table_path(FunctionTablePath *func_table_path,
   return ret;
 }
 
+int ObLogPlan::allocate_file_table_path(FileTablePath *file_table_path,
+                                        ObLogicalOperator *&out_access_path_op)
+{
+  int ret = OB_SUCCESS;
+  ObLogFileTable *op = NULL;
+  const TableItem *table_item = NULL;
+  if (OB_ISNULL(file_table_path) || OB_ISNULL(get_stmt()) ||
+      OB_ISNULL(table_item = get_stmt()->get_table_item_by_id(file_table_path->table_id_))) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_ISNULL(op = static_cast<ObLogFileTable*>(get_log_op_factory().
+                                        allocate(*this, LOG_FILE_TABLE)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else {
+    op->set_table_id(file_table_path->table_id_);
+    op->set_table_name(table_item->get_table_name());
+    if (OB_FAIL(append(op->get_filter_exprs(), file_table_path->filter_))) {
+    } else if (OB_FAIL(op->compute_property(file_table_path))) {
+    } else if (OB_FAIL(op->pick_out_startup_filters())) {
+    } else {
+      out_access_path_op = op;
+    }
+  }
+  return ret;
+}
+
 int ObLogPlan::allocate_json_table_path(JsonTablePath *json_table_path,
                                         ObLogicalOperator *&out_access_path_op)
 {
@@ -3502,6 +3528,10 @@ int ObLogPlan::create_plan_tree_from_path(Path *path,
     } else if (path->is_json_table_path()) {
       JsonTablePath *json_table_path = static_cast<JsonTablePath *>(path);
       if (OB_FAIL(allocate_json_table_path(json_table_path, op))) {
+      } else { /* Do nothing */ }
+    } else if (path->is_file_table_path()) {
+      FileTablePath *file_table_path = static_cast<FileTablePath *>(path);
+      if (OB_FAIL(allocate_file_table_path(file_table_path, op))) {
       } else { /* Do nothing */ }
     } else if (path->is_temp_table_path()) {
       TempTablePath *temp_table_path = static_cast<TempTablePath *>(path);

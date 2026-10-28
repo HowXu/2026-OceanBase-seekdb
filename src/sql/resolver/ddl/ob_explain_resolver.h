@@ -32,6 +32,13 @@ namespace sql
     {}
     virtual ~ObExplainResolver() {}
     virtual int resolve(const ParseNode &parse_tree);
+    /**
+     * @brief Answer the describe of a statement that reads a file with the
+     *        schema of the file.
+     * @return OB_SUCCESS when the statement reads a file, OB_SUCCESS as well
+     *         when it does not, the plan is the answer then
+     */
+    int resolve_file_table_columns(ObStmt *child_stmt);
     ObExplainStmt *get_explain_stmt();
     int resolve_columns(ObRawExpr *&expr, common::ObArray<ObQualifiedName> &columns)
     {
