@@ -197,7 +197,7 @@ git diff --check
 
 **Interfaces:** 保持 `ParquetScanner::open`、`schema`、`row_count`、`set_projection`、`next_row`、`reset`。错误必须抛出 `file_sql::Error`，不能将缺失数据页静默补成 NULL。
 
-- [ ] **1. 给 `FileScanTest` 增加真实夹具读取测试。** 将比赛原版 base64 解码结果以字节数组放入新测试数据头；引用原始文件哈希，禁止使用协作者替换后的内容。使用现有 `put` helper 写到临时根目录，断言：
+- [x] **1. 给 `FileScanTest` 增加真实夹具读取测试。** 将比赛原版 base64 解码结果以字节数组放入新测试数据头；引用原始文件哈希，禁止使用协作者替换后的内容。使用现有 `put` helper 写到临时根目录，断言：
 
 ```cpp
 Options options;
@@ -218,10 +218,12 @@ ASSERT_TRUE(scan.next(row));
 EXPECT_EQ("0", row[0].text);
 ```
 
-- [ ] **2. 运行新测试并记录真实结果。** 如果已通过，不制造失败；继续增加“截断页不能补 NULL”、多 Row Group、可空列、字典页及投影空列表测试，至少为实际修改找到一个可复现红灯。
-- [ ] **3. 修复命中的解码路径。** 检查 Footer/页长度、dictionary index、RLE/bit-packed 数量、Snappy 输出长度、Row Group 声明行数；列流早于声明行数结束时抛出明确错误，不能在 `next_row` 中当作合法 NULL。保留按页读取，禁止完整 Row Group 解码。
-- [ ] **4. 运行所有扫描测试、夹具完整性检查；增加两列夹具，其中未引用列使用无法解码的数据页，确认只读取目标列。** 元数据仍必须完整且合法；畸形 Footer 不能通过裁剪逃避验证。
-- [ ] **5. 提交。** `fix(sql): decode original parquet fixtures without weakening validation`。
+- [x] **2. 运行新测试并记录真实结果。** 如果已通过，不制造失败；继续增加“截断页不能补 NULL”、多 Row Group、可空列、字典页及投影空列表测试，至少为实际修改找到一个可复现红灯。
+- [x] **3. 修复命中的解码路径。** 检查 Footer/页长度、dictionary index、RLE/bit-packed 数量、Snappy 输出长度、Row Group 声明行数；列流早于声明行数结束时抛出明确错误，不能在 `next_row` 中当作合法 NULL。保留按页读取，禁止完整 Row Group 解码。
+- [x] **4. 运行所有扫描测试、夹具完整性检查；增加两列夹具，其中未引用列使用无法解码的数据页，确认只读取目标列。** 元数据仍必须完整且合法；畸形 Footer 不能通过裁剪逃避验证。
+- [x] **5. 提交。** `fix(sql): decode original parquet fixtures without weakening validation`。
+
+**执行记录（任务 2）：** 原版 Snappy/DataPageV2 夹具直接通过，解码后 SHA256 为 `6320823b8bd1f4309f6584f5d6e64d98b60dc731af039b6db3b5a51677bba13d`。新增多 Row Group、空投影、可空字典列和真实页裁剪测试。复现并修复两类错误：列块/Row Group 行数不一致导致补 NULL 或丢行；截断 Footer 泄漏内部 Truncated 异常而不是 Error。两类测试均先失败后通过，独立 GTest 13/13 通过，原版 8 个文件不变。未运行服务端或 SQL 端验证。
 
 ## Task 3: 统一安全文件句柄与变化检测
 

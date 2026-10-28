@@ -2011,7 +2011,11 @@ void ParquetScanner::ParquetScannerImpl::open(const std::string &path)
   }
   CompactReader reader(footer.data(), footer.size());
   FileMetaData metadata;
-  parse_file_metadata(reader, metadata);
+  try {
+    parse_file_metadata(reader, metadata);
+  } catch (const Truncated &) {
+    throw Error("truncated parquet footer: " + path);
+  }
   if (metadata.schema.empty()) {
     throw Error("corrupt parquet schema: " + path);
   }
@@ -2038,6 +2042,26 @@ void ParquetScanner::ParquetScannerImpl::open(const std::string &path)
     schema_.push_back(column);
   }
 
+  if (metadata.num_rows < 0) {
+    throw Error("corrupt parquet row count: " + path);
+  }
+  uint64_t total_rows = 0;
+  for (const auto &group : metadata.row_groups) {
+    if (group.num_rows < 0 || (uint64_t)group.num_rows > (uint64_t)metadata.num_rows - total_rows) {
+      throw Error("corrupt parquet row group count: " + path);
+    }
+    total_rows += (uint64_t)group.num_rows;
+    for (const auto &chunk : group.columns) {
+      // Only flat, non-repeated columns are supported: one value (including
+      // NULL) is required for every row, even for columns not projected.
+      if (!chunk.has_metadata || chunk.metadata.num_values != group.num_rows) {
+        throw Error("parquet column value count differs from row group: " + path);
+      }
+    }
+  }
+  if (total_rows != (uint64_t)metadata.num_rows) {
+    throw Error("parquet row group counts differ from file row count: " + path);
+  }
   row_groups_ = metadata.row_groups;
   num_rows_ = metadata.num_rows;
   reset();
@@ -2107,8 +2131,7 @@ bool ParquetScanner::ParquetScannerImpl::next_row(std::vector<std::string> &text
       std::string text;
       bool is_null = false;
       if (!streams_[i]->next(text, is_null)) {
-        text.clear();
-        is_null = true;
+        throw Error("parquet column ended before the declared row count");
       }
       texts.push_back(text);
       nulls.push_back(is_null);

@@ -3,6 +3,7 @@
  */
 #include <gtest/gtest.h>
 #include "sql/engine/basic/ob_file_scan_utils.h"
+#include "data/file_sql_parquet_fixtures.h"
 #include <filesystem>
 #include <fstream>
 #include <unistd.h>
@@ -52,6 +53,127 @@ TEST_F(FileScanTest, csv_quotes_bom_nulls_projection_and_rescan)
   scan.rescan();
   ASSERT_TRUE(scan.next(row));
   EXPECT_EQ("hello,\nworld", row[0].text);
+}
+
+TEST_F(FileScanTest, original_parquet_snappy_v2_projection_and_rescan)
+{
+  auto path = put("original.parquet",
+                  std::string(reinterpret_cast<const char *>(fixtures::original), sizeof(fixtures::original)));
+  Options options; options.format = Format::Parquet;
+  auto definition = infer(path, root, options);
+  ASSERT_EQ(1U, definition.columns.size());
+  EXPECT_EQ("c1", definition.columns[0].name);
+  EXPECT_EQ(Type::Bigint, definition.columns[0].type);
+  Scan scan(definition, root, {0});
+  std::vector<Cell> row;
+  for (int64_t expected = 0; expected < 7; ++expected) {
+    ASSERT_TRUE(scan.next(row));
+    ASSERT_EQ(1U, row.size());
+    EXPECT_FALSE(row[0].is_null);
+    EXPECT_EQ(std::to_string(expected), row[0].text);
+  }
+  EXPECT_FALSE(scan.next(row));
+  scan.rescan();
+  ASSERT_TRUE(scan.next(row));
+  EXPECT_EQ("0", row[0].text);
+}
+
+TEST_F(FileScanTest, parquet_multiple_row_groups_and_empty_projection)
+{
+  auto path = put("multi.parquet",
+                  std::string(reinterpret_cast<const char *>(fixtures::multi_group), sizeof(fixtures::multi_group)));
+  auto definition = infer(path, root, Options{});
+  Scan scan(definition, root, {0});
+  std::vector<Cell> row;
+  for (const auto *expected : {"10", "20", "30"}) {
+    ASSERT_TRUE(scan.next(row));
+    ASSERT_EQ(1U, row.size());
+    EXPECT_FALSE(row[0].is_null);
+    EXPECT_EQ(expected, row[0].text);
+  }
+  EXPECT_FALSE(scan.next(row));
+  scan.rescan();
+  ASSERT_TRUE(scan.next(row));
+  EXPECT_EQ("10", row[0].text);
+  Scan count(definition, root, {});
+  for (int i = 0; i < 3; ++i) {
+    ASSERT_TRUE(count.next(row));
+    EXPECT_TRUE(row.empty());
+  }
+  EXPECT_FALSE(count.next(row));
+}
+
+TEST_F(FileScanTest, parquet_nullable_dictionary_values)
+{
+  auto path = put("dictionary.parquet", std::string(
+      reinterpret_cast<const char *>(fixtures::nullable_dictionary), sizeof(fixtures::nullable_dictionary)));
+  auto definition = infer(path, root, Options{});
+  ASSERT_EQ(1U, definition.columns.size());
+  EXPECT_TRUE(definition.columns[0].nullable);
+  Scan scan(definition, root, {0});
+  std::vector<Cell> row;
+  ASSERT_TRUE(scan.next(row));
+  EXPECT_FALSE(row[0].is_null);
+  EXPECT_EQ("alpha", row[0].text);
+  ASSERT_TRUE(scan.next(row));
+  EXPECT_TRUE(row[0].is_null);
+  ASSERT_TRUE(scan.next(row));
+  EXPECT_FALSE(row[0].is_null);
+  EXPECT_EQ("beta", row[0].text);
+  EXPECT_FALSE(scan.next(row));
+}
+
+TEST_F(FileScanTest, parquet_rejects_short_or_extra_column_without_fabricating_nulls)
+{
+  for (auto bytes : {
+      std::string(reinterpret_cast<const char *>(fixtures::short_column), sizeof(fixtures::short_column)),
+      std::string(reinterpret_cast<const char *>(fixtures::extra_column), sizeof(fixtures::extra_column))}) {
+    auto path = put("mismatch.parquet", bytes);
+    EXPECT_THROW({
+      auto definition = infer(path, root, Options{});
+      Scan scan(definition, root, {0});
+      std::vector<Cell> row;
+      while (scan.next(row)) {}
+    }, Error);
+  }
+}
+
+TEST_F(FileScanTest, parquet_truncated_footer_reports_file_error)
+{
+  auto bytes = std::string(reinterpret_cast<const char *>(fixtures::original), sizeof(fixtures::original));
+  // A one-byte footer starting a LIST field cannot contain its list header.
+  bytes[bytes.size() - 9] = static_cast<char>(0x19);
+  bytes[bytes.size() - 8] = 1;
+  for (size_t i = bytes.size() - 7; i < bytes.size() - 4; ++i) {
+    bytes[i] = 0;
+  }
+  auto path = put("truncated.parquet", bytes);
+  EXPECT_THROW(infer(path, root, Options{}), Error);
+}
+
+TEST_F(FileScanTest, parquet_prunes_unreferenced_pages_but_validates_footer)
+{
+  auto bytes = std::string(reinterpret_cast<const char *>(fixtures::pruned_column), sizeof(fixtures::pruned_column));
+  auto path = put("pruned.parquet", bytes);
+  auto definition = infer(path, root, Options{});
+  ASSERT_EQ(2U, definition.columns.size());
+  Scan scan(definition, root, {0});
+  std::vector<Cell> row;
+  for (const auto *expected : {"10", "20"}) {
+    ASSERT_TRUE(scan.next(row));
+    ASSERT_EQ(1U, row.size());
+    EXPECT_EQ(expected, row[0].text);
+  }
+  EXPECT_FALSE(scan.next(row));
+  EXPECT_THROW({
+    Scan all(definition, root, {0, 1});
+    all.next(row);
+  }, Error);
+  for (size_t i = bytes.size() - 8; i < bytes.size() - 4; ++i) {
+    bytes[i] = static_cast<char>(0xff);
+  }
+  put("pruned.parquet", bytes);
+  EXPECT_THROW(infer(path, root, Options{}), Error);
 }
 
 TEST_F(FileScanTest, json_union_missing_and_conflicting_types)
