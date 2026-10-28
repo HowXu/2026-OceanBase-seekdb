@@ -86,7 +86,7 @@ int ObExplainResolver::resolve_file_table_columns(ObStmt *child_stmt)
     }
     ParseResult parse_result;
     ObParser parser(*allocator_, session_info_->get_sql_mode(), session_info_->get_charsets4parser());
-    if (OB_FAIL(parser.parse(common::ObString(sql.c_str(), sql.length()), parse_result))) {
+    if (OB_FAIL(parser.parse(common::ObString(sql.length(), sql.c_str()), parse_result))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("cannot parse the columns of the file", K(ret));
     } else {
