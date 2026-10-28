@@ -122,7 +122,7 @@ PY
 
 **Interfaces:** 沿用协作者 `Definition infer(const std::string &, const std::string &, const Options &)`、`Scan(const Definition &, const std::string &, const std::vector<int> &)`、`bool Scan::next(std::vector<Cell> &)`、`void Scan::rescan()`、`CsvWriter` 和类型函数；后续任务不改变调用方的基本使用方式。
 
-- [ ] **1. 先引入测试，运行并确认缺少功能源/头文件的红灯。** 从固定提交读取测试正文到 `unittest/sql/engine/basic/test_file_scan_utils.cpp`，不迁移 `test_main.cpp`。创建下述 CMakeLists 并执行独立配置/构建命令；预期 CMake 报扫描生产源不存在，或编译器报找不到 `sql/engine/basic/ob_file_scan_utils.h`。
+- [x] **1. 先引入测试，运行并确认缺少功能源/头文件的红灯。** 从固定提交读取测试正文到 `unittest/sql/engine/basic/test_file_scan_utils.cpp`，不迁移 `test_main.cpp`。创建下述 CMakeLists 并执行独立配置/构建命令；预期 CMake 报扫描生产源不存在，或编译器报找不到 `sql/engine/basic/ob_file_scan_utils.h`。
 
 ```bash
 git show 3381bcbfd:unittest/sql/engine/basic/test_file_scan_utils.cpp
@@ -130,7 +130,7 @@ git show 3381bcbfd:unittest/sql/engine/basic/test_file_scan_utils.cpp
 
 使用 write 工具保存该已检查正文，而不是 checkout 整个目录。配置/构建的失败须确认为本功能文件缺失，而非 GTest 或编译器等环境缺失；引入生产文件后转绿。
 
-- [ ] **2. 逐一迁移四个扫描文件。** 对下列每个路径使用 `git show 3381bcbfd:<path>` 读取并保存，不覆盖既有文件；不拷贝协作者的构建脚本或夹具：
+- [x] **2. 逐一迁移四个扫描文件。** 对下列每个路径使用 `git show 3381bcbfd:<path>` 读取并保存，不覆盖既有文件；不拷贝协作者的构建脚本或夹具：
 
 ```text
 src/sql/engine/basic/ob_file_scan_utils.h
@@ -139,7 +139,7 @@ src/sql/engine/basic/ob_file_parquet_scan.h
 src/sql/engine/basic/ob_file_parquet_scan.cpp
 ```
 
-- [ ] **3. 加入 CMake 构建。** 两个 `.cpp` 进入 CMake 转换器读取的 `SQL_STANDALONE_SOURCES`，不改头归属清单和 Bazel 规则。源码清单检查精确反映增加的两个 standalone 文件。
+- [x] **3. 加入 CMake 构建。** 两个 `.cpp` 进入 CMake 转换器读取的 `SQL_STANDALONE_SOURCES`，不改头归属清单和 Bazel 规则。源码清单检查精确反映增加的两个 standalone 文件。
 
 `unittest/CMakeLists.txt` 只包含 `add_subdirectory(sql)`，`unittest/sql/CMakeLists.txt` 此时只包含 `add_subdirectory(engine/basic)`。扫描目录 CMakeLists 同时支持根工程接入和独立配置：
 
@@ -176,7 +176,7 @@ add_test(NAME file_scan_utils COMMAND test_file_scan_utils)
 
 不要同时再链接 oceanbase 到独立扫描测试，否则会重复引入扫描实现。
 
-- [ ] **4. 运行独立扫描单测，预期现有七个测试通过；若不通过，先使用 systematic-debugging，不改断言绕过。** 另运行：
+- [x] **4. 运行独立扫描单测，预期现有七个测试通过；若不通过，先使用 systematic-debugging，不改断言绕过。** 另运行：
 
 ```bash
 python3 tools/module_check/sql_source_ownership_check.py .
@@ -187,7 +187,9 @@ git diff --check
 
 归属检查先保存迁移前结果；既有问题单独记录，新增缺失归属或重复归属必须清零。
 
-- [ ] **5. 提交仅本任务文件。** `feat(sql): port file scan utilities to the competition baseline`。保留失败/通过输出，记录没有进行 SQL 端验证。
+- [x] **5. 提交仅本任务文件。** `feat(sql): port file scan utilities to the competition baseline`。保留失败/通过输出，记录没有进行 SQL 端验证。
+
+**执行记录（任务 1）：** 隔离 worktree `.worktrees/file-as-database`，分支 `feat/file-as-database-cmake`。先配置 CMake，确认因扫描生产源缺失失败；逐文件迁移后配置、构建、CTest 成功，GTest 7/7 通过。源码清单检查及 CMake 清单生成成功；生成器有既存 Python AST 弃用警告。比赛原版 file_sql 的 8 个文件逐字节未变；未运行服务端 SQL。GTest 使用主工作区已有依赖，未复制/改动依赖目录。
 
 ## Task 2: 用原始 Parquet 夹具验证解码，禁止替换数据
 
@@ -195,7 +197,7 @@ git diff --check
 
 **Interfaces:** 保持 `ParquetScanner::open`、`schema`、`row_count`、`set_projection`、`next_row`、`reset`。错误必须抛出 `file_sql::Error`，不能将缺失数据页静默补成 NULL。
 
-- [ ] **1. 给 `FileScanTest` 增加真实夹具读取测试。** 将比赛原版 base64 解码结果以字节数组放入新测试数据头；引用原始文件哈希，禁止使用协作者替换后的内容。使用现有 `put` helper 写到临时根目录，断言：
+- [x] **1. 给 `FileScanTest` 增加真实夹具读取测试。** 将比赛原版 base64 解码结果以字节数组放入新测试数据头；引用原始文件哈希，禁止使用协作者替换后的内容。使用现有 `put` helper 写到临时根目录，断言：
 
 ```cpp
 Options options;
@@ -216,10 +218,12 @@ ASSERT_TRUE(scan.next(row));
 EXPECT_EQ("0", row[0].text);
 ```
 
-- [ ] **2. 运行新测试并记录真实结果。** 如果已通过，不制造失败；继续增加“截断页不能补 NULL”、多 Row Group、可空列、字典页及投影空列表测试，至少为实际修改找到一个可复现红灯。
-- [ ] **3. 修复命中的解码路径。** 检查 Footer/页长度、dictionary index、RLE/bit-packed 数量、Snappy 输出长度、Row Group 声明行数；列流早于声明行数结束时抛出明确错误，不能在 `next_row` 中当作合法 NULL。保留按页读取，禁止完整 Row Group 解码。
-- [ ] **4. 运行所有扫描测试、夹具完整性检查；增加两列夹具，其中未引用列使用无法解码的数据页，确认只读取目标列。** 元数据仍必须完整且合法；畸形 Footer 不能通过裁剪逃避验证。
-- [ ] **5. 提交。** `fix(sql): decode original parquet fixtures without weakening validation`。
+- [x] **2. 运行新测试并记录真实结果。** 如果已通过，不制造失败；继续增加“截断页不能补 NULL”、多 Row Group、可空列、字典页及投影空列表测试，至少为实际修改找到一个可复现红灯。
+- [x] **3. 修复命中的解码路径。** 检查 Footer/页长度、dictionary index、RLE/bit-packed 数量、Snappy 输出长度、Row Group 声明行数；列流早于声明行数结束时抛出明确错误，不能在 `next_row` 中当作合法 NULL。保留按页读取，禁止完整 Row Group 解码。
+- [x] **4. 运行所有扫描测试、夹具完整性检查；增加两列夹具，其中未引用列使用无法解码的数据页，确认只读取目标列。** 元数据仍必须完整且合法；畸形 Footer 不能通过裁剪逃避验证。
+- [x] **5. 提交。** `fix(sql): decode original parquet fixtures without weakening validation`。
+
+**执行记录（任务 2）：** 原版 Snappy/DataPageV2 夹具直接通过，解码后 SHA256 为 `6320823b8bd1f4309f6584f5d6e64d98b60dc731af039b6db3b5a51677bba13d`。新增多 Row Group、空投影、可空字典列和真实页裁剪测试。复现并修复两类错误：列块/Row Group 行数不一致导致补 NULL 或丢行；截断 Footer 泄漏内部 Truncated 异常而不是 Error。两类测试均先失败后通过，独立 GTest 13/13 通过，原版 8 个文件不变。未运行服务端或 SQL 端验证。
 
 ## Task 3: 统一安全文件句柄与变化检测
 
@@ -236,11 +240,15 @@ void validate_unchanged(const FileIdentity &expected) const;
 
 `LocalFile` 析构关闭其唯一拥有的 fd；禁止复制。ByteSource 和 Parquet FileReader 持有同一授权打开的文件对象/共享所有权，不能校验一个 fd 后重新按路径打开另一个文件。
 
-- [ ] **1. 先加失败测试。** 在现有 `mutation_and_security` 外单列测试：推断后用相同长度、恢复 mtime 的新 inode 替换文件；含嵌入 NUL 的路径；符号链接目录逃逸；打开后原路径被换为指向外部的链接；EOF 前后截断。预期明确失败，外部文件字节不变。替换测试使用 `rename`，不要把普通覆写当成 inode 替换。
-- [ ] **2. 运行新测试确认现有大小/mtime 检查的不足。** 命令为扫描单测配合 `--gtest_filter='FileScanTest.*security*:FileScanTest.*replacement*:FileScanTest.*mutation*'`。
-- [ ] **3. 实现句柄路径。** 拒绝 NUL；固定授权 root 的目录句柄；逐组件解析路径，目录使用 `openat(..., O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)`；文件使用 `openat(..., O_RDONLY | O_NOFOLLOW | O_CLOEXEC)` 并 `fstat` 要求普通文件。拒绝 `..` 逃逸；不因新封装改变现有 secure_file_priv 禁用语义。允许的内部符号链接需在授权 root 内安全解析并限制跳转次数，不能不加区分地接受 realpath 后重开。
-- [ ] **4. 连接推断、扫描、重扫和 EOF 的身份检查。** Definition 增加完整身份信息并更新其当前版本内的序列化/反序列化；读句柄身份与目录项身份均需验证，检测已打开后原路径替换。JSONL/CSV/Parquet 全部走相同检查。格式辅助库不读取 SQL 会话，当前权限复核留给任务 5/6 的 SQL 边界。
-- [ ] **5. 完整跑扫描测试；循环失败路径并比较 `/proc/self/fd` 数量；更新独立编译列表后提交。** `fix(sql): bind file scans to authorized descriptors and identities`。
+- [x] **1. 先加失败测试。** 在现有 `mutation_and_security` 外单列测试：推断后用相同长度、恢复 mtime 的新 inode 替换文件；含嵌入 NUL 的路径；符号链接目录逃逸；打开后原路径被换为指向外部的链接；EOF 前后截断。预期明确失败，外部文件字节不变。替换测试使用 `rename`，不要把普通覆写当成 inode 替换。
+- [x] **2. 运行新测试确认现有大小/mtime 检查的不足。** 命令为扫描单测配合 `--gtest_filter='FileScanTest.*security*:FileScanTest.*replacement*:FileScanTest.*mutation*'`。
+- [x] **3. 实现句柄路径。** 拒绝 NUL；固定授权 root 的目录句柄；逐组件解析路径，目录使用 `openat(..., O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)`；文件使用 `openat(..., O_RDONLY | O_NOFOLLOW | O_CLOEXEC)` 并 `fstat` 要求普通文件。拒绝 `..` 逃逸；不因新封装改变现有 secure_file_priv 禁用语义。允许的内部符号链接需在授权 root 内安全解析并限制跳转次数，不能不加区分地接受 realpath 后重开。
+- [x] **4. 连接推断、扫描、重扫和 EOF 的身份检查。** Definition 增加完整身份信息并更新其当前版本内的序列化/反序列化；读句柄身份与目录项身份均需验证，检测已打开后原路径替换。JSONL/CSV/Parquet 全部走相同检查。格式辅助库不读取 SQL 会话，当前权限复核留给任务 5/6 的 SQL 边界。
+- [x] **5. 完整跑扫描测试；循环失败路径并比较 `/proc/self/fd` 数量；更新独立编译列表后提交。** `fix(sql): bind file scans to authorized descriptors and identities`。
+
+**执行记录（任务 3）：** 四个新增安全用例先失败，证明旧逻辑不能识别同大小/mtime 的替换及恢复 mtime 的改写，也未拒绝路径 NUL。新增 move-only LocalFile，按授权 root 及规范化路径逐组件 openat/O_NOFOLLOW；CSV/JSONL/Parquet 推断和读取共享同一打开句柄，不按裸路径重开读取。持有句柄与当前目录项均校验 device/inode/size/mtime_ns/ctime_ns，推断完成、扫描前后及重扫复核。glob 以受约束目录句柄枚举，异常用 RAII 关闭 DIR。新增所有权、只读/CLOEXEC、边界、FIFO、目录替换及 128 次失败路径的 fd 回收测试。普通 GTest 21/21 通过，独立 CMake ASan/UBSan CTest 通过；源码清单与原版 8 个文件完整性检查通过，用户文档哈希不变。尚未接入当前 SQL 会话权限复核（任务 5/6），COPY 发布仍待任务 9；无服务端 SQL 验证。
+
+**任务 3 性能复核：** 一次性 CMake Release 对比（临时工程 `/tmp/seekdb-task2-io-benchmark`，同一份 10000 行 CSV，三次执行）发现逐行两次完整目录遍历使扫描耗时由协作者约 4–7 ms 增至约 90–97 ms。已修正：Linux 支持时以 openat2 的 NO_SYMLINKS/NO_MAGICLINKS 一次性核验规范化目录项，仅检查身份，内容仍由原持有 fd 读取；不支持或容器过滤时保留已测试的逐组件安全路径。实际 I/O 前后校验，缓冲行及 EOF 则在发布前校验一次，避免冗余检查。相同数据实测约 8.8–9.1 ms；这是本机小规模测量，不代表 SQL 或大文件性能结论。增加 EOF 后修改测试，普通及 ASan/UBSan 共 22 个 GTest 均通过。
 
 ## Task 4: 对记录、元数据、解压和容器分配施加预算
 
@@ -260,11 +268,13 @@ void charge(size_t bytes)
 }
 ```
 
-- [ ] **1. 先写边界与回收测试。** 16 MiB 记录可处理、16 MiB+1 失败；4096/4097 列；构造 Footer 或 Snappy 长度声明超过 64 MiB 的小文件，要求分配前失败；预算测试分别 charge 到边界、再加 1、释放后重用、模拟底层分配失败并核对未泄漏计费。
-- [ ] **2. 跑新测试，记录缺少限制的红灯。** 大规模 glob 用预算 helper/小测试预算验证分配路径，同时对固定 100000 上限建立边界断言；不在单测中创建百万文件。
-- [ ] **3. 实现常量、记录长度检查、元数据数量与偏移校验、深层容器记账。** Footer list/map、字典字符串、解压缓冲、CSV/JSONL 单元格及批次均须覆盖；长度相乘先检查溢出，禁止按恶意声明 resize 后才发现超限。超限抛出 Error，不截断或补 NULL。
-- [ ] **4. 跑扫描测试；用 Sanitizer 的独立 CMake 扫描构建检查越界、UB 和泄漏。** 另建 mktemp 构建目录，配置时传 `-DCMAKE_CXX_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer'` 和 `-DCMAKE_EXE_LINKER_FLAGS='-fsanitize=address,undefined'`，再 cmake --build/ctest，不覆盖普通构建。不能把环境不支持 Sanitizer 记作通过。
-- [ ] **5. 提交。** `fix(sql): bound file inference and parquet decoding memory`。
+- [x] **1. 先写边界与回收测试。** 16 MiB 记录可处理、16 MiB+1 失败；4096/4097 列；构造 Footer 或 Snappy 长度声明超过 64 MiB 的小文件，要求分配前失败；预算测试分别 charge 到边界、再加 1、释放后重用、模拟底层分配失败并核对未泄漏计费。
+- [x] **2. 跑新测试，记录缺少限制的红灯。** 大规模 glob 用预算 helper/小测试预算验证分配路径，同时对固定 100000 上限建立边界断言；不在单测中创建百万文件。
+- [x] **3. 实现常量、记录长度检查、元数据数量与偏移校验、深层容器记账。** Footer list/map、字典字符串、解压缓冲、CSV/JSONL 单元格及批次均须覆盖；长度相乘先检查溢出，禁止按恶意声明 resize 后才发现超限。超限抛出 Error，不截断或补 NULL。
+- [x] **4. 跑扫描测试；用 Sanitizer 的独立 CMake 扫描构建检查越界、UB 和泄漏。** 另建 mktemp 构建目录，配置时传 `-DCMAKE_CXX_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer'` 和 `-DCMAKE_EXE_LINKER_FLAGS='-fsanitize=address,undefined'`，再 cmake --build/ctest，不覆盖普通构建。不能把环境不支持 Sanitizer 记作通过。
+- [x] **5. 提交。** `fix(sql): bound file inference and parquet decoding memory`。
+
+**执行记录（任务 4）：** 新增共享 MemoryBudget、BudgetAllocator 和公开 std 边界的峰值预留；嵌套容器与字符串共用预算，扫描器在调用作用域结束后仍持有预算。记录/列数、Footer/页声明、Snappy 输出、集合长度、偏移、整数及混合编码宽度在分配或位移前校验；Parquet 列流限制在各自 ColumnChunk 内并校验解压长度。六个资源测试先暴露记录、列数及 Footer 限制缺失；修正 Snappy 夹具偏移后，临时移除长度 guard 的负对照确认测试能失败。新增多页、页/列块计数、解压长度及 Footer 嵌套回归。普通及 ASan/UBSan CTest 各 36 个 GTest 全通过；源码与头文件归属检查通过（补登记此前新增/迁移的四个头文件）。原版 file_sql 8 文件与用户文档哈希不变。未运行服务端或 SQL 端验证。
 
 ## Task 5: 迁移语法、系统开关与文件表原生计划
 
