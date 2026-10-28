@@ -1,0 +1,15 @@
+# initial prepared execution
+name
+one
+# replacement with the same size and mtime invalidates the old definition
+ERROR HY000: %s
+# re-preparing observes the new file
+name
+two
+# a cached plan cannot bypass the current feature switch
+ERROR 0A000: the file functions not supported
+# a cached plan cannot retain a previous secure_file_priv grant
+ERROR 42501: Access denied
+# restoring policy permits the unchanged prepared definition
+name
+two

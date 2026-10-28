@@ -23,6 +23,7 @@ namespace oceanbase
 {
 namespace sql
 {
+namespace file_sql { class MemoryBudget; }
 
 /**
  * @brief A binary blob that is able to travel inside an operator specification.
@@ -59,6 +60,7 @@ public:
   ObFileTableSpec(common::ObIAllocator &alloc, const ObPhyOperatorType type)
     : ObOpSpec(alloc, type),
       column_exprs_(alloc),
+      column_ids_(alloc),
       definition_(),
       root_(),
       pattern_(),
@@ -66,6 +68,7 @@ public:
   {}
   INHERIT_TO_STRING_KV("op_spec", ObOpSpec, K_(is_glob));
   common::ObFixedArray<ObExpr *, common::ObIAllocator> column_exprs_;
+  common::ObFixedArray<int64_t, common::ObIAllocator> column_ids_;
   // the serialized file_sql::Definition, empty for a glob table
   ObFileTableBlob definition_;
   // the only directory the file may live in, the value of secure_file_priv
@@ -96,15 +99,19 @@ public:
   virtual int inner_open() override;
   virtual int inner_rescan() override;
   virtual int inner_get_next_row() override;
+  virtual int inner_get_next_batch(const int64_t max_row_cnt) override;
   virtual int inner_close() override;
-  virtual void destroy() override { ObOperator::destroy(); }
+  virtual void destroy() override;
 private:
   int check_file_privilege();
   int open_file_scan();
   int open_glob();
+  int read_next_row();
   int set_cell_datum(const int64_t index, const file_sql::Cell &cell);
   int set_text_datum(ObExpr *expr, const char *text, const int64_t length);
 private:
+  std::shared_ptr<file_sql::MemoryBudget> budget_;
+  std::shared_ptr<file_sql::MemoryReservation> glob_memory_;
   file_sql::Scan *scan_;
   std::vector<std::string> glob_files_;
   int64_t glob_index_;

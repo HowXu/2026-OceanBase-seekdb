@@ -1,0 +1,20 @@
+# only selected columns, aliases and all-NULL type
+column_name	column_type	null	key	default	extra
+label	VARCHAR	NO	NULL	NULL	NULL
+id	BIGINT	NO	NULL	NULL	NULL
+empty	NULL	YES	NULL	NULL	NULL
+# LEFT JOIN output preserves aliases and null extension
+column_name	column_type	null	key	default	extra
+left_id	BIGINT	NO	NULL	NULL	NULL
+right_name	VARCHAR	YES	NULL	NULL	NULL
+# derived output types, not the input file schema
+column_name	column_type	null	key	default	extra
+fixed	BIGINT	NO	NULL	NULL	NULL
+upper_name	VARCHAR	YES	NULL	NULL	NULL
+# names are data in both SQL modes
+column_name	column_type	null	key	default	extra
+o'ne\name	VARCHAR	NO	NULL	NULL	NULL
+value	BIGINT	NO	NULL	NULL	NULL
+column_name	column_type	null	key	default	extra
+o'ne\name	VARCHAR	NO	NULL	NULL	NULL
+value	BIGINT	NO	NULL	NULL	NULL

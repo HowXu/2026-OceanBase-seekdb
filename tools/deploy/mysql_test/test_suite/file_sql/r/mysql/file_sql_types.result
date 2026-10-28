@@ -1,0 +1,25 @@
+# BIGINT bounds, DOUBLE output, BOOLEAN, temporal scale and all-NULL values
+i	d	b	day	created	is_null
+-9223372036854775808	10.5	1	2024-02-29	2024-02-29 12:34:56.123456	1
+9223372036854775807	20	0	2024-03-01	2024-03-01 00:00:00.000000	1
+total	mean	active
+30.50	15.25	1
+# union schema, missing fields and NULL arithmetic
+id	name	extra	missing	adjusted
+1	one	NULL	NULL	1.75
+1	NULL	union	NULL	2.75
+2	NULL	NULL	NULL	NULL
+# GROUP BY, HAVING, ORDER BY and LIMIT use native inferred numeric types
+id	n	total	mean	low	high
+1	2	4.00	2.00	1.5	2.5
+# cross-format LEFT JOIN with the original Parquet values
+id	c1
+NULL	NULL
+0	0
+6	6
+9	NULL
+# empty inputs preserve row counts
+n	total
+0	NULL
+n
+0

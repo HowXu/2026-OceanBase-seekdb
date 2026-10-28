@@ -42,6 +42,13 @@ int ObLogSelectInto::est_cost()
   return ret;
 }
 
+int ObLogSelectInto::allocate_startup_expr_post()
+{
+  // COPY must execute even when its child is empty, so that the header is
+  // published. Keep startup predicates below this side-effect boundary.
+  return into_type_ == T_FILE_COPY ? OB_SUCCESS : ObLogicalOperator::allocate_startup_expr_post();
+}
+
 int ObLogSelectInto::compute_plan_type()
 {
   int ret = OB_SUCCESS;

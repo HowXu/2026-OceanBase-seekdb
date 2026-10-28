@@ -16,6 +16,7 @@
 
 #ifndef OCEANBASE_SQL_OB_EXEC_CONTEXT_H
 #define OCEANBASE_SQL_OB_EXEC_CONTEXT_H
+#include <memory>
 #include "share/interrupt/ob_global_interrupt_call.h"
 #include "lib/net/ob_addr.h"
 #include "lib/allocator/page_arena.h"
@@ -217,6 +218,8 @@ struct ObTempExprBackupCtx;
 // ObExecContext can be serialized, but cannot be deserialized;
 // And ObDesExecContext cannot be serialized, but can be deserialized;
 // Use ObExecContext to serialize, then deserialize correspondingly with ObDesExecContext
+namespace file_sql { class MemoryBudget; }
+
 class ObExecContext
 {
 public:
@@ -287,6 +290,7 @@ public:
   inline bool is_expr_op_ctx_inited() { return expr_op_size_ > 0 && NULL != expr_op_ctx_store_; }
   int get_convert_charset_allocator(common::ObArenaAllocator *&allocator);
   int get_malloc_allocator(ObIAllocator *&allocator);
+  std::shared_ptr<file_sql::MemoryBudget> &get_file_sql_query_budget() { return file_sql_query_budget_; }
   void try_reset_convert_charset_allocator();
 
   void destroy_eval_allocator();
@@ -890,6 +894,7 @@ protected:
   // just for convert charset in query response result
   lib::MemoryContext convert_allocator_;
   lib::MemoryContext mem_context_;
+  std::shared_ptr<file_sql::MemoryBudget> file_sql_query_budget_;
   GroupPWJTabletIdMap *group_pwj_map_;
   // sample result
   Ob2DArray<ObPxTabletRange> part_ranges_;

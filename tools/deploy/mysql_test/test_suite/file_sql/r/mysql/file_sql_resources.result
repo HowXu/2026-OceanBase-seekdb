@@ -1,0 +1,12 @@
+# prime a prepared scan under the normal query quota
+n
+1
+# cached execution must observe the current query memory limit
+ERROR HY000: Exceed query memory limit (mem_limit=LIMIT, mem_hold=HELD),  please check whether the query_memory_limit_percentage configuration item is reasonable.
+# fresh inference is subject to the same limit
+ERROR HY000: Exceed query memory limit (mem_limit=LIMIT, mem_hold=HELD),  please check whether the query_memory_limit_percentage configuration item is reasonable.
+# a long full-file inference is interrupted by the query deadline
+ERROR HY000: Timeout, query has reached the maximum query timeout: 20000(us), maybe you can adjust the session variable ob_query_timeout or query_timeout hint, and try again.
+# resource failure does not poison the next query
+n
+1

@@ -20,6 +20,8 @@
 #include "sql/engine/basic/file_sql_memory.h"
 
 #include <algorithm>
+#include <random>
+#include <limits.h>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
@@ -429,13 +431,14 @@ struct WorkingDefinition {
 
 Definition export_definition(const WorkingDefinition &source)
 {
-  MemoryReservation copy(active_file_sql_budget);
+  Definition result;
+  result.memory_reservation = std::make_shared<MemoryReservation>(active_file_sql_budget);
+  MemoryReservation &copy = *result.memory_reservation;
   reserve_standard_copy(copy, source.path.size() + source.options.null_string.size() + 2);
   reserve_standard_copy(copy, source.columns.size() * sizeof(Column));
   for (const auto &column : source.columns) {
     reserve_standard_copy(copy, column.name.size() + 1);
   }
-  Definition result;
   result.path.assign(source.path.data(), source.path.size());
   result.options.format = source.options.format;
   result.options.header = source.options.header;
@@ -1313,9 +1316,6 @@ void infer_json(const std::shared_ptr<LocalFile> &file, WorkingDefinition &defin
     }
     ++row_count;
   }
-  if (row_count == 0) {
-    throw Error("the JSON lines file is empty");
-  }
   definition.columns.clear();
   for (size_t index = 0; index < names.size(); ++index) {
     WorkingColumn column;
@@ -1579,7 +1579,8 @@ Definition infer(const std::string &path, const std::string &root, const Options
   return export_definition(definition);
 }
 
-std::vector<std::string> discover(const std::string &pattern, const std::string &root)
+std::vector<std::string> discover(const std::string &pattern, const std::string &root,
+                                  MemoryReservation *result_memory)
 {
   BudgetScope scope;
   MemoryReservation bookkeeping(scope.budget(), 64 * 1024);
@@ -1602,7 +1603,9 @@ std::vector<std::string> discover(const std::string &pattern, const std::string 
   const auto close_directory = [](DIR *handle) { ::closedir(handle); };
   std::unique_ptr<DIR, decltype(close_directory)> handle(raw_handle, close_directory);
   BudgetVector<BudgetString> matches;
+  size_t entries = 0;
   while (true) {
+    if ((entries++ & 255) == 0) check_work();
     errno = 0;
     struct dirent *entry = ::readdir(handle.get());
     if (entry == nullptr) {
@@ -1622,7 +1625,8 @@ std::vector<std::string> discover(const std::string &pattern, const std::string 
   }
   directory.validate_unchanged(identity);
   std::sort(matches.begin(), matches.end());
-  MemoryReservation output(scope.budget());
+  MemoryReservation local_output(scope.budget());
+  MemoryReservation &output = result_memory ? *result_memory : local_output;
   reserve_standard_copy(output, matches.size() * sizeof(std::string));
   for (const auto &path : matches) reserve_standard_copy(output, path.size() + 1);
   std::vector<std::string> result;
@@ -1631,7 +1635,7 @@ std::vector<std::string> discover(const std::string &pattern, const std::string 
   return result;
 }
 
-std::string Definition::serialize() const
+std::string Definition::serialize(MemoryReservation *result_memory) const
 {
   BudgetScope scope;
   MemoryReservation bookkeeping(scope.budget(), 64 * 1024);
@@ -1659,7 +1663,8 @@ std::string Definition::serialize() const
     blob.push_back(columns[index].nullable ? '\1' : '\0');
     append_u32(blob, static_cast<uint32_t>(columns[index].scale));
   }
-  MemoryReservation output(scope.budget());
+  MemoryReservation local_output(scope.budget());
+  MemoryReservation &output = result_memory ? *result_memory : local_output;
   reserve_standard_copy(output, blob.size() + 1);
   return std::string(blob.data(), blob.size());
 }
@@ -1706,7 +1711,7 @@ class Scan::ScanImpl {
 public:
   ScanImpl(const Definition &definition, const std::string &root, const std::vector<int> &projection)
       : budget_(active_file_sql_budget ? active_file_sql_budget : std::make_shared<MemoryBudget>()),
-        bookkeeping_(budget_, 64 * 1024)
+        bookkeeping_(budget_, 64 * 1024), output_memory_(budget_)
   {
     BudgetScope scope(budget_);
     check_count(projection.size(), MAX_COLUMNS, "projection");
@@ -1740,14 +1745,16 @@ public:
     // Actual reads validate their held descriptor before/after I/O. Validate
     // again before publishing any row (including buffered rows) or EOF.
     row.clear();
+    output_memory_.clear();
+    reserve_standard_copy(output_memory_, row.capacity() * sizeof(Cell));
     BudgetVector<WorkingCell> cells;
     const bool has_row = producer_->next_row(cells);
     check_unchanged();
     if (!has_row) {
       return false;
     }
-    MemoryReservation output(budget_);
-    reserve_standard_copy(output, (row.capacity() + cells.size()) * sizeof(Cell));
+    MemoryReservation &output = output_memory_;
+    reserve_standard_copy(output, cells.size() * sizeof(Cell));
     for (const auto &cell : cells) {
       reserve_standard_copy(output, cell.text.size() + 1);
     }
@@ -1775,6 +1782,7 @@ private:
 
   std::shared_ptr<MemoryBudget> budget_;
   MemoryReservation bookkeeping_;
+  MemoryReservation output_memory_;
   WorkingDefinition definition_;
   BudgetVector<int> projection_;
   std::shared_ptr<LocalFile> file_;
@@ -1791,35 +1799,69 @@ Scan::~Scan() {}
 bool Scan::next(std::vector<Cell> &row) { return impl_->next(row); }
 
 void Scan::rescan() { impl_->rescan(); }
-
 class CsvWriter::CsvWriterImpl {
 public:
+  CsvWriterImpl()
+      : budget_(active_file_sql_budget ? active_file_sql_budget : std::make_shared<MemoryBudget>()),
+        bookkeeping_(budget_, 64 * 1024) {}
+
   void open(const Definition &output, const std::string &root)
   {
-    root_ = root;
-    options_ = output.options;
-    target_path_ = resolve_output_path(output.path, root);
-    if (is_regular_file(target_path_)) {
-      throw Error("the file " + target_path_ + " already exists");
+    BudgetScope scope(budget_);
+    check_count(output.path.size(), PATH_MAX - 1, "output path");
+    if (output.path.find('\0') != std::string::npos) {
+      throw Error("file SQL output path contains NUL");
     }
-    static int counter = 0;
-    ++counter;
-    const std::string directory = directory_of(target_path_);
-    char suffix[64];
-    ::snprintf(suffix, sizeof(suffix), "/.seekdb-copy-%ld-%d.csv", static_cast<long>(::getpid()), counter);
-    temp_path_ = directory + suffix;
-    stream_.open(temp_path_.c_str(), std::ios::binary | std::ios::trunc);
-    if (!stream_.good()) {
-      throw Error("cannot create the temporary file " + temp_path_);
+    check_count(output.columns.size(), MAX_COLUMNS, "output column");
+    check_count(root.size(), PATH_MAX - 1, "output root");
+    check_count(output.options.null_string.size(), MAX_RECORD_BYTES, "NULL marker");
+    size_t header_bytes = 0;
+    for (const auto &column : output.columns) {
+      check_count(column.name.size(), MAX_RECORD_BYTES - header_bytes, "CSV output header");
+      header_bytes += column.name.size();
+    }
+    reserve_standard_copy(bookkeeping_, output.options.null_string.size() + 1);
+    options_ = output.options;
+    if (options_.delimiter == '\0' || options_.delimiter == '\n' || options_.delimiter == '\r'
+        || options_.quote == '\0' || options_.quote == '\n' || options_.quote == '\r'
+        || options_.delimiter == options_.quote || options_.escape == '\0'
+        || options_.escape == '\r' || options_.escape == '\n'
+        || options_.null_string.find_first_of(std::string("\0\r\n", 3)) != std::string::npos
+        || options_.null_string.find(options_.delimiter) != std::string::npos
+        || options_.null_string.find(options_.quote) != std::string::npos) {
+      throw Error("invalid CSV output options");
+    }
+    root_ = root;
+    target_ = basename_of(output.path);
+    if (target_.empty() || target_ == "." || target_ == "..") {
+      throw Error("invalid file SQL output name");
+    }
+    directory_.reset(new LocalFile(LocalFile::open_directory(directory_of(output.path), root)));
+    struct stat info{};
+    if (::fstatat(directory_->descriptor(), target_.c_str(), &info, AT_SYMLINK_NOFOLLOW) == 0
+        || errno != ENOENT) {
+      throw Error("file SQL output already exists or is inaccessible");
+    }
+    std::random_device random;
+    for (int attempt = 0; attempt < 128 && fd_ < 0; ++attempt) {
+      temp_ = ".seekdb-copy-" + std::to_string(::getpid()) + "-"
+              + std::to_string(random()) + "-" + std::to_string(random());
+      fd_ = ::openat(directory_->descriptor(), temp_.c_str(),
+                     O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
+      if (fd_ < 0 && errno != EEXIST) {
+        throw Error("cannot create exclusive file SQL temporary output");
+      }
+    }
+    if (fd_ < 0) {
+      throw Error("cannot allocate file SQL temporary output name");
     }
     if (options_.header) {
+      MemoryReservation header_memory(budget_);
+      reserve_standard_copy(header_memory, output.columns.size() * sizeof(Field) + header_bytes);
       std::vector<Field> header;
-      for (size_t index = 0; index < output.columns.size(); ++index) {
-        Field field;
-        field.is_null = false;
-        field.text = output.columns[index].name;
-        field.type = Type::Varchar;
-        header.push_back(field);
+      header.reserve(output.columns.size());
+      for (const auto &column : output.columns) {
+        header.push_back({false, column.name, Type::Varchar});
       }
       write_row(header);
     }
@@ -1827,123 +1869,150 @@ public:
 
   void write(const std::vector<Field> &fields)
   {
-    if (committed_) {
-      throw Error("the file was already written");
+    if (committed_ || fd_ < 0) {
+      throw Error("file SQL output is not writable");
     }
     write_row(fields);
   }
 
   void commit()
   {
-    if (committed_) {
-      throw Error("the file was already written");
+    BudgetScope scope(budget_);
+    check_work();
+    if (committed_ || fd_ < 0) {
+      throw Error("file SQL output is not writable");
     }
-    stream_.flush();
-    stream_.close();
-    if (is_regular_file(target_path_)) {
-      cleanup();
-      throw Error("the file " + target_path_ + " already exists");
+    validate_directory();
+    if (::fsync(fd_) != 0) {
+      throw Error("cannot flush file SQL output");
     }
-    if (::rename(temp_path_.c_str(), target_path_.c_str()) != 0) {
-      cleanup();
-      throw Error("cannot write the file " + target_path_);
+    check_work();
+    // Link the held inode, never a replaceable temporary pathname. linkat
+    // publishes exclusively: every existing directory entry yields EEXIST.
+    int result = ::linkat(fd_, "", directory_->descriptor(), target_.c_str(), AT_EMPTY_PATH);
+    if (result != 0 && (errno == EPERM || errno == ENOENT || errno == EINVAL)) {
+      const std::string descriptor = "/proc/self/fd/" + std::to_string(fd_);
+      result = ::linkat(AT_FDCWD, descriptor.c_str(), directory_->descriptor(),
+                        target_.c_str(), AT_SYMLINK_FOLLOW);
+    }
+    if (result != 0) {
+      throw Error("cannot publish file SQL output without replacing an existing entry");
+    }
+    try {
+      validate_directory();
+    } catch (...) {
+      unlink_owned(target_);
+      throw;
+    }
+    struct stat identity{};
+    if (::fstat(fd_, &identity) != 0) {
+      unlink_owned(target_);
+      throw Error("cannot stat file SQL output before close");
+    }
+    unlink_owned(temp_);
+    const int close_result = ::close(fd_);
+    fd_ = -1;
+    temp_.clear();
+    if (close_result != 0) {
+      unlink_inode(target_, identity);
+      throw Error("cannot close file SQL output");
     }
     committed_ = true;
   }
 
-  ~CsvWriterImpl()
+  ~CsvWriterImpl() { cleanup(); }
+
+private:
+  void validate_directory()
   {
-    if (!committed_) {
-      cleanup();
+    const auto current = LocalFile::open_directory(directory_->path(), root_);
+    const auto original = directory_->identity();
+    const auto identity = current.identity();
+    if (original.device != identity.device || original.inode != identity.inode) {
+      throw Error("file SQL output directory changed");
     }
   }
 
-private:
-  void cleanup()
+  void unlink_inode(const std::string &name, const struct stat &held) noexcept
   {
-    if (stream_.is_open()) {
-      stream_.close();
+    struct stat entry{};
+    if (directory_
+        && ::fstatat(directory_->descriptor(), name.c_str(), &entry, AT_SYMLINK_NOFOLLOW) == 0
+        && held.st_dev == entry.st_dev && held.st_ino == entry.st_ino) {
+      ::unlinkat(directory_->descriptor(), name.c_str(), 0);
     }
-    if (!temp_path_.empty()) {
-      ::remove(temp_path_.c_str());
-      temp_path_.clear();
+  }
+
+  void unlink_owned(const std::string &name) noexcept
+  {
+    struct stat held{};
+    if (fd_ >= 0 && ::fstat(fd_, &held) == 0) unlink_inode(name, held);
+  }
+
+  void cleanup() noexcept
+  {
+    if (!temp_.empty()) {
+      unlink_owned(temp_);
+      temp_.clear();
+    }
+    if (fd_ >= 0) {
+      ::close(fd_);
+      fd_ = -1;
     }
   }
 
   void write_row(const std::vector<Field> &fields)
   {
-    for (size_t index = 0; index < fields.size(); ++index) {
-      if (index > 0) {
-        stream_ << options_.delimiter;
+    check_count(fields.size(), MAX_COLUMNS, "output column");
+    BudgetScope scope(budget_);
+    check_work();
+    BudgetString row;
+    auto append = [&](std::string_view text) {
+      if (text.size() > MAX_RECORD_BYTES - row.size()) {
+        throw Error("CSV output record exceeds the size limit");
       }
-      write_field(fields[index]);
-    }
-    stream_ << '\n';
-    if (!stream_.good()) {
-      throw Error("cannot write the file " + target_path_);
-    }
-  }
-
-  void write_field(const Field &field)
-  {
-    if (field.is_null) {
-      stream_ << options_.null_string;
-      return;
-    }
-    const std::string &text = field.text;
-    const bool needs_quotes = text.empty() || (!options_.null_string.empty() && text == options_.null_string)
-                              || text.find(options_.delimiter) != std::string::npos
-                              || text.find(options_.quote) != std::string::npos
-                              || (options_.escape != options_.quote && text.find(options_.escape) != std::string::npos)
-                              || text.find('\n') != std::string::npos || text.find('\r') != std::string::npos
-                              || text.front() == ' ' || text.back() == ' ';
-    if (!needs_quotes) {
-      stream_ << text;
-      return;
-    }
-    stream_ << options_.quote;
-    for (size_t index = 0; index < text.size(); ++index) {
-      const char item = text[index];
-      if (item == options_.quote) {
-        if (options_.escape == options_.quote) {
-          stream_ << options_.quote << options_.quote;
-        } else {
-          stream_ << options_.escape << options_.quote;
-        }
-      } else if (options_.escape != options_.quote && item == options_.escape) {
-        stream_ << options_.escape << options_.escape;
-      } else {
-        stream_ << item;
+      row.append(text.data(), text.size());
+    };
+    auto byte = [&](char value) { append(std::string_view(&value, 1)); };
+    for (size_t i = 0; i < fields.size(); ++i) {
+      if (i != 0) byte(options_.delimiter);
+      const auto &field = fields[i];
+      if (field.is_null) {
+        append(options_.null_string);
+        continue;
       }
+      const auto &text = field.text;
+      const bool quote = text.empty() || text == options_.null_string
+          || text.find_first_of(std::string{options_.delimiter, options_.quote, options_.escape, '\n', '\r'})
+             != std::string::npos || text.front() == ' ' || text.back() == ' ';
+      if (quote) byte(options_.quote);
+      size_t position = 0;
+      for (const char value : text) {
+        if ((position++ & 65535) == 0) check_work();
+        if (quote && (value == options_.quote || value == options_.escape)) byte(options_.escape);
+        byte(value);
+      }
+      if (quote) byte(options_.quote);
     }
-    stream_ << options_.quote;
+    byte('\n');
+    size_t position = 0;
+    while (position < row.size()) {
+      check_work();
+      const ssize_t count = ::write(fd_, row.data() + position, row.size() - position);
+      if (count < 0 && errno == EINTR) continue;
+      if (count <= 0) throw Error("cannot write file SQL output");
+      position += static_cast<size_t>(count);
+    }
   }
 
-  std::string resolve_output_path(const std::string &path, const std::string &root)
-  {
-    if (root.empty() || root == "NULL") {
-      throw Error("the directory allowed to write files to is not configured");
-    }
-    const std::string canonical_root = canonical_path(root);
-    if (!is_directory(canonical_root)) {
-      throw Error("the directory allowed to write files to is not a directory");
-    }
-    const std::string name = basename_of(path);
-    if (name.empty() || name == "." || name == "..") {
-      throw Error("the output path " + path + " is not a file name");
-    }
-    const std::string directory = canonical_path(directory_of(path));
-    if (!is_within(directory, canonical_root)) {
-      throw Error("the output path " + path + " is outside of the directory allowed to write files to");
-    }
-    return directory + "/" + name;
-  }
-
+  std::shared_ptr<MemoryBudget> budget_;
+  MemoryReservation bookkeeping_;
   Options options_;
   std::string root_;
-  std::string target_path_;
-  std::string temp_path_;
-  std::ofstream stream_;
+  std::string target_;
+  std::string temp_;
+  std::unique_ptr<LocalFile> directory_;
+  int fd_ = -1;
   bool committed_ = false;
 };
 

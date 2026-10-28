@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/basic/ob_file_table_op.h"
+#include "sql/engine/basic/file_sql_query_context.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/expr/ob_expr.h"
 #include "sql/session/ob_basic_session_info.h"
@@ -36,6 +37,7 @@ namespace sql
 OB_SERIALIZE_MEMBER_INHERIT(ObFileTableSpec,
                             ObOpSpec,
                             column_exprs_,
+                            column_ids_,
                             definition_,
                             root_,
                             pattern_,
@@ -68,10 +70,15 @@ int ObFileTableOp::inner_open()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_file_privilege())) {
-  } else if (MY_SPEC.is_glob_) {
-    ret = open_glob();
   } else {
-    ret = open_file_scan();
+    try {
+      budget_ = make_file_sql_scan_budget(ctx_);
+      ret = MY_SPEC.is_glob_ ? open_glob() : open_file_scan();
+    } catch (const FileSqlQueryError &error) {
+      ret = error.code();
+    } catch (const std::bad_alloc &) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    }
   }
   return ret;
 }
@@ -110,26 +117,40 @@ int ObFileTableOp::inner_rescan()
       ret = open_glob();
     } else if (OB_NOT_NULL(scan_)) {
       try {
+        file_sql::BudgetScope scope(budget_);
         scan_->rescan();
-      } catch (const file_sql::Error &error) {
+      } catch (const FileSqlQueryError &error) {
+        ret = error.code();
+      } catch (const std::bad_alloc &) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } catch (const std::exception &error) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_USER_ERROR(OB_ERR_UNEXPECTED, "%s", error.what());
+        LOG_WARN("file rescan failed", K(ret), "error", error.what());
       }
     }
   }
   return ret;
 }
 
+void ObFileTableOp::destroy()
+{
+  inner_close();
+  ObOperator::destroy();
+}
+
 int ObFileTableOp::inner_close()
 {
   int ret = OB_SUCCESS;
+  std::vector<file_sql::Cell>().swap(cells_);
   if (OB_NOT_NULL(scan_)) {
     delete scan_;
     scan_ = NULL;
   }
-  glob_files_.clear();
+  // The engine calls destroy(), not the C++ destructor, for arena operators.
+  std::vector<std::string>().swap(glob_files_);
   glob_index_ = 0;
-  cells_.clear();
+  glob_memory_.reset();
+  budget_.reset();
   return ret;
 }
 
@@ -137,16 +158,20 @@ int ObFileTableOp::open_file_scan()
 {
   int ret = OB_SUCCESS;
   try {
+    file_sql::BudgetScope scope(budget_);
+    file_sql::MemoryReservation blob_memory(scope.budget());
+    file_sql::reserve_standard_copy(blob_memory, MY_SPEC.definition_.length() + 1);
     const std::string blob = MY_SPEC.definition_.str();
     file_sql::Definition definition = file_sql::Definition::deserialize(blob);
     std::vector<int> projection;
-    for (size_t index = 0; index < definition.columns.size(); ++index) {
-      projection.push_back(static_cast<int>(index));
+    for (int64_t index = 0; index < MY_SPEC.column_ids_.count(); ++index) {
+      projection.push_back(static_cast<int>(MY_SPEC.column_ids_.at(index)));
     }
     scan_ = new file_sql::Scan(definition, MY_SPEC.root_.str(), projection);
-  } catch (const file_sql::Error &error) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_USER_ERROR(OB_ERR_UNEXPECTED, "%s", error.what());
+  } catch (const FileSqlQueryError &error) {
+    ret = error.code();
+  } catch (const std::bad_alloc &) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
   } catch (const std::exception &exception) {
     ret = OB_ERR_UNEXPECTED;
     LOG_USER_ERROR(OB_ERR_UNEXPECTED, "%s", exception.what());
@@ -158,10 +183,14 @@ int ObFileTableOp::open_glob()
 {
   int ret = OB_SUCCESS;
   try {
-    glob_files_ = file_sql::discover(MY_SPEC.pattern_.str(), MY_SPEC.root_.str());
-  } catch (const file_sql::Error &error) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_USER_ERROR(OB_ERR_UNEXPECTED, "%s", error.what());
+    file_sql::BudgetScope scope(budget_);
+    std::vector<std::string>().swap(glob_files_);
+    glob_memory_ = std::make_shared<file_sql::MemoryReservation>(scope.budget());
+    glob_files_ = file_sql::discover(MY_SPEC.pattern_.str(), MY_SPEC.root_.str(), glob_memory_.get());
+  } catch (const FileSqlQueryError &error) {
+    ret = error.code();
+  } catch (const std::bad_alloc &) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
   } catch (const std::exception &exception) {
     ret = OB_ERR_UNEXPECTED;
     LOG_USER_ERROR(OB_ERR_UNEXPECTED, "%s", exception.what());
@@ -172,46 +201,76 @@ int ObFileTableOp::open_glob()
 
 int ObFileTableOp::inner_get_next_row()
 {
+  clear_evaluated_flag();
+  return read_next_row();
+}
+
+int ObFileTableOp::inner_get_next_batch(const int64_t max_row_cnt)
+{
+  int ret = OB_SUCCESS;
+  const int64_t count = std::min(max_row_cnt, MY_SPEC.max_batch_size_);
+  clear_evaluated_flag();
+  clear_datum_eval_flag();
+  brs_.size_ = 0;
+  brs_.end_ = false;
+  if (OB_UNLIKELY(count <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    if (brs_.skip_ != nullptr) {
+      brs_.skip_->reset(count);
+    }
+    ObEvalCtx::BatchInfoScopeGuard guard(eval_ctx_);
+    guard.set_batch_size(count);
+    while (OB_SUCC(ret) && brs_.size_ < count) {
+      guard.set_batch_idx(brs_.size_);
+      if (OB_ITER_END == (ret = read_next_row())) {
+        ret = OB_SUCCESS;
+        brs_.end_ = true;
+        break;
+      } else if (OB_SUCC(ret)) {
+        ++brs_.size_;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObFileTableOp::read_next_row()
+{
   int ret = OB_SUCCESS;
   if (OB_FAIL(try_check_status())) {
   } else {
-    clear_evaluated_flag();
-    if (MY_SPEC.is_glob_) {
-      if (glob_index_ >= static_cast<int64_t>(glob_files_.size())) {
-        ret = OB_ITER_END;
-      } else {
-        const std::string &file = glob_files_[glob_index_++];
-        file_sql::Cell cell;
-        cell.text = file;
-        cell.is_null = false;
-        cells_.clear();
-        cells_.push_back(cell);
-        if (OB_SUCC(ret) && OB_FAIL(set_cell_datum(0, cell))) {
-        }
-      }
-    } else if (OB_ISNULL(scan_)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      bool has_row = false;
-      try {
-        has_row = scan_->next(cells_);
-      } catch (const file_sql::Error &error) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_USER_ERROR(OB_ERR_UNEXPECTED, "%s", error.what());
-      } catch (const std::exception &exception) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_USER_ERROR(OB_ERR_UNEXPECTED, "%s", exception.what());
-      }
-      if (OB_SUCC(ret)) {
-        if (!has_row) {
+    try {
+      file_sql::BudgetScope scope(budget_);
+      if (MY_SPEC.is_glob_) {
+        if (glob_index_ >= static_cast<int64_t>(glob_files_.size())) {
           ret = OB_ITER_END;
         } else {
-          for (int64_t index = 0; OB_SUCC(ret) && index < static_cast<int64_t>(cells_.size()); ++index) {
-            if (OB_FAIL(set_cell_datum(index, cells_[index]))) {
-            }
+          file_sql::Cell cell;
+          cell.text = glob_files_[glob_index_++];
+          cell.is_null = false;
+          if (!MY_SPEC.column_exprs_.empty()) {
+            ret = set_cell_datum(0, cell);
           }
         }
+      } else if (OB_ISNULL(scan_)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (!scan_->next(cells_)) {
+        ret = OB_ITER_END;
+      } else if (static_cast<int64_t>(cells_.size()) != MY_SPEC.column_exprs_.count()) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        for (int64_t index = 0; OB_SUCC(ret) && index < MY_SPEC.column_exprs_.count(); ++index) {
+          ret = set_cell_datum(index, cells_[index]);
+        }
       }
+    } catch (const FileSqlQueryError &error) {
+      ret = error.code();
+    } catch (const std::bad_alloc &) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } catch (const std::exception &error) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("file scan failed", K(ret), "error", error.what());
     }
   }
   return ret;

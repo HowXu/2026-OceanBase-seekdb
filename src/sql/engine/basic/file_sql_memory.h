@@ -4,6 +4,7 @@
 #pragma once
 
 #include <atomic>
+#include <functional>
 #include <limits>
 #include <map>
 #include <memory_resource>
@@ -22,19 +23,44 @@ inline constexpr size_t MAX_WORKSPACE_BYTES = 256U * 1024 * 1024;
 class MemoryBudget {
 public:
   explicit MemoryBudget(size_t limit = MAX_WORKSPACE_BYTES,
-                        std::pmr::memory_resource *upstream = std::pmr::new_delete_resource())
-      : limit_(limit), upstream_(upstream) {}
+                        std::pmr::memory_resource *upstream = std::pmr::new_delete_resource(),
+                        std::shared_ptr<MemoryBudget> parent = {},
+                        std::function<void(size_t)> check = {})
+      : limit_(limit), upstream_(upstream), parent_(std::move(parent)), check_(std::move(check)) {}
 
   void reserve(size_t bytes)
   {
+    if (bytes == 0) return;
     size_t used = used_.load(std::memory_order_relaxed);
     do {
       if (bytes > limit_ - used) {
         throw Error("file SQL memory budget exceeded");
       }
     } while (!used_.compare_exchange_weak(used, used + bytes, std::memory_order_relaxed));
+    bool parent_charged = false;
+    try {
+      if (parent_) {
+        parent_->reserve(bytes);
+        parent_charged = true;
+      }
+      if (check_) check_(used + bytes);
+    } catch (...) {
+      if (parent_charged) parent_->release(bytes);
+      used_.fetch_sub(bytes, std::memory_order_relaxed);
+      throw;
+    }
   }
-  void release(size_t bytes) noexcept { used_.fetch_sub(bytes, std::memory_order_relaxed); }
+  void release(size_t bytes) noexcept
+  {
+    if (bytes == 0) return;
+    used_.fetch_sub(bytes, std::memory_order_relaxed);
+    if (parent_) parent_->release(bytes);
+  }
+  void check() const
+  {
+    if (parent_) parent_->check();
+    if (check_) check_(used());
+  }
   size_t used() const { return used_.load(std::memory_order_relaxed); }
 
   void *allocate(size_t bytes, size_t alignment)
@@ -56,12 +82,19 @@ public:
 private:
   size_t limit_;
   std::pmr::memory_resource *upstream_;
+  std::shared_ptr<MemoryBudget> parent_;
+  std::function<void(size_t)> check_;
   std::atomic<size_t> used_{0};
 };
 
 // Only our allocators consult this scope; the process-wide allocator and PMR
 // default resource are never changed. Each allocation retains its own budget.
 inline thread_local std::shared_ptr<MemoryBudget> active_file_sql_budget;
+
+inline void check_work()
+{
+  if (active_file_sql_budget) active_file_sql_budget->check();
+}
 
 class BudgetScope {
 public:
@@ -87,7 +120,8 @@ class MemoryReservation {
 public:
   explicit MemoryReservation(std::shared_ptr<MemoryBudget> budget, size_t bytes = 0)
       : budget_(std::move(budget)) { add(bytes); }
-  ~MemoryReservation() { budget_->release(bytes_); }
+  ~MemoryReservation() { clear(); }
+  void clear() noexcept { budget_->release(bytes_); bytes_ = 0; }
   MemoryReservation(const MemoryReservation &) = delete;
   MemoryReservation &operator=(const MemoryReservation &) = delete;
   void add(size_t bytes) { budget_->reserve(bytes); bytes_ += bytes; }

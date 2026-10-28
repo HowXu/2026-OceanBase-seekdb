@@ -1,0 +1,38 @@
+# owner: database-competition
+# description: Query memory applies to inference/cached scans; long inference observes timeouts.
+--disable_query_log
+let $RESOURCE_DIR = $OBSERVER_DIR/file_sql_resources;
+exec mkdir -p "$RESOURCE_DIR";
+exec python3 -c "from pathlib import Path; Path('$RESOURCE_DIR/large.csv').write_text('id,payload'+chr(10)+'1,'+'a'*12582912+chr(10))";
+exec awk 'BEGIN {print "id,name"; for(i=0;i<5000000;i++) print "1,a"}' > "$RESOURCE_DIR/long.csv";
+let $OLD_FILE_SQL_MEMORY_BUDGET = query_get_value("show parameters like 'memory_budget'",value,1);
+let $OLD_FILE_SQL_QUERY_PERCENT = query_get_value("show parameters like 'query_memory_limit_percentage'",value,1);
+alter system set memory_budget='2G';
+set session enable_file_sql=ON;
+--echo # prime a prepared scan under the normal query quota
+eval prepare file_sql_resource_scan from "select count(*) as n from read_csv('$RESOURCE_DIR/large.csv')";
+execute file_sql_resource_scan;
+alter system set query_memory_limit_percentage=1;
+--echo # cached execution must observe the current query memory limit
+--replace_regex /mem_limit=[0-9]+/mem_limit=LIMIT/ /mem_hold=[0-9]+/mem_hold=HELD/
+--error 11049
+execute file_sql_resource_scan;
+deallocate prepare file_sql_resource_scan;
+--echo # fresh inference is subject to the same limit
+--replace_regex /mem_limit=[0-9]+/mem_limit=LIMIT/ /mem_hold=[0-9]+/mem_hold=HELD/
+--error 11049
+eval select count(*) as fresh from read_csv('$RESOURCE_DIR/large.csv');
+eval alter system set query_memory_limit_percentage=$OLD_FILE_SQL_QUERY_PERCENT;
+--echo # a long full-file inference is interrupted by the query deadline
+set session ob_query_timeout=20000;
+--error 4012
+eval select count(*) from read_csv('$RESOURCE_DIR/long.csv');
+set session ob_query_timeout=10000000;
+--echo # resource failure does not poison the next query
+eval select count(*) as n from read_csv('$RESOURCE_DIR/large.csv');
+eval alter system set memory_budget='$OLD_FILE_SQL_MEMORY_BUDGET';
+set session enable_file_sql=OFF;
+remove_file $RESOURCE_DIR/large.csv;
+remove_file $RESOURCE_DIR/long.csv;
+exec rmdir "$RESOURCE_DIR";
+--enable_query_log

@@ -5550,7 +5550,8 @@ int ObStaticEngineCG::generate_spec(ObLogFileTable &op, ObFileTableSpec &spec,
   } else if (OB_ISNULL(table_item = stmt->get_table_item_by_id(op.get_table_id())) ||
              OB_ISNULL(table_item->file_table_def_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(spec.column_exprs_.init(stmt->get_column_size()))) {
+  } else if (OB_FAIL(spec.column_exprs_.init(stmt->get_column_size())) ||
+             OB_FAIL(spec.column_ids_.init(stmt->get_column_size()))) {
   } else if (OB_FAIL(ob_write_string(alloc, table_item->file_table_def_->definition_, definition)) ||
              OB_FAIL(ob_write_string(alloc, table_item->file_table_def_->root_, root)) ||
              OB_FAIL(ob_write_string(alloc, table_item->file_table_def_->pattern_, pattern))) {
@@ -5572,7 +5573,10 @@ int ObStaticEngineCG::generate_spec(ObLogFileTable &op, ObFileTableSpec &spec,
           && col_item->table_id_ == op.get_table_id()
           && col_item->expr_->is_explicited_reference()) {
         OZ (mark_expr_self_produced(col_item->expr_));
+        const int64_t source_index = col_item->column_id_ - OB_APP_MIN_COLUMN_ID;
+        CK (source_index >= 0 && source_index < table_item->file_table_def_->columns_.count());
         OZ (generate_rt_expr(*col_item->expr_, rt_expr));
+        OZ (spec.column_ids_.push_back(source_index));
         OZ (spec.column_exprs_.push_back(rt_expr));
       }
     }

@@ -529,7 +529,7 @@ class ObLogFileTable;
 class ObFileTableSpec;
 class ObFileTableOp;
 REGISTER_OPERATOR(ObLogFileTable, PHY_FILE_TABLE, ObFileTableSpec,
-                  ObFileTableOp, NOINPUT);
+                  ObFileTableOp, NOINPUT, VECTORIZED_OP);
 
 class ObLogOptimizerStatsGathering;
 class ObOptimizerStatsGatheringSpec;

@@ -27,6 +27,8 @@ namespace oceanbase {
 namespace sql {
 namespace file_sql {
 
+class MemoryReservation;
+
 /**
  * @brief Error raised when a file cannot be read, a schema cannot be inferred
  *        or a security constraint forbids the access.
@@ -114,6 +116,8 @@ struct Field {
  */
 class Definition {
 public:
+  // Keeps returned standard-library storage charged until its owner releases it.
+  std::shared_ptr<MemoryReservation> memory_reservation;
   std::string path;
   Options options;
   std::vector<Column> columns;
@@ -126,7 +130,7 @@ public:
   /**
    * @brief Serialize the definition into a binary blob.
    */
-  std::string serialize() const;
+  std::string serialize(MemoryReservation *result_memory = nullptr) const;
 
   /**
    * @brief Restore a definition serialized by serialize().
@@ -179,7 +183,8 @@ Definition infer(const std::string &path, const std::string &root, const Options
  * @param root     the only directory the files may live in
  * @throw Error when the pattern escapes the root or a match is a dangling link
  */
-std::vector<std::string> discover(const std::string &pattern, const std::string &root);
+std::vector<std::string> discover(const std::string &pattern, const std::string &root,
+                                  MemoryReservation *result_memory = nullptr);
 
 /**
  * @brief Stream the rows of a file.

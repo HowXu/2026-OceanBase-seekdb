@@ -17,8 +17,10 @@
 #define USING_LOG_PREFIX SQL_RESV
 
 #include "sql/resolver/dml/ob_dml_resolver.h"
+#include "sql/resolver/dml/ob_select_resolver.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "sql/engine/basic/ob_file_scan_utils.h"
+#include "sql/engine/basic/file_sql_query_context.h"
 #include "sql/session/ob_basic_session_info.h"
 #include "share/system_variable/ob_sys_var_class_type.h"
 
@@ -50,6 +52,11 @@ static int file_table_type_to_obj_meta(const ObFileTableColumnDef &column,
 {
   int ret = OB_SUCCESS;
   switch (static_cast<file_sql::Type>(column.type_)) {
+    case file_sql::Type::Null:
+      meta.set_type(ObNullType);
+      accuracy.set_precision(0);
+      accuracy.set_scale(0);
+      break;
     case file_sql::Type::Boolean:
       meta.set_tinyint();
       accuracy.set_precision(PRECISION_UNKNOWN_YET);
@@ -63,7 +70,7 @@ static int file_table_type_to_obj_meta(const ObFileTableColumnDef &column,
     case file_sql::Type::Double:
       meta.set_double();
       accuracy.set_precision(PRECISION_UNKNOWN_YET);
-      accuracy.set_scale(0);
+      accuracy.set_scale(SCALE_UNKNOWN_YET);
       break;
     case file_sql::Type::Date:
       meta.set_date();
@@ -79,6 +86,7 @@ static int file_table_type_to_obj_meta(const ObFileTableColumnDef &column,
       meta.set_varchar();
       accuracy.set_precision(PRECISION_UNKNOWN_YET);
       accuracy.set_scale(SCALE_UNKNOWN_YET);
+      accuracy.set_length(OB_MAX_VARCHAR_LENGTH);
       break;
   }
   return ret;
@@ -131,15 +139,17 @@ static int file_table_option_value(const ParseNode *node,
  */
 static int file_table_options(const ParseNode *args_node,
                                file_sql::Options &options,
-                               bool &has_format)
+                               bool &has_format,
+                               bool copy_mode = false,
+                               file_sql::MemoryReservation *option_memory = nullptr)
 {
   int ret = OB_SUCCESS;
   has_format = false;
   std::set<std::string> seen_options;
   if (OB_ISNULL(args_node)) {
-    ret = OB_ERR_UNEXPECTED;
+    ret = copy_mode ? OB_SUCCESS : OB_ERR_UNEXPECTED;
   } else {
-    for (int64_t i = 1; OB_SUCC(ret) && i < args_node->num_child_; ++i) {
+    for (int64_t i = copy_mode ? 0 : 1; OB_SUCC(ret) && i < args_node->num_child_; ++i) {
       const ParseNode *arg_node = args_node->children_[i];
       const ParseNode *name_node = NULL;
       const ParseNode *value_node = NULL;
@@ -159,7 +169,16 @@ static int file_table_options(const ParseNode *args_node,
         break;
       }
       name.assign_ptr(name_node->str_value_, name_node->str_len_);
-      if (OB_FAIL(file_table_option_value(value_node, string_value, int_value, bool_value, value_type))) {
+      if (copy_mode && value_node == nullptr && name.case_compare("header") == 0) {
+        bool_value = true;
+        value_type = 2;
+      } else if (copy_mode && name.case_compare("format") == 0 && value_node != nullptr
+                 && value_node->type_ == T_COLUMN_REF && value_node->num_child_ == 3
+                 && value_node->children_[0] == nullptr && value_node->children_[1] == nullptr
+                 && value_node->children_[2] != nullptr) {
+        string_value.assign_ptr(value_node->children_[2]->str_value_, value_node->children_[2]->str_len_);
+        value_type = 1;
+      } else if (OB_FAIL(file_table_option_value(value_node, string_value, int_value, bool_value, value_type))) {
         break;
       }
       char lower_name[32];
@@ -168,7 +187,9 @@ static int file_table_options(const ParseNode *args_node,
         lower_name[index] = static_cast<char>(::tolower(static_cast<unsigned char>(name.ptr()[index])));
       }
       lower_name[name_length] = '\0';
-      if (!seen_options.insert(lower_name).second) {
+      const char *canonical_name = 0 == ::strcmp(lower_name, "delim") ? "delimiter"
+                                   : 0 == ::strcmp(lower_name, "nullstr") ? "null_string" : lower_name;
+      if (!seen_options.insert(canonical_name).second) {
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "duplicate option of a file function");
         break;
@@ -207,9 +228,11 @@ static int file_table_options(const ParseNode *args_node,
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "the null_string option of a file function");
           break;
         }
+        file_sql::check_count(string_value.length(), file_sql::MAX_RECORD_BYTES, "NULL marker");
+        if (option_memory) file_sql::reserve_standard_copy(*option_memory, string_value.length() + 1);
         options.null_string = std::string(string_value.ptr(), string_value.length());
       } else if (0 == ::strcmp(lower_name, "sample_size")) {
-        if (3 != value_type) {
+        if (copy_mode || 3 != value_type) {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "the sample_size option of a file function");
           break;
@@ -254,9 +277,74 @@ static int file_table_options(const ParseNode *args_node,
   return ret;
 }
 
-int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
-                                            TableItem *&tbl_item)
+int ObSelectResolver::resolve_file_copy(const ParseNode &node, ObSelectIntoItem &into_item) try
 {
+  file_sql::BudgetScope query_scope(std::make_shared<file_sql::MemoryBudget>(
+      file_sql::MAX_WORKSPACE_BYTES, std::pmr::new_delete_resource(),
+      make_file_sql_query_budget(*session_info_)));
+  file_sql::MemoryReservation option_memory(query_scope.budget(), 64 * 1024);
+  int ret = OB_SUCCESS;
+  bool enabled = false;
+  bool has_format = false;
+  ObString root;
+  CK (node.num_child_ == 2 && node.children_[0] != nullptr);
+  OZ (session_info_->get_sys_variable(share::SYS_VAR_ENABLE_FILE_SQL, enabled));
+  if (OB_SUCC(ret) && !enabled) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "the file COPY");
+  }
+  OZ (session_info_->get_secure_file_priv(root));
+  try {
+    file_sql::Definition output;
+    output.options.format = file_sql::Format::Csv;
+    OZ (file_table_options(node.children_[1], output.options, has_format, true, &option_memory));
+    if (OB_SUCC(ret) && output.options.format != file_sql::Format::Csv) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "COPY output other than CSV");
+    }
+    if (OB_SUCC(ret)) {
+      output.path.assign(node.children_[0]->str_value_, node.children_[0]->str_len_);
+      const ObString path(static_cast<int32_t>(output.path.size()), output.path.data());
+      OZ (ObResolverUtils::check_secure_path(root, path));
+      const auto *source = get_select_stmt();
+      file_sql::reserve_standard_copy(option_memory, source->get_select_item_size() * sizeof(file_sql::Column));
+      for (int64_t i = 0; i < source->get_select_item_size(); ++i) {
+        const SelectItem &item = source->get_select_item(i);
+        const ObString &name = item.alias_name_.empty() ? item.expr_name_ : item.alias_name_;
+        file_sql::reserve_standard_copy(option_memory, name.length() + 1);
+        output.columns.push_back({std::string(name.ptr(), name.length()), file_sql::Type::Varchar, true});
+      }
+      file_sql::MemoryReservation blob_memory(query_scope.budget());
+      const std::string blob = output.serialize(&blob_memory);
+      OZ (ob_write_string(*allocator_, ObString(static_cast<int32_t>(blob.size()), blob.data()),
+                          into_item.external_properties_));
+    }
+  } catch (const FileSqlQueryError &error) {
+    ret = error.code();
+  } catch (const std::bad_alloc &) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } catch (const std::exception &error) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_USER_ERROR(OB_ERR_UNEXPECTED, "%s", error.what());
+  }
+  return ret;
+} catch (const FileSqlQueryError &error) {
+  return error.code();
+} catch (const std::bad_alloc &) {
+  return OB_ALLOCATE_MEMORY_FAILED;
+} catch (const std::exception &error) {
+  LOG_USER_ERROR(OB_ERR_UNEXPECTED, "%s", error.what());
+  return OB_ERR_UNEXPECTED;
+}
+
+int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
+                                            TableItem *&tbl_item) try
+{
+  file_sql::BudgetScope query_scope(std::make_shared<file_sql::MemoryBudget>(
+      file_sql::MAX_WORKSPACE_BYTES, std::pmr::new_delete_resource(),
+      make_file_sql_query_budget(*session_info_)));
+  file_sql::MemoryReservation option_memory(query_scope.budget(), 64 * 1024);
+  file_sql::MemoryReservation glob_memory(query_scope.budget());
   int ret = OB_SUCCESS;
   ObDMLStmt *stmt = get_stmt();
   TableItem *item = NULL;
@@ -298,7 +386,7 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
         path.assign_ptr(path_node->str_value_, path_node->str_len_);
       }
     }
-    if (OB_SUCC(ret) && OB_FAIL(file_table_options(args_node, options, has_format))) {
+    if (OB_SUCC(ret) && OB_FAIL(file_table_options(args_node, options, has_format, false, &option_memory))) {
     } else if (OB_SUCC(ret) && OB_FAIL(session_info_->get_secure_file_priv(secure_file_priv))) {
     } else if (OB_SUCC(ret) && OB_FAIL(ObResolverUtils::check_secure_path(secure_file_priv, path))) {
     }
@@ -329,12 +417,15 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
       try {
         if (FILE_TABLE_GLOB == function_id) {
           glob_files = file_sql::discover(std::string(path.ptr(), path.length()),
-                                          std::string(secure_file_priv.ptr(), secure_file_priv.length()));
+                                          std::string(secure_file_priv.ptr(), secure_file_priv.length()),
+                                          &glob_memory);
         } else {
           definition = file_sql::infer(std::string(path.ptr(), path.length()),
                                        std::string(secure_file_priv.ptr(), secure_file_priv.length()),
                                        options);
         }
+      } catch (const FileSqlQueryError &error) {
+        ret = error.code();
       } catch (const file_sql::Error &error) {
         ret = OB_ERR_UNEXPECTED;
         LOG_USER_ERROR(OB_ERR_UNEXPECTED, "%s", error.what());
@@ -364,7 +455,8 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
         if (OB_FAIL(table_def->columns_.push_back(column))) {
         }
       } else {
-        const std::string blob = definition.serialize();
+        file_sql::MemoryReservation blob_memory(query_scope.budget());
+        const std::string blob = definition.serialize(&blob_memory);
         if (OB_FAIL(ob_write_string(*allocator_,
                                     ObString(static_cast<int32_t>(blob.size()), blob.data()),
                                     table_def->definition_))) {
@@ -402,6 +494,13 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
   }
   OX (tbl_item = item);
   return ret;
+} catch (const FileSqlQueryError &error) {
+  return error.code();
+} catch (const std::bad_alloc &) {
+  return OB_ALLOCATE_MEMORY_FAILED;
+} catch (const std::exception &error) {
+  LOG_USER_ERROR(OB_ERR_UNEXPECTED, "%s", error.what());
+  return OB_ERR_UNEXPECTED;
 }
 
 int ObDMLResolver::resolve_file_table_column_item(const TableItem &table_item,
@@ -482,6 +581,7 @@ int ObDMLResolver::resolve_file_table_column_item(const TableItem &table_item,
         if (OB_FAIL(file_table_type_to_obj_meta(column, meta, accuracy))) {
         } else if (meta.is_string_type()) {
           meta.set_collation_type(session_info_->get_nls_collation());
+          meta.set_collation_level(CS_LEVEL_IMPLICIT);
         }
         if (OB_SUCC(ret)) {
           ret = resolve_file_table_column_item(table_item,

@@ -30,3 +30,11 @@ target_compile_features(test_file_scan_utils PRIVATE cxx_std_17)
 target_include_directories(test_file_scan_utils PRIVATE "${FILE_SQL_REPO_ROOT}/src")
 target_link_libraries(test_file_scan_utils PRIVATE file_sql_gtest_main)
 add_test(NAME file_scan_utils COMMAND test_file_scan_utils)
+
+if(NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+  add_executable(test_file_table_op test_file_table_op.cpp)
+  target_link_libraries(test_file_table_op PRIVATE oceanbase ob_base file_sql_gtest_main)
+  set_property(TARGET test_file_table_op APPEND PROPERTY
+    BUILD_RPATH "$<TARGET_FILE_DIR:oceanbase>")
+  add_test(NAME file_table_op COMMAND test_file_table_op)
+endif()

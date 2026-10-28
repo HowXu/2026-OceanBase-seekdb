@@ -60,6 +60,7 @@ public:
   }
   static void update_mem_limit();
   static int check_status();
+  static int check_status(int64_t external_memory);
   static int try_check_status(int64_t check_try_times = DEFAULT_CHECK_STATUS_TRY_TIMES);
 
 private:

@@ -1,0 +1,43 @@
+# owner: database-competition
+# description: Describe resolved SELECT outputs without reparsing SQL literals.
+--disable_query_log
+let $DESC_DIR = $OBSERVER_DIR/file_sql_describe;
+exec mkdir -p "$DESC_DIR";
+--write_file $DESC_DIR/projection.csv
+id,name,empty
+1,alice,
+2,bob,
+EOF
+--write_file $DESC_DIR/right.jsonl
+{"id":1,"label":"one"}
+EOF
+--write_file $DESC_DIR/quotes.csv
+"o'ne\name",value
+literal,7
+EOF
+set session enable_file_sql=ON;
+--echo # only selected columns, aliases and all-NULL type
+ eval describe select name as label,id,empty from read_csv('$DESC_DIR/projection.csv');
+--echo # LEFT JOIN output preserves aliases and null extension
+ eval describe select c.id as left_id,j.label as right_name from read_csv('$DESC_DIR/projection.csv') c left join read_json('$DESC_DIR/right.jsonl') j on c.id=j.id;
+--echo # derived output types, not the input file schema
+ eval describe select 1 as fixed,upper(name) as upper_name from read_csv('$DESC_DIR/projection.csv');
+--echo # names are data in both SQL modes
+set @old_sql_mode=@@sql_mode;
+ eval describe select * from read_csv('$DESC_DIR/quotes.csv');
+set session sql_mode='NO_BACKSLASH_ESCAPES';
+ eval describe select * from read_csv('$DESC_DIR/quotes.csv');
+set session sql_mode=@old_sql_mode;
+--disable_result_log
+explain select 1;
+ eval explain select id from read_csv('$DESC_DIR/projection.csv');
+create table file_sql_describe_ordinary(id int);
+describe file_sql_describe_ordinary;
+drop table file_sql_describe_ordinary;
+--enable_result_log
+set session enable_file_sql=OFF;
+remove_file $DESC_DIR/projection.csv;
+remove_file $DESC_DIR/right.jsonl;
+remove_file $DESC_DIR/quotes.csv;
+exec rmdir "$DESC_DIR";
+--enable_query_log

@@ -1,0 +1,82 @@
+# owner: database-competition
+# description: COPY consumes native SELECT rows and publishes CSV exclusively.
+--disable_query_log
+let $COPY_DIR = $OBSERVER_DIR/file_sql_copy;
+exec mkdir -p "$COPY_DIR";
+--write_file $COPY_DIR/input.csv
+id,name,score
+1,"comma,""quote""",10.5
+2,"",NULL
+3,"NULL",20
+EOF
+set session enable_file_sql=ON;
+--echo # query COPY preserves ordering, quoting, empty strings and NULLs
+eval copy (select id,name,score from read_csv('$COPY_DIR/input.csv',nullstr='NULL') order by id) to '$COPY_DIR/query.csv' (format csv,header,nullstr 'NULL');
+select row_count() as copied;
+eval select id,name,name is null as missing,score from read_csv('$COPY_DIR/query.csv',nullstr='NULL') order by id;
+--echo # publishing cannot replace an existing output
+--error 4016
+eval copy (select 99 as id) to '$COPY_DIR/query.csv' (format csv);
+eval select count(*) as n,sum(id) as total from read_csv('$COPY_DIR/query.csv',nullstr='NULL');
+--echo # synonymous options cannot silently override one another
+--error 1235
+ eval copy (select 1 as id) to '$COPY_DIR/duplicate.csv' (delim ';',delimiter ',');
+--error 1235
+ eval select count(*) from read_csv('$COPY_DIR/input.csv',nullstr='NULL',null_string='');
+--echo # ordinary table COPY and default options use the same executor
+create table file_sql_copy_source (id bigint,name varchar(30));
+insert into file_sql_copy_source values (1,'one'),(2,NULL);
+eval copy file_sql_copy_source to '$COPY_DIR/table.csv';
+eval select id,name from read_csv('$COPY_DIR/table.csv') order by id;
+--echo # empty result still exports the selected header
+eval copy (select id from file_sql_copy_source where 1=0) to '$COPY_DIR/empty.csv' (header);
+eval select count(*) as n from read_csv('$COPY_DIR/empty.csv');
+--echo # header false and non-default delimiters
+eval copy (select id,name from file_sql_copy_source order by id) to '$COPY_DIR/noheader.csv' (format 'csv',header false,delimiter ';',nullstr 'NULL');
+eval select count(*) as n from read_csv('$COPY_DIR/noheader.csv',header=false,delim=';',nullstr='NULL');
+--echo # custom quote and escape round-trip embedded separators and newlines
+ eval copy (select 1 as id,concat('semi;|/end',char(10)) as name union all select 2,NULL) to '$COPY_DIR/custom.csv' (format csv,header,delimiter ';',quote '|',escape '/',nullstr 'NULL');
+ eval select id,replace(name,char(10),'[LF]') as name from read_csv('$COPY_DIR/custom.csv',delim=';',quote='|',escape='/',nullstr='NULL') order by id;
+--echo # native aggregation and LEFT JOIN feed COPY
+ eval copy (select t.id,sum(c.score) as total from file_sql_copy_source t left join read_csv('$COPY_DIR/input.csv',nullstr='NULL') c on t.id=c.id group by t.id order by t.id) to '$COPY_DIR/aggregate.csv' (header,nullstr 'NULL');
+ eval select id,total from read_csv('$COPY_DIR/aggregate.csv',nullstr='NULL') order by id;
+--echo # temporal output retains fractional seconds
+ eval copy (select date('2024-02-29') as day,cast('2024-02-29 12:34:56.123456' as datetime(6)) as created) to '$COPY_DIR/temporal.csv' (header);
+ eval select day,created from read_csv('$COPY_DIR/temporal.csv');
+--echo # row execution exports the same values
+alter system set _rowsets_max_rows=0;
+ eval copy (select id,name from file_sql_copy_source order by id) to '$COPY_DIR/row.csv' (header);
+alter system set _rowsets_max_rows=256;
+ eval select id,name from read_csv('$COPY_DIR/row.csv') order by id;
+--echo # multiple native batches retain all independent strings
+exec awk 'BEGIN {print "id,label"; for(i=1;i<=2049;i++) printf "%d,item%04d\n",i,i}' > "$COPY_DIR/many.csv";
+ eval copy (select label,id from read_csv('$COPY_DIR/many.csv') order by id desc) to '$COPY_DIR/many-out.csv' (header);
+ eval select count(*) as n,count(distinct label) as labels,sum(id) as total from read_csv('$COPY_DIR/many-out.csv');
+--echo # timeout rolls back output and temporary files
+set session ob_query_timeout=10000;
+--error 4012
+eval copy (select sleep(0.1) as delayed) to '$COPY_DIR/timeout.csv' (header);
+set session ob_query_timeout=10000000;
+eval select count(*) as n from glob('$COPY_DIR/*timeout*');
+eval select count(*) as n from glob('$COPY_DIR/.seekdb-copy-*');
+--echo # legacy OUTFILE retains its original path
+ eval select 7,'legacy' into outfile '$COPY_DIR/legacy.tsv';
+ eval select count(*) as n from read_csv('$COPY_DIR/legacy.tsv',header=false,delim='\t');
+drop table file_sql_copy_source;
+set session enable_file_sql=OFF;
+--error 1235
+eval copy (select 1 as id) to '$COPY_DIR/off.csv' (format csv);
+remove_file $COPY_DIR/input.csv;
+remove_file $COPY_DIR/query.csv;
+remove_file $COPY_DIR/table.csv;
+remove_file $COPY_DIR/empty.csv;
+remove_file $COPY_DIR/noheader.csv;
+remove_file $COPY_DIR/custom.csv;
+remove_file $COPY_DIR/aggregate.csv;
+remove_file $COPY_DIR/temporal.csv;
+remove_file $COPY_DIR/row.csv;
+remove_file $COPY_DIR/many.csv;
+remove_file $COPY_DIR/many-out.csv;
+remove_file $COPY_DIR/legacy.tsv;
+exec rmdir "$COPY_DIR";
+--enable_query_log

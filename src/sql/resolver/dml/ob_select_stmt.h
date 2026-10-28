@@ -372,7 +372,8 @@ public:
   uint64_t get_view_ref_id() const { return view_ref_id_; }
   bool has_select_into() const { return into_item_ != NULL; }
   bool is_select_into_outfile() const { return has_select_into() &&
-                                               into_item_->into_type_ == T_INTO_OUTFILE; }
+                                               (into_item_->into_type_ == T_INTO_OUTFILE ||
+                                                into_item_->into_type_ == T_FILE_COPY); }
   // check if the stmt is a Select-Project-Join(SPJ) query
   bool is_spj() const;
   // is_spj + normal group by or scalar group by

@@ -1,0 +1,50 @@
+# owner: database-competition
+# description: Inferred types survive native expressions and aggregates.
+--disable_query_log
+let $TYPE_DIR = $OBSERVER_DIR/file_sql_types;
+exec mkdir -p "$TYPE_DIR";
+--write_file $TYPE_DIR/types.csv
+i,d,b,day,created,missing
+-9223372036854775808,10.5,true,2024-02-29,2024-02-29 12:34:56.123456,
+9223372036854775807,20,false,2024-03-01,2024-03-01 00:00:00,
+EOF
+--write_file $TYPE_DIR/types.jsonl
+{"id":1,"score":1.5,"name":"one","missing":null}
+{"id":1,"score":2.5,"extra":"union"}
+{"id":2,"score":null}
+EOF
+--write_file $TYPE_DIR/left.csv
+id
+0
+6
+9
+NULL
+EOF
+--write_file $TYPE_DIR/empty.csv
+id,name
+EOF
+--write_file $TYPE_DIR/empty.jsonl
+EOF
+exec base64 -d "mysql_test/test_suite/file_sql/data/simple.parquet.b64" > "$TYPE_DIR/original.parquet";
+set session enable_file_sql=ON;
+--echo # BIGINT bounds, DOUBLE output, BOOLEAN, temporal scale and all-NULL values
+ eval select i,d,b,day,created,missing is null as is_null from read_csv('$TYPE_DIR/types.csv') order by i;
+ eval select cast(sum(d) as decimal(10,2)) as total,cast(avg(d) as decimal(10,2)) as mean,sum(b) as active from read_csv('$TYPE_DIR/types.csv');
+--echo # union schema, missing fields and NULL arithmetic
+ eval select id,name,extra,missing,score+0.25 as adjusted from read_json('$TYPE_DIR/types.jsonl') order by id,score;
+--echo # GROUP BY, HAVING, ORDER BY and LIMIT use native inferred numeric types
+ eval select id,count(*) as n,cast(sum(score) as decimal(10,2)) as total,cast(avg(score) as decimal(10,2)) as mean,min(score) as low,max(score) as high from read_ndjson('$TYPE_DIR/types.jsonl') group by id having count(*)>1 order by id limit 2;
+--echo # cross-format LEFT JOIN with the original Parquet values
+ eval select c.id,p.c1 from read_csv('$TYPE_DIR/left.csv',nullstr='NULL') c left join read_parquet('$TYPE_DIR/original.parquet') p on c.id=p.c1 order by c.id;
+--echo # empty inputs preserve row counts
+ eval select count(*) as n,sum(id) as total from read_csv('$TYPE_DIR/empty.csv');
+ eval select count(*) as n from read_json('$TYPE_DIR/empty.jsonl');
+set session enable_file_sql=OFF;
+remove_file $TYPE_DIR/left.csv;
+remove_file $TYPE_DIR/empty.csv;
+remove_file $TYPE_DIR/empty.jsonl;
+remove_file $TYPE_DIR/original.parquet;
+remove_file $TYPE_DIR/types.csv;
+remove_file $TYPE_DIR/types.jsonl;
+exec rmdir "$TYPE_DIR";
+--enable_query_log

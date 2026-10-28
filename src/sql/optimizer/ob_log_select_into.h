@@ -167,6 +167,7 @@ public:
   const common::ObIArray<ObRawExpr*> &get_select_exprs() const { return select_exprs_; }
   common::ObIArray<ObRawExpr*> &get_select_exprs() { return select_exprs_; }
   virtual int est_cost() override;
+  int allocate_startup_expr_post() override;
   virtual int compute_plan_type() override;
   virtual int get_op_exprs(ObIArray<ObRawExpr*> &all_exprs) override;
   virtual int inner_replace_op_exprs(ObRawExprReplacer &replacer);

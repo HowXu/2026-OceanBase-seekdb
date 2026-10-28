@@ -147,6 +147,7 @@ public:
 
   uint8_t read_byte()
   {
+    if ((read_calls_++ & 4095) == 0) check_work();
     if (pos_ >= size_) {
       throw Truncated();
     }
@@ -259,6 +260,7 @@ private:
   size_t size_;
   size_t pos_;
   size_t skip_depth_ = 0;
+  size_t read_calls_ = 0;
 };
 
 /**
@@ -991,7 +993,12 @@ bool snappy_decompress(const uint8_t *src, size_t src_size, size_t expected_size
   if (length != expected_size) throw Error("parquet decompressed page size mismatch");
   out.assign((size_t)length, 0);
   size_t written = 0;
+  size_t checked = 0;
   while (pos < src_size) {
+    if (written - checked >= 65536) {
+      check_work();
+      checked = written;
+    }
     uint8_t tag = src[pos++];
     uint32_t type = tag & 0x03;
     if (type == 0) {
@@ -1169,6 +1176,7 @@ bool decode_hybrid(const uint8_t *data,
       uint32_t value = (uint32_t)read_le(data + pos, bytes);
       pos += bytes;
       for (uint64_t i = 0; i < run && (int)values.size() < count; ++i) {
+        if ((i & 4095) == 0) check_work();
         values.push_back((int32_t)value);
       }
     } else {
@@ -1184,6 +1192,7 @@ bool decode_hybrid(const uint8_t *data,
       }
       BitReader packed(data + pos, bytes);
       for (uint64_t i = 0; i < total && (int)values.size() < count; ++i) {
+        if ((i & 4095) == 0) check_work();
         uint32_t value = 0;
         if (!packed.read_bits(width, value)) {
           return false;
@@ -1462,6 +1471,7 @@ void decode_plain_values(const uint8_t *data,
         throw Error("corrupt parquet page");
       }
       for (int i = 0; i < count; ++i) {
+        if ((i & 4095) == 0) check_work();
         uint8_t byte = data[i / 8];
         values.push_back((byte >> (i % 8)) & 1 ? "true" : "false");
       }
@@ -1472,6 +1482,7 @@ void decode_plain_values(const uint8_t *data,
         throw Error("corrupt parquet page");
       }
       for (int i = 0; i < count; ++i) {
+        if ((i & 4095) == 0) check_work();
         values.push_back(format_value(column, data + pos, 4));
         pos += 4;
       }
@@ -1482,6 +1493,7 @@ void decode_plain_values(const uint8_t *data,
         throw Error("corrupt parquet page");
       }
       for (int i = 0; i < count; ++i) {
+        if ((i & 4095) == 0) check_work();
         values.push_back(format_value(column, data + pos, 8));
         pos += 8;
       }
@@ -1492,6 +1504,7 @@ void decode_plain_values(const uint8_t *data,
         throw Error("corrupt parquet page");
       }
       for (int i = 0; i < count; ++i) {
+        if ((i & 4095) == 0) check_work();
         values.push_back(format_value(column, data + pos, 12));
         pos += 12;
       }
@@ -1502,6 +1515,7 @@ void decode_plain_values(const uint8_t *data,
         throw Error("corrupt parquet page");
       }
       for (int i = 0; i < count; ++i) {
+        if ((i & 4095) == 0) check_work();
         values.push_back(format_value(column, data + pos, 4));
         pos += 4;
       }
@@ -1512,6 +1526,7 @@ void decode_plain_values(const uint8_t *data,
         throw Error("corrupt parquet page");
       }
       for (int i = 0; i < count; ++i) {
+        if ((i & 4095) == 0) check_work();
         values.push_back(format_value(column, data + pos, 8));
         pos += 8;
       }
@@ -1519,6 +1534,7 @@ void decode_plain_values(const uint8_t *data,
     }
     case PARQUET_BYTE_ARRAY: {
       for (int i = 0; i < count; ++i) {
+        if ((i & 4095) == 0) check_work();
         if (pos + 4 > size) {
           throw Error("corrupt parquet page");
         }
@@ -1538,6 +1554,7 @@ void decode_plain_values(const uint8_t *data,
         throw Error("corrupt parquet page");
       }
       for (int i = 0; i < count; ++i) {
+        if ((i & 4095) == 0) check_work();
         values.push_back(format_value(column, data + pos, length));
         pos += length;
       }

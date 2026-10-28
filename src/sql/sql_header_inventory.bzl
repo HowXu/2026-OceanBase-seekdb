@@ -471,6 +471,7 @@ SQL_PRIVATE_HEADERS = [
     "engine/basic/chunk_store/ob_default_block_writer.h",
     "engine/basic/file_sql_file_access.h",
     "engine/basic/file_sql_memory.h",
+    "engine/basic/file_sql_query_context.h",
     "engine/basic/ob_expr_values_op.h",
     "engine/basic/ob_file_parquet_scan.h",
     "engine/basic/ob_file_scan_utils.h",

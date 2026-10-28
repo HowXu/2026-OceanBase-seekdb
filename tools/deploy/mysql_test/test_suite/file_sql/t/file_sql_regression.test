@@ -1,0 +1,44 @@
+# owner: database-competition
+# description: Native file projections, aggregates, batches and cross-format joins.
+--disable_query_log
+let $REG_DIR = $OBSERVER_DIR/file_sql_regression;
+exec mkdir -p "$REG_DIR";
+--write_file $REG_DIR/projection.csv
+id,name,score
+1,alice,10
+2,bob,20
+3,carol,30
+EOF
+--write_file $REG_DIR/right.jsonl
+{"id":1,"label":"one"}
+{"id":2,"label":"two"}
+{"id":null,"label":"none"}
+EOF
+exec awk 'BEGIN {print "id,name,score"; for(i=1;i<=2049;i++) printf "%d,item%04d,%d\n",i,i,i}' > "$REG_DIR/batch.csv";
+set session enable_file_sql=ON;
+--echo # projection order and repeated columns
+ eval select name, id from read_csv('$REG_DIR/projection.csv') order by id;
+ eval select name, name as again from read_csv('$REG_DIR/projection.csv') order by id;
+--echo # empty projection and aggregates
+ eval select count(*) as n from read_csv('$REG_DIR/projection.csv');
+ eval select sum(id) as total, min(name) as first_name, max(name) as last_name from read_csv('$REG_DIR/projection.csv');
+--echo # native INNER and LEFT JOIN with missing and NULL keys
+ eval select c.id, j.label from read_csv('$REG_DIR/projection.csv') c inner join read_json('$REG_DIR/right.jsonl') j on c.id=j.id order by c.id;
+ eval select c.id, j.label from read_csv('$REG_DIR/projection.csv') c left join read_json('$REG_DIR/right.jsonl') j on c.id=j.id order by c.id;
+--echo # nested-loop rescan and filtered aggregate
+ eval select /*+ use_nl(c j) */ c.id, count(j.id) as n from read_csv('$REG_DIR/projection.csv') c left join read_json('$REG_DIR/right.jsonl') j on c.id=j.id group by c.id order by c.id;
+ eval select sum(score) as total from read_csv('$REG_DIR/projection.csv') where id>1;
+--echo # multiple batches retain independent string datums
+ eval select count(*) as n, count(distinct name) as names, sum(id) as total from read_csv('$REG_DIR/batch.csv');
+ eval select name,id from read_csv('$REG_DIR/batch.csv') order by id desc limit 3;
+ eval select id%2 as parity,count(*) as n,sum(id) as total from read_csv('$REG_DIR/batch.csv') group by id%2 order by parity;
+--echo # row execution agrees with vectorized execution
+alter system set _rowsets_max_rows=0;
+ eval select /*+ use_plan_cache(none) */ name,id from read_csv('$REG_DIR/batch.csv') where id in (1,1025,2049) order by id;
+alter system set _rowsets_max_rows=256;
+set session enable_file_sql=OFF;
+remove_file $REG_DIR/batch.csv;
+remove_file $REG_DIR/projection.csv;
+remove_file $REG_DIR/right.jsonl;
+exec rmdir "$REG_DIR";
+--enable_query_log

@@ -1,0 +1,52 @@
+# query COPY preserves ordering, quoting, empty strings and NULLs
+copied
+3
+id	name	missing	score
+1	comma,"quote"	0	10.5
+2		0	NULL
+3	NULL	0	20
+# publishing cannot replace an existing output
+ERROR HY000: %s
+n	total
+3	6
+# synonymous options cannot silently override one another
+ERROR 0A000: duplicate option of a file function not supported
+ERROR 0A000: duplicate option of a file function not supported
+# ordinary table COPY and default options use the same executor
+id	name
+1	one
+2	NULL
+# empty result still exports the selected header
+n
+0
+# header false and non-default delimiters
+n
+2
+# custom quote and escape round-trip embedded separators and newlines
+id	name
+1	semi;|/end[LF]
+2	NULL
+# native aggregation and LEFT JOIN feed COPY
+id	total
+1	10.5
+2	NULL
+# temporal output retains fractional seconds
+day	created
+2024-02-29	2024-02-29 12:34:56.123456
+# row execution exports the same values
+id	name
+1	one
+2	NULL
+# multiple native batches retain all independent strings
+n	labels	total
+2049	2049	2100225
+# timeout rolls back output and temporary files
+ERROR HY000: Timeout, query has reached the maximum query timeout: 10000(us), maybe you can adjust the session variable ob_query_timeout or query_timeout hint, and try again.
+n
+0
+n
+0
+# legacy OUTFILE retains its original path
+n
+1
+ERROR 0A000: the file COPY not supported

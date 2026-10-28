@@ -76,14 +76,19 @@ TEST(FileSqlParser, describe_and_copy)
   parser.free_result(result);
   const char *queries[] = {
     "COPY (SELECT * FROM read_csv('/tmp/a.csv')) TO '/tmp/out.csv' (format csv, header, nullstr 'NULL')",
-    "COPY ordinary_table TO '/tmp/out.csv' (delimiter ';', quote '\"', escape '\"', header false)"
+    "COPY ordinary_table TO '/tmp/out.csv' (delimiter ';', quote '\"', escape '\"', header false)",
+    "COPY test.ordinary_table TO '/tmp/out.csv'",
+    "COPY (SELECT 1 AS id UNION ALL SELECT 2) TO '/tmp/out.csv'"
   };
   for (const char *query : queries) {
     result = ParseResult{};
     ASSERT_EQ(common::OB_SUCCESS, parser.parse(common::ObString(query), result)) << query;
-    const ParseNode *into = find_node(result.result_tree_, T_INTO_OUTFILE);
+    const ParseNode *into = find_node(result.result_tree_, T_FILE_COPY);
     ASSERT_NE(nullptr, into);
-    EXPECT_EQ(0, into->value_); // no question marks in these statements
+    EXPECT_EQ(2, into->num_child_);
+    const ParseNode *select = find_node(result.result_tree_, T_SELECT);
+    ASSERT_NE(nullptr, select);
+    EXPECT_EQ(0, select->value_); // only the root stores question-mark count
     EXPECT_TRUE(into->is_tree_not_param_);
     parser.free_result(result);
   }

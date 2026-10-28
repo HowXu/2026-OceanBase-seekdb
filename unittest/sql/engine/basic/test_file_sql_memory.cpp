@@ -42,6 +42,72 @@ TEST(FileSqlMemory, allocation_failure_rolls_back_charge)
   EXPECT_EQ(0U, budget->used());
 }
 
+TEST(FileSqlMemory, sibling_budgets_share_query_usage_and_roll_back_failed_charge)
+{
+  size_t engine_bytes = 16;
+  auto query = std::make_shared<MemoryBudget>(1024, std::pmr::new_delete_resource(),
+      std::shared_ptr<MemoryBudget>{}, [&](size_t bytes) {
+        if (bytes > 96 - engine_bytes) throw Error("query memory limit");
+      });
+  MemoryBudget left(64, std::pmr::new_delete_resource(), query);
+  MemoryBudget right(64, std::pmr::new_delete_resource(), query);
+  left.reserve(48);
+  EXPECT_THROW(right.reserve(48), Error);
+  EXPECT_EQ(48U, query->used());
+  EXPECT_EQ(0U, right.used());
+  left.release(16);
+  right.reserve(48);
+  EXPECT_EQ(80U, query->used());
+  EXPECT_THROW(left.reserve(1), Error);
+  EXPECT_EQ(32U, left.used());
+  left.release(32);
+  right.release(48);
+  EXPECT_EQ(0U, query->used());
+}
+
+TEST(FileSqlMemory, parent_allocation_failure_releases_both_counters)
+{
+  auto query = std::make_shared<MemoryBudget>(1024);
+  FailingResource upstream;
+  auto child = std::make_shared<MemoryBudget>(1024, &upstream, query);
+  BudgetAllocator<int> allocator(child);
+  EXPECT_THROW(allocator.allocate(16), std::bad_alloc);
+  EXPECT_EQ(0U, child->used());
+  EXPECT_EQ(0U, query->used());
+}
+
+TEST(FileSqlMemory, cancellation_checks_do_not_require_an_allocation)
+{
+  bool cancelled = false;
+  auto query = std::make_shared<MemoryBudget>(1024, std::pmr::new_delete_resource(),
+      std::shared_ptr<MemoryBudget>{}, [&](size_t) {
+        if (cancelled) throw Error("query cancelled");
+      });
+  auto scanner = std::make_shared<MemoryBudget>(1024, std::pmr::new_delete_resource(), query);
+  BudgetScope scope(scanner);
+  check_work();
+  cancelled = true;
+  EXPECT_THROW(check_work(), Error);
+  EXPECT_THROW(scanner->reserve(32), Error);
+  EXPECT_EQ(0U, scanner->used());
+  EXPECT_EQ(0U, query->used());
+}
+
+TEST(FileSqlMemory, zero_reservations_do_not_poll_and_reused_reservations_release_usage)
+{
+  int checks = 0;
+  auto budget = std::make_shared<MemoryBudget>(1024, std::pmr::new_delete_resource(),
+      std::shared_ptr<MemoryBudget>{}, [&](size_t) { ++checks; });
+  budget->reserve(0);
+  EXPECT_EQ(0, checks);
+  MemoryReservation output(budget);
+  output.add(64);
+  output.clear();
+  EXPECT_EQ(0U, budget->used());
+  output.add(32);
+  EXPECT_EQ(32U, budget->used());
+}
+
 TEST(FileSqlMemory, nested_containers_and_copy_peak_share_one_budget)
 {
   auto budget = std::make_shared<MemoryBudget>(4096);

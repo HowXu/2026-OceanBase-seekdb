@@ -36,9 +36,19 @@ void ObMemTrackerGuard::update_mem_limit()
 }
 int ObMemTrackerGuard::check_status()
 {
+  return check_status(0);
+}
+
+int ObMemTrackerGuard::check_status(int64_t external_memory)
+{
   int ret = common::OB_SUCCESS;
   if (nullptr != mem_tracker_.mem_context_) {
     int64_t tree_mem_hold = mem_tracker_.mem_context_->tree_mem_hold();
+    // File-SQL uses standard-library storage outside MemoryContext. Account
+    // its query-wide live allocation/reservation total without allocating a
+    // second, dummy buffer or changing the process-wide allocator.
+    tree_mem_hold = external_memory > INT64_MAX - tree_mem_hold
+                    ? INT64_MAX : tree_mem_hold + external_memory;
     ++mem_tracker_.check_status_times_;
     if (0 == mem_tracker_.cache_mem_limit_
       || (mem_tracker_.check_status_times_ % UPDATE_MEM_LIMIT_THRESHOLD == 0)) {

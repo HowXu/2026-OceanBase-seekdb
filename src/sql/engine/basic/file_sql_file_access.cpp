@@ -202,6 +202,7 @@ void LocalFile::validate_unchanged(const FileIdentity &expected) const
 
 size_t LocalFile::read_at(uint64_t offset, void *buffer, size_t size)
 {
+  check_work();
   validate_unchanged(initial_);
   if (offset > initial_.size || offset > static_cast<uint64_t>(INT64_MAX)) {
     throw Error("file SQL read offset is out of bounds: " + path_);
@@ -209,6 +210,7 @@ size_t LocalFile::read_at(uint64_t offset, void *buffer, size_t size)
   const size_t wanted = static_cast<size_t>(std::min<uint64_t>(size, initial_.size - offset));
   size_t done = 0;
   while (done < wanted) {
+    check_work();
     const ssize_t count = ::pread(fd_, static_cast<char *>(buffer) + done, wanted - done,
                                   static_cast<off_t>(offset + done));
     if (count < 0 && errno == EINTR) {
@@ -220,6 +222,7 @@ size_t LocalFile::read_at(uint64_t offset, void *buffer, size_t size)
     done += static_cast<size_t>(count);
   }
   validate_unchanged(initial_);
+  check_work();
   return done;
 }
 

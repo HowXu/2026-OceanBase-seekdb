@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/ddl/ob_explain_resolver.h"
 #include "sql/resolver/ob_resolver.h"
-#include "sql/parser/ob_parser.h"
 #include "sql/engine/basic/ob_file_scan_utils.h"
+#include "sql/optimizer/ob_optimizer_util.h"
 
 using namespace oceanbase;
 using namespace sql;
@@ -29,83 +29,102 @@ const static int64_t EXPLAIN_INTO_TABLE = 2;
 const static int64_t EXPLAIN_STMT_ID = 3;
 const static int64_t EXPLAIN_CHILD_STMT = 4;
 namespace {
-
-void append_quoted_text(std::string &sql, const common::ObString &value)
+const char *describe_type(ObObjType type)
 {
-  sql.append("'");
-  for (int64_t i = 0; i < value.length(); ++i) {
-    const char item = value.ptr()[i];
-    if ('\\' == item || '\'' == item) {
-      sql.push_back('\\');
-    }
-    sql.push_back(item);
+  switch (type) {
+    case ObNullType: return "NULL";
+    case ObTinyIntType: return "TINYINT";
+    case ObIntType: return "BIGINT";
+    case ObDoubleType: return "DOUBLE";
+    case ObFloatType: return "FLOAT";
+    case ObDateType: return "DATE";
+    case ObDateTimeType: return "DATETIME";
+    case ObNumberType: return "DECIMAL";
+    default: return ob_is_string_type(type) ? "VARCHAR" : ob_obj_type_str(type);
   }
-  sql.append("'");
 }
-
 } // namespace
 
 int ObExplainResolver::resolve_file_table_columns(ObStmt *child_stmt)
 {
   int ret = OB_SUCCESS;
-  const ObFileTableDef *table_def = NULL;
   if (OB_ISNULL(child_stmt) || !child_stmt->is_select_stmt()) {
-    ret = OB_NOT_SUPPORTED;
-  } else {
-    ObSelectStmt *select_stmt = static_cast<ObSelectStmt *>(child_stmt);
-    common::ObIArray<TableItem *> &table_items = select_stmt->get_table_items();
-    for (int64_t i = 0; OB_SUCC(ret) && i < table_items.count(); ++i) {
-      TableItem *table_item = table_items.at(i);
-      if (OB_NOT_NULL(table_item) && table_item->is_file_table()
-          && OB_NOT_NULL(table_item->file_table_def_)) {
-        table_def = table_item->file_table_def_;
-        break;
-      }
-    }
-    if (OB_ISNULL(table_def)) {
-      ret = OB_NOT_SUPPORTED;
-    }
+    return ret; // Preserve ordinary EXPLAIN/DESCRIBE semantics.
   }
-  if (OB_SUCC(ret)) {
-    // the columns of the file, in the shape of a describe
-    std::string sql;
-    for (int64_t i = 0; OB_SUCC(ret) && i < table_def->columns_.count(); ++i) {
-      const ObFileTableColumnDef &column = table_def->columns_.at(i);
-      if (i > 0) {
-        sql.append(" UNION ALL ");
-      }
-      sql.append("SELECT ");
-      append_quoted_text(sql, column.name_);
-      sql.append(" AS column_name, ");
-      sql.append("'");
-      sql.append(file_sql::type_name(static_cast<file_sql::Type>(column.type_)));
-      sql.append("'");
-      sql.append(" AS column_type, ");
-      sql.append(column.nullable_ ? "'YES'" : "'NO'");
-      sql.append(" AS `null`, NULL AS `key`, NULL AS `default`, NULL AS `extra` FROM dual");
+  ObSelectStmt *source = static_cast<ObSelectStmt *>(child_stmt);
+  ObSEArray<ObSelectStmt *, 8> pending;
+  bool reads_file = false;
+  OZ (pending.push_back(source));
+  for (int64_t i = 0; OB_SUCC(ret) && !reads_file && i < pending.count(); ++i) {
+    for (int64_t j = 0; !reads_file && j < pending.at(i)->get_table_items().count(); ++j) {
+      reads_file = pending.at(i)->get_table_items().at(j)->is_file_table();
     }
-    ParseResult parse_result;
-    ObParser parser(*allocator_, session_info_->get_sql_mode(), session_info_->get_charsets4parser());
-    if (OB_FAIL(parser.parse(common::ObString(sql.length(), sql.c_str()), parse_result))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("cannot parse the columns of the file", K(ret));
-    } else {
-      ObResolver resolver(params_);
-      ObStmt *column_stmt = NULL;
-      if (OB_FAIL(resolver.resolve(ObResolver::IS_NOT_PREPARED_STMT,
-                                  *parse_result.result_tree_,
-                                  column_stmt))) {
-      } else if (OB_ISNULL(column_stmt)) {
-        ret = OB_ERR_UNEXPECTED;
+    ObSEArray<ObSelectStmt *, 8> children;
+    OZ (pending.at(i)->get_child_stmts(children));
+    OZ (append_array_no_dup(pending, children));
+  }
+  if (OB_FAIL(ret) || !reads_file) {
+    return ret;
+  }
+  const char *names[] = {"column_name", "column_type", "null", "key", "default", "extra"};
+  ObSEArray<ObSelectStmt *, 8> rows;
+  for (int64_t i = 0; OB_SUCC(ret) && i < source->get_select_item_size(); ++i) {
+    const SelectItem &item = source->get_select_item(i);
+    const char *type = describe_type(item.expr_->get_result_type().get_type());
+    bool nullable = !item.expr_->is_not_null_for_read();
+    if (item.expr_->is_column_ref_expr()) {
+      const ObColumnRefRawExpr &column = *static_cast<ObColumnRefRawExpr *>(item.expr_);
+      const TableItem *table = source->get_table_item_by_id(column.get_table_id());
+      if (table != nullptr && table->is_file_table() && table->file_table_def_ != nullptr) {
+        const int64_t index = column.get_column_id() - OB_APP_MIN_COLUMN_ID;
+        CK (index >= 0 && index < table->file_table_def_->columns_.count());
+        if (OB_SUCC(ret)) {
+          const ObFileTableColumnDef &definition = table->file_table_def_->columns_.at(index);
+          bool null_side = false;
+          OZ (ObOptimizerUtil::is_table_on_null_side(source, table->table_id_, null_side));
+          nullable = definition.nullable_ || null_side;
+          // BOOLEAN is represented by a native TINYINT expression.
+          if (definition.type_ == static_cast<int32_t>(file_sql::Type::Boolean)) {
+            type = "BOOLEAN";
+          }
+        }
+      }
+    }
+    ObSelectStmt *row = nullptr;
+    CK (OB_NOT_NULL(row = create_stmt<ObSelectStmt>()));
+    ObString values[] = {item.alias_name_.empty() ? item.expr_name_ : item.alias_name_,
+                         ObString(type), ObString(nullable ? "YES" : "NO")};
+    for (int64_t j = 0; OB_SUCC(ret) && j < 6; ++j) {
+      SelectItem output;
+      output.alias_name_ = ObString(names[j]);
+      output.expr_name_ = output.alias_name_;
+      output.is_real_alias_ = true;
+      if (j < 3) {
+        ObString value;
+        ObConstRawExpr *constant = nullptr;
+        OZ (ob_write_string(*allocator_, values[j], value));
+        OZ (ObRawExprUtils::build_const_string_expr(*params_.expr_factory_, ObVarcharType,
+                                                   value, session_info_->get_nls_collation(), constant));
+        output.expr_ = constant;
       } else {
-        stmt_ = column_stmt;
+        OZ (ObRawExprUtils::build_null_expr(*params_.expr_factory_, output.expr_));
       }
-      parser.free_result(parse_result);
+      OZ (row->add_select_item(output));
     }
+    OZ (row->formalize_stmt(session_info_));
+    OZ (rows.push_back(row));
   }
-  if (OB_NOT_SUPPORTED == ret) {
-    // the statement does not read a file, the plan is the answer
-    ret = OB_SUCCESS;
+  if (OB_SUCC(ret) && rows.count() == 1) {
+    stmt_ = rows.at(0);
+  } else if (OB_SUCC(ret) && rows.count() > 1) {
+    ObSelectStmt *result = create_stmt<ObSelectStmt>();
+    CK (OB_NOT_NULL(result));
+    OZ (result->get_set_query().assign(rows));
+    OX (result->assign_set_op(ObSelectStmt::UNION));
+    OX (result->assign_set_all());
+    OZ (result->create_select_list_for_set_stmt(*params_.expr_factory_));
+    OZ (result->formalize_stmt(session_info_));
+    OX (stmt_ = result);
   }
   return ret;
 }

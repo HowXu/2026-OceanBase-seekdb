@@ -384,7 +384,7 @@ END_P SET_VAR DELIMITER
 %type <node> date_unit date_params timestamp_params
 %type <node> drop_table_stmt table_list drop_view_stmt table_or_tables
 %type <node> explain_stmt explainable_stmt format_name kill_stmt create_outline_stmt alter_outline_stmt drop_outline_stmt opt_outline_target
-%type <node> copy_stmt copy_option_list copy_option
+%type <node> copy_stmt copy_source opt_copy_options copy_option_list copy_option
 %type <node> expr_list expr expr_const conf_const simple_expr simple_expr_list expr_or_default bit_expr bool_pri predicate explain_or_desc pl_expr_stmt
 %type <node> column_ref multi_delete_table
 %type <node> case_expr func_expr in_expr sub_query_flag search_expr
@@ -16756,19 +16756,51 @@ relation_name COMP_EQ simple_expr
 
 /* COPY uses the outfile node with value 1 to distinguish its syntax. */
 copy_stmt:
-COPY '(' select_stmt ')' TO STRING_VALUE '(' copy_option_list ')'
+COPY copy_source TO STRING_VALUE opt_copy_options
 {
-  ParseNode *options = NULL;
-  merge_nodes(options, result, T_EXPR_LIST, $8);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_INTO_OUTFILE, 3, $6, options, $3);
-  $$->is_tree_not_param_ = true;
+  // Lower COPY to the native SELECT/SELECT_INTO pipeline. A dedicated INTO
+  // kind distinguishes it from legacy SELECT INTO OUTFILE at every layer.
+  ParseNode *star = NULL;
+  ParseNode *project = NULL;
+  ParseNode *projects = NULL;
+  ParseNode *sources = NULL;
+  ParseNode *into = NULL;
+  malloc_terminal_node(star, result->malloc_pool_, T_STAR);
+  malloc_non_terminal_node(project, result->malloc_pool_, T_PROJECT_STRING, 1, star);
+  dup_string_to_node(project, result->malloc_pool_, "*");
+  merge_nodes(projects, result, T_PROJECT_LIST, project);
+  merge_nodes(sources, result, T_FROM_LIST, $2);
+  malloc_non_terminal_node(into, result->malloc_pool_, T_FILE_COPY, 2, $4, $5);
+  into->is_tree_not_param_ = true;
+  malloc_select_node($$, result->malloc_pool_);
+  $$->children_[PARSE_SELECT_SELECT] = projects;
+  $$->children_[PARSE_SELECT_FROM] = sources;
+  $$->children_[PARSE_SELECT_INTO] = into;
 }
-| COPY relation_name TO STRING_VALUE '(' copy_option_list ')'
+;
+
+copy_source:
+'(' select_stmt ')'
 {
-  ParseNode *options = NULL;
-  merge_nodes(options, result, T_EXPR_LIST, $6);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_INTO_OUTFILE, 3, $4, options, $2);
-  $$->is_tree_not_param_ = true;
+  ParseNode *alias = NULL;
+  make_name_node(alias, result->malloc_pool_, "");
+  alias->sql_str_off_ = @1.first_column;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_ALIAS, 2, $2, alias);
+}
+| relation_factor
+{
+  $$ = $1;
+}
+;
+
+opt_copy_options:
+/* EMPTY */
+{
+  $$ = NULL;
+}
+| '(' copy_option_list ')'
+{
+  merge_nodes($$, result, T_EXPR_LIST, $2);
 }
 ;
 

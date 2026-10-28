@@ -1,0 +1,45 @@
+# owner: database-competition
+# description: Cached file scans recheck policy and identities on every execution.
+--disable_query_log
+let $SECURITY_DIR = $OBSERVER_DIR/file_sql_security;
+exec mkdir -p "$SECURITY_DIR/denied";
+--write_file $SECURITY_DIR/input.csv
+id,name
+1,one
+EOF
+set session enable_file_sql=ON;
+eval prepare file_sql_identity from "select name from read_csv('$SECURITY_DIR/input.csv')";
+--echo # initial prepared execution
+execute file_sql_identity;
+--echo # replacement with the same size and mtime invalidates the old definition
+exec python3 -c "import os; from pathlib import Path; p=Path('$SECURITY_DIR/input.csv'); s=p.stat(); q=p.with_suffix('.new'); q.write_text('id,name'+chr(10)+'1,two'+chr(10)); os.utime(q,ns=(s.st_atime_ns,s.st_mtime_ns)); os.replace(q,p)";
+--error 4016
+execute file_sql_identity;
+deallocate prepare file_sql_identity;
+eval prepare file_sql_policy from "select name from read_csv('$SECURITY_DIR/input.csv')";
+--echo # re-preparing observes the new file
+execute file_sql_policy;
+--echo # a cached plan cannot bypass the current feature switch
+set session enable_file_sql=OFF;
+--error 1235
+execute file_sql_policy;
+set session enable_file_sql=ON;
+--echo # a cached plan cannot retain a previous secure_file_priv grant
+connect (file_sql_policy_admin,localhost,root,,test,$OBMYSQL_PORT,$OBSERVER_DIR/run/sql.sock);
+connection file_sql_policy_admin;
+let $OLD_FILE_SQL_ROOT = query_get_value("select @@global.secure_file_priv as root",root,1);
+eval set global secure_file_priv='$SECURITY_DIR/denied';
+connection default;
+--error 1227
+execute file_sql_policy;
+connection file_sql_policy_admin;
+eval set global secure_file_priv='$OLD_FILE_SQL_ROOT';
+disconnect file_sql_policy_admin;
+connection default;
+--echo # restoring policy permits the unchanged prepared definition
+execute file_sql_policy;
+deallocate prepare file_sql_policy;
+set session enable_file_sql=OFF;
+remove_file $SECURITY_DIR/input.csv;
+exec rmdir "$SECURITY_DIR/denied" "$SECURITY_DIR";
+--enable_query_log

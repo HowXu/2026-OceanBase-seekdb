@@ -7,6 +7,10 @@
 #include "sql/engine/basic/file_sql_memory.h"
 #include "data/file_sql_parquet_fixtures.h"
 #include <filesystem>
+#include <atomic>
+#include <thread>
+#include <csignal>
+#include <sys/resource.h>
 #include <fstream>
 #include <unistd.h>
 #include <fcntl.h>
@@ -568,6 +572,192 @@ TEST_F(FileScanTest, security_rejects_nonregular_files_and_closes_failed_reads)
     EXPECT_THROW(infer(path, root, Options{}), Error);
   }
   EXPECT_EQ(before, fd_count());
+}
+
+TEST_F(FileScanTest, returned_definition_remains_charged_after_inference)
+{
+  const auto path = put("schema.csv", std::string(1024, 'n') + "\n1\n");
+  auto budget = std::make_shared<MemoryBudget>();
+  {
+    BudgetScope scope(budget);
+    auto definition = infer(path, root, Options{});
+    EXPECT_GE(budget->used(), 1024U);
+  }
+  EXPECT_EQ(0U, budget->used());
+}
+
+TEST_F(FileScanTest, empty_json_has_no_rows_and_no_invented_columns)
+{
+  const auto path = put("empty.jsonl", "\n  \n");
+  auto definition = infer(path, root, Options{});
+  EXPECT_TRUE(definition.columns.empty());
+  Scan scan(definition, root, {});
+  std::vector<Cell> row;
+  EXPECT_FALSE(scan.next(row));
+}
+
+TEST_F(FileScanTest, copy_rejects_nul_and_existing_symlink_or_directory)
+{
+  Definition output; output.path = root + "/out.csv";
+  output.columns = {{"value", Type::Varchar, false}};
+  auto invalid = output;
+  invalid.path += std::string("\0ignored", 8);
+  EXPECT_THROW(CsvWriter(invalid, root), Error);
+  EXPECT_THROW(CsvWriter(output, root + std::string("\0ignored", 8)), Error);
+  ASSERT_EQ(0, ::symlink("missing-target", output.path.c_str()));
+  EXPECT_THROW(CsvWriter(output, root), Error);
+  EXPECT_TRUE(std::filesystem::is_symlink(output.path));
+  std::filesystem::remove(output.path);
+  std::filesystem::create_directory(output.path);
+  EXPECT_THROW(CsvWriter(output, root), Error);
+}
+
+TEST_F(FileScanTest, copy_parent_replacement_cleans_pinned_directory)
+{
+  std::filesystem::create_directory(root + "/parent");
+  std::filesystem::create_directory(root + "/outside");
+  Definition output; output.path = root + "/parent/out.csv";
+  output.columns = {{"value", Type::Varchar, false}};
+  {
+    CsvWriter writer(output, root);
+    writer.write({{false, "safe", Type::Varchar}});
+    std::filesystem::rename(root + "/parent", root + "/moved");
+    ASSERT_EQ(0, ::symlink((root + "/outside").c_str(), (root + "/parent").c_str()));
+    EXPECT_THROW(writer.commit(), Error);
+  }
+  EXPECT_TRUE(std::filesystem::is_empty(root + "/moved"));
+  EXPECT_TRUE(std::filesystem::is_empty(root + "/outside"));
+}
+
+TEST_F(FileScanTest, copy_exclusive_publish_and_private_temporary_permissions)
+{
+  Definition output; output.path = root + "/out.csv";
+  output.columns = {{"value", Type::Varchar, false}};
+  {
+    CsvWriter first(output, root);
+    CsvWriter second(output, root);
+    first.write({{false, "first", Type::Varchar}});
+    second.write({{false, "second", Type::Varchar}});
+    for (const auto &entry : std::filesystem::directory_iterator(root)) {
+      struct stat info{};
+      ASSERT_EQ(0, ::stat(entry.path().c_str(), &info));
+      EXPECT_EQ(0600, info.st_mode & 0777);
+    }
+    first.commit();
+    EXPECT_THROW(second.commit(), Error);
+  }
+  std::ifstream input(output.path);
+  EXPECT_EQ("value\nfirst\n", std::string(std::istreambuf_iterator<char>(input), {}));
+  EXPECT_EQ(1, std::distance(std::filesystem::directory_iterator(root),
+                             std::filesystem::directory_iterator{}));
+}
+
+TEST_F(FileScanTest, copy_concurrent_commit_has_exactly_one_winner)
+{
+  Definition output; output.path = root + "/out.csv";
+  output.columns = {{"value", Type::Varchar, false}};
+  std::atomic<int> successes{0}, failures{0}, unexpected{0};
+  {
+    CsvWriter first(output, root), second(output, root);
+    first.write({{false, "first", Type::Varchar}});
+    second.write({{false, "second", Type::Varchar}});
+    auto publish = [&](CsvWriter &writer) {
+      try { writer.commit(); ++successes; }
+      catch (const Error &) { ++failures; }
+      catch (...) { ++unexpected; }
+    };
+    std::thread a(publish, std::ref(first)), b(publish, std::ref(second));
+    a.join(); b.join();
+  }
+  EXPECT_EQ(1, successes.load());
+  EXPECT_EQ(1, failures.load());
+  EXPECT_EQ(0, unexpected.load());
+  std::ifstream input(output.path);
+  const std::string bytes(std::istreambuf_iterator<char>(input), {});
+  EXPECT_TRUE(bytes == "value\nfirst\n" || bytes == "value\nsecond\n");
+  EXPECT_EQ(1, std::distance(std::filesystem::directory_iterator(root),
+                             std::filesystem::directory_iterator{}));
+}
+
+TEST_F(FileScanTest, copy_target_symlink_appearing_before_commit_is_not_replaced)
+{
+  Definition output; output.path = root + "/out.csv";
+  output.columns = {{"value", Type::Varchar, false}};
+  {
+    CsvWriter writer(output, root);
+    writer.write({{false, "safe", Type::Varchar}});
+    ASSERT_EQ(0, ::symlink("missing-target", output.path.c_str()));
+    EXPECT_THROW(writer.commit(), Error);
+  }
+  EXPECT_TRUE(std::filesystem::is_symlink(output.path));
+  EXPECT_EQ("missing-target", std::filesystem::read_symlink(output.path));
+  EXPECT_EQ(1, std::distance(std::filesystem::directory_iterator(root),
+                             std::filesystem::directory_iterator{}));
+}
+
+TEST_F(FileScanTest, copy_does_not_publish_or_unlink_a_substituted_temporary_entry)
+{
+  Definition output; output.path = root + "/out.csv";
+  output.columns = {{"value", Type::Varchar, false}};
+  std::filesystem::path temporary;
+  {
+    CsvWriter writer(output, root);
+    writer.write({{false, "safe", Type::Varchar}});
+    temporary = std::filesystem::directory_iterator(root)->path();
+    ASSERT_TRUE(std::filesystem::remove(temporary));
+    std::ofstream replacement(temporary);
+    replacement << "attacker";
+    replacement.close();
+    EXPECT_THROW(writer.commit(), Error);
+  }
+  EXPECT_FALSE(std::filesystem::exists(output.path));
+  std::ifstream input(temporary);
+  EXPECT_EQ("attacker", std::string(std::istreambuf_iterator<char>(input), {}));
+}
+
+TEST_F(FileScanTest, copy_bounds_encoded_records_and_cleans_failure)
+{
+  Definition output; output.path = root + "/out.csv";
+  output.columns = {{"value", Type::Varchar, false}};
+  {
+    CsvWriter writer(output, root);
+    EXPECT_THROW(writer.write({{false, std::string(MAX_RECORD_BYTES / 2, '"'), Type::Varchar}}), Error);
+  }
+  EXPECT_TRUE(std::filesystem::is_empty(root));
+}
+
+TEST_F(FileScanTest, copy_write_error_removes_partial_output)
+{
+  Definition output; output.path = root + "/out.csv";
+  output.columns = {{"value", Type::Varchar, false}};
+  struct rlimit original{};
+  struct sigaction original_signal{}, ignored{};
+  ASSERT_EQ(0, ::getrlimit(RLIMIT_FSIZE, &original));
+  ignored.sa_handler = SIG_IGN;
+  ::sigemptyset(&ignored.sa_mask);
+  bool failed = false, unexpected = false;
+  int limit_result = -1, restore_result = -1, signal_result = -1;
+  {
+    CsvWriter writer(output, root);
+    ASSERT_EQ(0, ::sigaction(SIGXFSZ, &ignored, &original_signal));
+    struct rlimit limited = original;
+    limited.rlim_cur = 16;
+    limit_result = ::setrlimit(RLIMIT_FSIZE, &limited);
+    if (limit_result == 0) {
+      try { writer.write({{false, std::string(1024, 'x'), Type::Varchar}}); }
+      catch (const Error &) { failed = true; }
+      catch (...) { unexpected = true; }
+    }
+    // Restore before GTest writes diagnostics to files in this process.
+    restore_result = ::setrlimit(RLIMIT_FSIZE, &original);
+    signal_result = ::sigaction(SIGXFSZ, &original_signal, nullptr);
+  }
+  ASSERT_EQ(0, limit_result);
+  ASSERT_EQ(0, restore_result);
+  ASSERT_EQ(0, signal_result);
+  EXPECT_TRUE(failed);
+  EXPECT_FALSE(unexpected);
+  EXPECT_TRUE(std::filesystem::is_empty(root));
 }
 
 TEST_F(FileScanTest, copy_roundtrip_and_atomic_cleanup)
