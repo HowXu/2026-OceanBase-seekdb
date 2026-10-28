@@ -1,0 +1,51 @@
+name: FTS Validation
+
+on:
+  push:
+    branches: [codex/2026-competition-fts]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fts-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compare:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reclaim build disk space
+        uses: insightsengineering/disk-space-reclaimer@v1
+        with:
+          tools-cache: false
+
+      - name: Install build and database client dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build rpm rpm2cpio cpio m4 libtool-bin libncurses5 libaio1 mariadb-client python3
+
+      - name: Compare baseline and candidate
+        env:
+          BASELINE_COMMIT: 5bce9e06d1281347ad61344e4b01fab9158c58a2
+          CANDIDATE_COMMIT: ${{ github.sha }}
+          CARGO_BUILD_JOBS: 2
+        run: |
+          cp .github/script/seekdb/fts_validation.sh "$RUNNER_TEMP/fts_validation.sh"
+          cp unittest/storage/fts_unicode_regression.sql "$RUNNER_TEMP/fts-unicode.sql"
+          bash "$RUNNER_TEMP/fts_validation.sh"
+
+      - name: Save validation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fts-validation-${{ github.sha }}
+          path: ${{ runner.temp }}/fts-validation/reports/
+          if-no-files-found: error
+          retention-days: 14
