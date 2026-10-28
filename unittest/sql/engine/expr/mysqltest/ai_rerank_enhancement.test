@@ -1,0 +1,39 @@
+connection default;
+
+--disable_query_log
+--disable_warnings
+drop table if exists ai_rerank_doc_keys;
+--enable_warnings
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('rerank_semantics_ep');
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('rerank_semantics_model');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('rerank_semantics_model', '{"type":"rerank","model_name":"BAAI/bge-reranker-v2-m3"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('rerank_semantics_ep', '{"ai_model_name":"rerank_semantics_model","url":"http://0.0.0.0:8000/v1/rerank","access_key":"mock-key","provider":"siliconflow"}');
+--enable_query_log
+
+# An explicit SQL NULL document key has the same meaning as an omitted key.
+select json_length(ai_rerank('rerank_semantics_model', 'query', '["one","two"]')) as implicit_count;
+select json_length(ai_rerank('rerank_semantics_model', 'query', '["one","two"]', null)) as null_count;
+select ai_rerank('rerank_semantics_model', 'query', '["one","two"]') = ai_rerank('rerank_semantics_model', 'query', '["one","two"]', null) as same_result;
+
+# The mode must be selected per row, not from the nullable key's SQL type.
+--disable_query_log
+create table ai_rerank_doc_keys(id int primary key, doc_key varchar(32));
+insert into ai_rerank_doc_keys values (1, null), (2, 'text'), (3, null);
+--enable_query_log
+select id, json_length(ai_rerank('rerank_semantics_model', 'query', case when doc_key is null then '["one","two"]' else '[{"id":"a","text":"one"},{"id":"b","text":"two"}]' end, doc_key)) as result_count from ai_rerank_doc_keys order by id;
+
+# NULL is not permission to accept object arrays without a text field key.
+--error 1210
+select ai_rerank('rerank_semantics_model', 'query', '[{"text":"one"}]', null);
+--error 1210
+select ai_rerank('rerank_semantics_model', 'query', '["one"]', 'text');
+--error 1210
+select ai_rerank('rerank_semantics_model', 'query', '[{"text":"one"}]', '');
+
+--disable_query_log
+drop table ai_rerank_doc_keys;
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('rerank_semantics_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('rerank_semantics_model');
+--enable_query_log

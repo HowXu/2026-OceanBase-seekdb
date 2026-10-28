@@ -1,0 +1,20 @@
+select json_length(ai_rerank('rerank_semantics_model', 'query', '["one","two"]')) as implicit_count;
+implicit_count
+2
+select json_length(ai_rerank('rerank_semantics_model', 'query', '["one","two"]', null)) as null_count;
+null_count
+2
+select ai_rerank('rerank_semantics_model', 'query', '["one","two"]') = ai_rerank('rerank_semantics_model', 'query', '["one","two"]', null) as same_result;
+same_result
+1
+select id, json_length(ai_rerank('rerank_semantics_model', 'query', case when doc_key is null then '["one","two"]' else '[{"id":"a","text":"one"},{"id":"b","text":"two"}]' end, doc_key)) as result_count from ai_rerank_doc_keys order by id;
+id	result_count
+1	2
+2	2
+3	2
+select ai_rerank('rerank_semantics_model', 'query', '[{"text":"one"}]', null);
+ERROR HY000: Incorrect arguments to ai_rerank, document_array element is not string
+select ai_rerank('rerank_semantics_model', 'query', '["one"]', 'text');
+ERROR HY000: Incorrect arguments to ai_rerank, document_array element is not object
+select ai_rerank('rerank_semantics_model', 'query', '[{"text":"one"}]', '');
+ERROR HY000: Invalid argument
