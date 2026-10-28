@@ -22,6 +22,7 @@ set_target_properties(file_sql_gtest_main PROPERTIES
 
 add_executable(test_file_scan_utils
   test_file_scan_utils.cpp
+  test_file_sql_memory.cpp
   "${FILE_SQL_REPO_ROOT}/src/sql/engine/basic/file_sql_file_access.cpp"
   "${FILE_SQL_REPO_ROOT}/src/sql/engine/basic/ob_file_scan_utils.cpp"
   "${FILE_SQL_REPO_ROOT}/src/sql/engine/basic/ob_file_parquet_scan.cpp")

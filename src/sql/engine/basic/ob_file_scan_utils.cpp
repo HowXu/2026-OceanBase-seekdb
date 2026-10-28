@@ -17,6 +17,7 @@
 #include "sql/engine/basic/ob_file_scan_utils.h"
 #include "sql/engine/basic/ob_file_parquet_scan.h"
 #include "sql/engine/basic/file_sql_file_access.h"
+#include "sql/engine/basic/file_sql_memory.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -45,16 +46,16 @@ namespace {
 // Small helpers
 // ---------------------------------------------------------------------------
 
-std::string lowercase(const std::string &value)
+BudgetString lowercase(std::string_view value)
 {
-  std::string result(value);
+  BudgetString result(value.data(), value.size());
   for (char &item : result) {
     item = static_cast<char>(::tolower(static_cast<unsigned char>(item)));
   }
   return result;
 }
 
-std::string trim(const std::string &value)
+BudgetString trim(std::string_view value)
 {
   size_t begin = 0;
   size_t end = value.size();
@@ -64,7 +65,7 @@ std::string trim(const std::string &value)
   while (end > begin && ::isspace(static_cast<unsigned char>(value[end - 1]))) {
     --end;
   }
-  return value.substr(begin, end - begin);
+  return BudgetString(value.data() + begin, end - begin);
 }
 
 bool is_valid_utf8(const char *data, size_t length)
@@ -138,7 +139,7 @@ bool is_valid_time(int hour, int minute, int second)
   return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59 && second >= 0 && second <= 59;
 }
 
-bool parse_digits(const std::string &value, size_t offset, size_t count, int &result)
+bool parse_digits(std::string_view value, size_t offset, size_t count, int &result)
 {
   if (offset + count > value.size()) {
     return false;
@@ -155,7 +156,7 @@ bool parse_digits(const std::string &value, size_t offset, size_t count, int &re
   return true;
 }
 
-bool looks_like_integer(const std::string &value)
+bool looks_like_integer(std::string_view value)
 {
   if (value.empty()) {
     return false;
@@ -175,7 +176,7 @@ bool looks_like_integer(const std::string &value)
   return true;
 }
 
-bool looks_like_double(const std::string &value)
+bool looks_like_double(std::string_view value)
 {
   if (value.empty()) {
     return false;
@@ -220,7 +221,7 @@ bool looks_like_double(const std::string &value)
  * @param scale receives the number of fractional digits of a datetime
  * @return Date, Datetime or Null when the value is not a temporal literal
  */
-Type classify_temporal(const std::string &value, int &scale)
+Type classify_temporal(std::string_view value, int &scale)
 {
   scale = 0;
   if (value.size() < 10) {
@@ -281,7 +282,8 @@ std::string extension_of(const std::string &path)
   if (dot == std::string::npos || dot + 1 >= base.size()) {
     return std::string();
   }
-  return lowercase(base.substr(dot + 1));
+  const auto lower = lowercase(base.substr(dot + 1));
+  return std::string(lower.data(), lower.size());
 }
 
 std::string directory_of(const std::string &path)
@@ -312,6 +314,7 @@ std::string canonical_path(const std::string &path)
   if (path.find('\0') != std::string::npos) {
     throw Error("file SQL path contains NUL");
   }
+  check_count(path.size(), 4096, "path");
   char buffer[PATH_MAX];
   if (::realpath(path.c_str(), buffer) == nullptr) {
     throw Error("cannot resolve the path " + path);
@@ -354,23 +357,127 @@ bool is_within(const std::string &path, const std::string &root)
 /**
  * @brief Build unique column names, the duplicates get a numeric suffix.
  */
-std::vector<std::string> unique_names(const std::vector<std::string> &raw_names)
+// Private representations keep names, values and nested container storage on
+// one budget. Public std::string/vector results are copied only at the boundary.
+struct WorkingOptions {
+  Format format = Format::Auto;
+  bool header = true;
+  char delimiter = ',';
+  char quote = '"';
+  char escape = '"';
+  BudgetString null_string;
+  int64_t sample_size = -1;
+
+  WorkingOptions() = default;
+  explicit WorkingOptions(const Options &options)
+      : format(options.format), header(options.header), delimiter(options.delimiter),
+        quote(options.quote), escape(options.escape), sample_size(options.sample_size)
+  {
+    if (options.null_string.size() > MAX_RECORD_BYTES) {
+      throw Error("file SQL NULL option limit exceeded");
+    }
+    null_string.assign(options.null_string.data(), options.null_string.size());
+  }
+};
+
+struct WorkingColumn {
+  BudgetString name;
+  Type type = Type::Varchar;
+  bool nullable = false;
+  int scale = 0;
+};
+
+struct WorkingCell {
+  BudgetString text;
+  bool is_null = false;
+};
+
+struct WorkingDefinition {
+  BudgetString path;
+  WorkingOptions options;
+  BudgetVector<WorkingColumn> columns;
+  uint64_t file_size = 0;
+  int64_t file_mtime_ns = 0;
+  uint64_t file_device = 0;
+  uint64_t file_inode = 0;
+  int64_t file_ctime_ns = 0;
+
+  WorkingDefinition() = default;
+  explicit WorkingDefinition(const Definition &source)
+  {
+    check_count(source.columns.size(), MAX_COLUMNS, "column");
+    check_count(source.path.size(), 4096, "path");
+    path.assign(source.path.data(), source.path.size());
+    options = WorkingOptions(source.options);
+    file_size = source.file_size;
+    file_mtime_ns = source.file_mtime_ns;
+    file_device = source.file_device;
+    file_inode = source.file_inode;
+    file_ctime_ns = source.file_ctime_ns;
+    columns.reserve(source.columns.size());
+    for (const auto &column : source.columns) {
+      check_count(column.name.size(), MAX_RECORD_BYTES, "column name");
+      WorkingColumn copy;
+      copy.name.assign(column.name.data(), column.name.size());
+      copy.type = column.type;
+      copy.nullable = column.nullable;
+      copy.scale = column.scale;
+      columns.push_back(std::move(copy));
+    }
+  }
+};
+
+Definition export_definition(const WorkingDefinition &source)
 {
-  std::vector<std::string> names;
-  std::map<std::string, int> counters;
-  for (const std::string &raw_name : raw_names) {
-    const std::string base = trim(raw_name);
-    const std::string key = lowercase(base);
-    std::map<std::string, int>::iterator found = counters.find(key);
+  MemoryReservation copy(active_file_sql_budget);
+  reserve_standard_copy(copy, source.path.size() + source.options.null_string.size() + 2);
+  reserve_standard_copy(copy, source.columns.size() * sizeof(Column));
+  for (const auto &column : source.columns) {
+    reserve_standard_copy(copy, column.name.size() + 1);
+  }
+  Definition result;
+  result.path.assign(source.path.data(), source.path.size());
+  result.options.format = source.options.format;
+  result.options.header = source.options.header;
+  result.options.delimiter = source.options.delimiter;
+  result.options.quote = source.options.quote;
+  result.options.escape = source.options.escape;
+  result.options.null_string.assign(source.options.null_string.data(), source.options.null_string.size());
+  result.options.sample_size = source.options.sample_size;
+  result.file_size = source.file_size;
+  result.file_mtime_ns = source.file_mtime_ns;
+  result.file_device = source.file_device;
+  result.file_inode = source.file_inode;
+  result.file_ctime_ns = source.file_ctime_ns;
+  result.columns.reserve(source.columns.size());
+  for (const auto &column : source.columns) {
+    Column output;
+    output.name.assign(column.name.data(), column.name.size());
+    output.type = column.type;
+    output.nullable = column.nullable;
+    output.scale = column.scale;
+    result.columns.push_back(std::move(output));
+  }
+  return result;
+}
+
+BudgetVector<BudgetString> unique_names(const BudgetVector<BudgetString> &raw_names)
+{
+  BudgetVector<BudgetString> names;
+  BudgetMap<BudgetString, int> counters;
+  for (const BudgetString &raw_name : raw_names) {
+    const BudgetString base = trim(raw_name);
+    const BudgetString key = lowercase(base);
+    BudgetMap<BudgetString, int>::iterator found = counters.find(key);
     if (found == counters.end()) {
       counters[key] = 1;
       names.push_back(base);
       continue;
     }
     int count = ++found->second;
-    std::string candidate = key + "__" + std::to_string(count);
+    BudgetString candidate = key + "__" + budget_to_string(count);
     while (std::find(names.begin(), names.end(), candidate) != names.end()) {
-      candidate = key + "__" + std::to_string(++count);
+      candidate = key + "__" + budget_to_string(++count);
     }
     found->second = count;
     names.push_back(candidate);
@@ -401,21 +508,32 @@ public:
   {
     const int item = peek();
     if (item >= 0) {
+      check_count(record_bytes_ + 1, MAX_RECORD_BYTES + 2, "record");
+      ++record_bytes_;
       ++position_;
     }
     return item;
   }
 
-  bool read_line(std::string &line)
+  void begin_record() { record_bytes_ = 0; }
+  void finish_record(size_t terminator_bytes)
   {
+    check_count(record_bytes_ - terminator_bytes, MAX_RECORD_BYTES, "record");
+  }
+
+  bool read_line(BudgetString &line)
+  {
+    begin_record();
     line.clear();
     int item;
     while ((item = get()) >= 0) {
       if (item == '\n') {
+        finish_record(!line.empty() && line.back() == '\r' ? 2 : 1);
         return true;
       }
       line.push_back(static_cast<char>(item));
     }
+    finish_record(0);
     return !line.empty();
   }
 
@@ -423,6 +541,7 @@ public:
   {
     offset_ = 0;
     position_ = 0;
+    record_bytes_ = 0;
     buffer_.clear();
   }
 
@@ -439,8 +558,9 @@ private:
 
   std::shared_ptr<LocalFile> file_;
   uint64_t offset_ = 0;
-  std::vector<char> buffer_;
+  BudgetVector<char> buffer_;
   size_t position_ = 0;
+  size_t record_bytes_ = 0;
 };
 
 /**
@@ -452,22 +572,25 @@ private:
  */
 class CsvRecordReader {
 public:
-  CsvRecordReader(const std::shared_ptr<LocalFile> &file, const Options &options)
+  CsvRecordReader(const std::shared_ptr<LocalFile> &file, const WorkingOptions &options)
       : path_(file->path()), options_(options), source_(file)
   {
     skip_bom();
   }
 
-  bool next_record(std::vector<std::string> &values, std::vector<bool> &quoted)
+  bool next_record(BudgetVector<BudgetString> &values, BudgetVector<bool> &quoted)
   {
     while (true) {
       values.clear();
       quoted.clear();
+      source_.begin_record();
+      size_t terminator_bytes = 0;
       if (source_.peek() < 0) {
         return false;
       }
       while (true) {
-        std::string value;
+        check_count(values.size() + 1, MAX_COLUMNS, "CSV column");
+        BudgetString value;
         bool was_quoted = false;
         const int first = source_.peek();
         if (first == options_.quote) {
@@ -486,17 +609,21 @@ public:
         }
         if (separator == '\r') {
           source_.get();
+          terminator_bytes = 1;
           if (source_.peek() == '\n') {
             source_.get();
+            terminator_bytes = 2;
           }
           break;
         }
         if (separator == '\n') {
           source_.get();
+          terminator_bytes = 1;
           break;
         }
         break;
       }
+      source_.finish_record(terminator_bytes);
       // a line without any character is not a record
       if (values.size() == 1 && !quoted[0] && values[0].empty()) {
         continue;
@@ -525,7 +652,7 @@ private:
     }
   }
 
-  void read_quoted_value(std::string &value)
+  void read_quoted_value(BudgetString &value)
   {
     while (true) {
       const int item = source_.get();
@@ -563,7 +690,7 @@ private:
     }
   }
 
-  void read_plain_value(std::string &value)
+  void read_plain_value(BudgetString &value)
   {
     while (true) {
       const int item = source_.peek();
@@ -574,8 +701,8 @@ private:
     }
   }
 
-  std::string path_;
-  Options options_;
+  BudgetString path_;
+  WorkingOptions options_;
   ByteSource source_;
 };
 
@@ -584,13 +711,13 @@ private:
 // ---------------------------------------------------------------------------
 
 struct JsonMember {
-  std::string key;
-  std::string value;
+  BudgetString key;
+  BudgetString value;
   Type type = Type::Null;
   bool is_null = false;
 };
 
-void append_utf8(std::string &out, unsigned int code)
+void append_utf8(BudgetString &out, unsigned int code)
 {
   if (code < 0x80) {
     out.push_back(static_cast<char>(code));
@@ -616,9 +743,9 @@ void append_utf8(std::string &out, unsigned int code)
  */
 class JsonLineParser {
 public:
-  explicit JsonLineParser(const std::string &text) : text_(text), position_(0) {}
+  explicit JsonLineParser(const BudgetString &text) : text_(text), position_(0) {}
 
-  bool parse(std::vector<JsonMember> &members, std::string &error)
+  bool parse(BudgetVector<JsonMember> &members, BudgetString &error)
   {
     members.clear();
     skip_space();
@@ -638,8 +765,9 @@ public:
       return true;
     }
     while (true) {
+      check_count(members.size() + 1, MAX_COLUMNS, "JSON field");
       skip_space();
-      std::string key;
+      BudgetString key;
       if (!parse_string(key, error)) {
         return false;
       }
@@ -684,7 +812,7 @@ private:
     }
   }
 
-  bool parse_string(std::string &out, std::string &error)
+  bool parse_string(BudgetString &out, BudgetString &error)
   {
     if (position_ >= text_.size() || text_[position_] != '"') {
       error = "the JSON object expects a string key";
@@ -788,7 +916,7 @@ private:
     return false;
   }
 
-  bool parse_value(JsonMember &member, std::string &error)
+  bool parse_value(JsonMember &member, BudgetString &error)
   {
     if (position_ >= text_.size()) {
       error = "the JSON object expects a value";
@@ -883,7 +1011,7 @@ private:
     return true;
   }
 
-  const std::string &text_;
+  const BudgetString &text_;
   size_t position_;
 };
 
@@ -897,13 +1025,13 @@ private:
 class RowProducer {
 public:
   virtual ~RowProducer() {}
-  virtual bool next_row(std::vector<Cell> &cells) = 0;
+  virtual bool next_row(BudgetVector<WorkingCell> &cells) = 0;
   virtual void reset() = 0;
 };
 
 class CsvRowProducer : public RowProducer {
 public:
-  CsvRowProducer(const Definition &definition, const std::vector<int> &projection,
+  CsvRowProducer(const WorkingDefinition &definition, const BudgetVector<int> &projection,
                  const std::shared_ptr<LocalFile> &file)
       : definition_(definition), projection_(projection), reader_(file, definition.options)
   {
@@ -912,22 +1040,22 @@ public:
     }
   }
 
-  bool next_row(std::vector<Cell> &cells) override
+  bool next_row(BudgetVector<WorkingCell> &cells) override
   {
-    std::vector<std::string> values;
-    std::vector<bool> quoted;
+    BudgetVector<BudgetString> values;
+    BudgetVector<bool> quoted;
     if (!reader_.next_record(values, quoted)) {
       return false;
     }
     if (values.size() != definition_.columns.size()) {
-      throw Error("the CSV row has " + std::to_string(values.size()) + " values but the file has "
-                  + std::to_string(definition_.columns.size()) + " columns");
+      throw Error("the CSV row has " + budget_to_string(values.size()) + " values but the file has "
+                  + budget_to_string(definition_.columns.size()) + " columns");
     }
     cells.clear();
     cells.reserve(projection_.size());
     for (size_t index = 0; index < projection_.size(); ++index) {
       const size_t column = static_cast<size_t>(projection_[index]);
-      Cell cell;
+      WorkingCell cell;
       cell.text = values[column];
       cell.is_null = !quoted[column] && values[column] == definition_.options.null_string;
       cells.push_back(cell);
@@ -947,19 +1075,19 @@ private:
   void skip_header()
   {
     // the header describes the columns, it is not a row
-    std::vector<std::string> values;
-    std::vector<bool> quoted;
+    BudgetVector<BudgetString> values;
+    BudgetVector<bool> quoted;
     reader_.next_record(values, quoted);
   }
 
-  Definition definition_;
-  std::vector<int> projection_;
+  WorkingDefinition definition_;
+  BudgetVector<int> projection_;
   CsvRecordReader reader_;
 };
 
 class JsonRowProducer : public RowProducer {
 public:
-  JsonRowProducer(const Definition &definition, const std::vector<int> &projection,
+  JsonRowProducer(const WorkingDefinition &definition, const BudgetVector<int> &projection,
                   const std::shared_ptr<LocalFile> &file)
       : definition_(definition), projection_(projection), source_(file)
   {
@@ -968,9 +1096,9 @@ public:
     }
   }
 
-  bool next_row(std::vector<Cell> &cells) override
+  bool next_row(BudgetVector<WorkingCell> &cells) override
   {
-    std::string line;
+    BudgetString line;
     while (source_.read_line(line)) {
       if (!line.empty() && line[line.size() - 1] == '\r') {
         line.erase(line.size() - 1);
@@ -978,8 +1106,8 @@ public:
       if (trim(line).empty()) {
         continue;
       }
-      std::vector<JsonMember> members;
-      std::string error;
+      BudgetVector<JsonMember> members;
+      BudgetString error;
       JsonLineParser parser(line);
       if (!parser.parse(members, error)) {
         throw Error(error);
@@ -987,8 +1115,8 @@ public:
       cells.clear();
       cells.reserve(projection_.size());
       for (size_t index = 0; index < projection_.size(); ++index) {
-        const std::string &name = names_[static_cast<size_t>(projection_[index])];
-        Cell cell;
+        const BudgetString &name = names_[static_cast<size_t>(projection_[index])];
+        WorkingCell cell;
         cell.is_null = true;
         for (size_t member = 0; member < members.size(); ++member) {
           if (lowercase(members[member].key) == name) {
@@ -1007,15 +1135,15 @@ public:
   void reset() override { source_.rewind(); }
 
 private:
-  Definition definition_;
-  std::vector<int> projection_;
-  std::vector<std::string> names_;
+  WorkingDefinition definition_;
+  BudgetVector<int> projection_;
+  BudgetVector<BudgetString> names_;
   ByteSource source_;
 };
 
 class ParquetRowProducer : public RowProducer {
 public:
-  ParquetRowProducer(const Definition &definition, const std::vector<int> &projection,
+  ParquetRowProducer(const WorkingDefinition &definition, const BudgetVector<int> &projection,
                      const std::shared_ptr<LocalFile> &file)
       : definition_(definition), projection_(projection)
   {
@@ -1023,17 +1151,17 @@ public:
     scanner_.set_projection(projection);
   }
 
-  bool next_row(std::vector<Cell> &cells) override
+  bool next_row(BudgetVector<WorkingCell> &cells) override
   {
-    std::vector<std::string> texts;
-    std::vector<bool> nulls;
+    BudgetVector<BudgetString> texts;
+    BudgetVector<bool> nulls;
     if (!scanner_.next_row(texts, nulls)) {
       return false;
     }
     cells.clear();
     cells.reserve(texts.size());
     for (size_t index = 0; index < texts.size(); ++index) {
-      Cell cell;
+      WorkingCell cell;
       cell.text = texts[index];
       cell.is_null = nulls[index];
       cells.push_back(cell);
@@ -1044,8 +1172,8 @@ public:
   void reset() override { scanner_.reset(); }
 
 private:
-  Definition definition_;
-  std::vector<int> projection_;
+  WorkingDefinition definition_;
+  BudgetVector<int> projection_;
   ParquetScanner scanner_;
 };
 
@@ -1053,12 +1181,12 @@ private:
 // Schema inference
 // ---------------------------------------------------------------------------
 
-void consume_csv_row(const std::vector<std::string> &values,
-                     const std::vector<bool> &quoted,
-                     const Options &options,
-                     std::vector<Type> &types,
-                     std::vector<int> &scales,
-                     std::vector<bool> &nullable)
+void consume_csv_row(const BudgetVector<BudgetString> &values,
+                     const BudgetVector<bool> &quoted,
+                     const WorkingOptions &options,
+                     BudgetVector<Type> &types,
+                     BudgetVector<int> &scales,
+                     BudgetVector<bool> &nullable)
 {
   for (size_t index = 0; index < values.size(); ++index) {
     if (!is_valid_utf8(values[index].data(), values[index].size())) {
@@ -1074,7 +1202,7 @@ void consume_csv_row(const std::vector<std::string> &values,
       type = Type::Varchar;
     } else {
       int scale = 0;
-      const std::string trimmed = trim(values[index]);
+      const BudgetString trimmed = trim(values[index]);
       type = infer_type(trimmed);
       if (type == Type::Datetime) {
         classify_temporal(trimmed, scale);
@@ -1085,41 +1213,41 @@ void consume_csv_row(const std::vector<std::string> &values,
   }
 }
 
-void infer_csv(const std::shared_ptr<LocalFile> &file, Definition &definition)
+void infer_csv(const std::shared_ptr<LocalFile> &file, WorkingDefinition &definition)
 {
-  const Options &options = definition.options;
+  const WorkingOptions &options = definition.options;
   CsvRecordReader reader(file, options);
-  std::vector<std::string> values;
-  std::vector<bool> quoted;
+  BudgetVector<BudgetString> values;
+  BudgetVector<bool> quoted;
   const bool has_record = reader.next_record(values, quoted);
   if (!has_record) {
     throw Error("the CSV file is empty");
   }
   const size_t column_count = values.size();
-  std::vector<std::string> names;
+  BudgetVector<BudgetString> names;
   if (options.header) {
     names = unique_names(values);
   } else {
     for (size_t index = 0; index < column_count; ++index) {
-      names.push_back("column" + std::to_string(index));
+      names.push_back("column" + budget_to_string(index));
     }
   }
-  std::vector<Type> types(column_count, Type::Null);
-  std::vector<int> scales(column_count, 0);
-  std::vector<bool> nullable(column_count, false);
+  BudgetVector<Type> types(column_count, Type::Null);
+  BudgetVector<int> scales(column_count, 0);
+  BudgetVector<bool> nullable(column_count, false);
   if (!options.header) {
     consume_csv_row(values, quoted, options, types, scales, nullable);
   }
   while (reader.next_record(values, quoted)) {
     if (values.size() != column_count) {
-      throw Error("the CSV row has " + std::to_string(values.size()) + " values but the file has "
-                  + std::to_string(column_count) + " columns");
+      throw Error("the CSV row has " + budget_to_string(values.size()) + " values but the file has "
+                  + budget_to_string(column_count) + " columns");
     }
     consume_csv_row(values, quoted, options, types, scales, nullable);
   }
   definition.columns.clear();
   for (size_t index = 0; index < column_count; ++index) {
-    Column column;
+    WorkingColumn column;
     column.name = names[index];
     column.type = types[index];
     column.nullable = nullable[index];
@@ -1128,17 +1256,17 @@ void infer_csv(const std::shared_ptr<LocalFile> &file, Definition &definition)
   }
 }
 
-void infer_json(const std::shared_ptr<LocalFile> &file, Definition &definition)
+void infer_json(const std::shared_ptr<LocalFile> &file, WorkingDefinition &definition)
 {
   ByteSource source(file);
-  std::vector<std::string> names;
-  std::map<std::string, size_t> lookup;
-  std::vector<Type> types;
-  std::vector<int> scales;
-  std::vector<bool> nullable;
-  std::vector<int> occurrences;
+  BudgetVector<BudgetString> names;
+  BudgetMap<BudgetString, size_t> lookup;
+  BudgetVector<Type> types;
+  BudgetVector<int> scales;
+  BudgetVector<bool> nullable;
+  BudgetVector<int> occurrences;
   size_t row_count = 0;
-  std::string line;
+  BudgetString line;
   while (source.read_line(line)) {
     if (!line.empty() && line[line.size() - 1] == '\r') {
       line.erase(line.size() - 1);
@@ -1146,21 +1274,22 @@ void infer_json(const std::shared_ptr<LocalFile> &file, Definition &definition)
     if (trim(line).empty()) {
       continue;
     }
-    std::vector<JsonMember> members;
-    std::string error;
+    BudgetVector<JsonMember> members;
+    BudgetString error;
     JsonLineParser parser(line);
     if (!parser.parse(members, error)) {
       throw Error(error);
     }
-    std::map<std::string, bool> seen;
+    BudgetMap<BudgetString, bool> seen;
     for (size_t index = 0; index < members.size(); ++index) {
-      const std::string key = lowercase(members[index].key);
+      const BudgetString key = lowercase(members[index].key);
       if (seen.count(key) > 0) {
         throw Error("the JSON object has the duplicated key " + members[index].key);
       }
       seen[key] = true;
-      std::map<std::string, size_t>::iterator found = lookup.find(key);
+      BudgetMap<BudgetString, size_t>::iterator found = lookup.find(key);
       if (found == lookup.end()) {
+        check_count(names.size() + 1, MAX_COLUMNS, "JSON column");
         found = lookup.insert(std::make_pair(key, names.size())).first;
         names.push_back(members[index].key);
         types.push_back(Type::Null);
@@ -1189,7 +1318,7 @@ void infer_json(const std::shared_ptr<LocalFile> &file, Definition &definition)
   }
   definition.columns.clear();
   for (size_t index = 0; index < names.size(); ++index) {
-    Column column;
+    WorkingColumn column;
     column.name = names[index];
     column.type = types[index];
     column.scale = scales[index];
@@ -1198,14 +1327,14 @@ void infer_json(const std::shared_ptr<LocalFile> &file, Definition &definition)
   }
 }
 
-void infer_parquet(const std::shared_ptr<LocalFile> &file, Definition &definition)
+void infer_parquet(const std::shared_ptr<LocalFile> &file, WorkingDefinition &definition)
 {
   ParquetScanner scanner;
   scanner.open(file);
   definition.columns.clear();
-  const std::vector<ParquetColumn> &schema = scanner.schema();
+  const BudgetVector<ParquetColumn> &schema = scanner.schema();
   for (size_t index = 0; index < schema.size(); ++index) {
-    Column column;
+    WorkingColumn column;
     column.name = schema[index].name;
     column.type = schema[index].type;
     column.nullable = schema[index].nullable;
@@ -1217,29 +1346,30 @@ void infer_parquet(const std::shared_ptr<LocalFile> &file, Definition &definitio
 // Serialization
 // ---------------------------------------------------------------------------
 
-void append_u32(std::string &blob, uint32_t value)
+void append_u32(BudgetString &blob, uint32_t value)
 {
   for (int index = 0; index < 4; ++index) {
     blob.push_back(static_cast<char>((value >> (8 * index)) & 0xFF));
   }
 }
 
-void append_u64(std::string &blob, uint64_t value)
+void append_u64(BudgetString &blob, uint64_t value)
 {
   for (int index = 0; index < 8; ++index) {
     blob.push_back(static_cast<char>((value >> (8 * index)) & 0xFF));
   }
 }
 
-void append_i64(std::string &blob, int64_t value)
+void append_i64(BudgetString &blob, int64_t value)
 {
   append_u64(blob, static_cast<uint64_t>(value));
 }
 
-void append_string(std::string &blob, const std::string &value)
+void append_string(BudgetString &blob, std::string_view value)
 {
+  check_count(value.size(), MAX_RECORD_BYTES, "serialized string");
   append_u32(blob, static_cast<uint32_t>(value.size()));
-  blob.append(value);
+  blob.append(value.data(), value.size());
 }
 
 class BlobReader {
@@ -1268,13 +1398,14 @@ public:
 
   uint8_t u8() { return static_cast<uint8_t>(byte()); }
 
-  std::string str()
+  BudgetString str()
   {
     const uint32_t length = u32();
-    if (position_ + length > blob_.size()) {
+    check_count(length, MAX_RECORD_BYTES, "serialized string");
+    if (length > blob_.size() - position_) {
       throw Error("the serialized definition is corrupted");
     }
-    const std::string value = blob_.substr(position_, length);
+    const BudgetString value(blob_.data() + position_, length);
     position_ += length;
     return value;
   }
@@ -1318,13 +1449,14 @@ const char *type_name(Type type)
   }
 }
 
-Type infer_type(const std::string &text)
+Type infer_type(std::string_view text)
 {
-  const std::string value = trim(text);
+  BudgetScope scope;
+  const BudgetString value = trim(text);
   if (value.empty()) {
     return Type::Null;
   }
-  const std::string lowered = lowercase(value);
+  const BudgetString lowered = lowercase(value);
   if (lowered == "true" || lowered == "false") {
     return Type::Boolean;
   }
@@ -1373,6 +1505,7 @@ Type widen(Type left, Type right)
 
 Format resolve_format(const std::string &path, const Options &options)
 {
+  check_count(path.size(), 4096, "path");
   if (options.format == Format::Csv) {
     return Format::Csv;
   }
@@ -1413,14 +1546,16 @@ std::string resolve_within_root(const std::string &path, const std::string &root
 
 Definition infer(const std::string &path, const std::string &root, const Options &options)
 {
+  BudgetScope scope;
+  MemoryReservation bookkeeping(scope.budget(), 64 * 1024);
   if (options.sample_size != -1) {
     throw Error("only sample_size = -1 is supported");
   }
   auto file = std::make_shared<LocalFile>(LocalFile::open_read(path, root));
-  Definition definition;
-  definition.path = file->path();
-  definition.options = options;
-  definition.options.format = resolve_format(definition.path, options);
+  WorkingDefinition definition;
+  definition.path.assign(file->path().data(), file->path().size());
+  definition.options = WorkingOptions(options);
+  definition.options.format = resolve_format(file->path(), options);
   const FileIdentity identity = file->identity();
   definition.file_size = identity.size;
   definition.file_mtime_ns = identity.mtime_ns;
@@ -1441,11 +1576,14 @@ Definition infer(const std::string &path, const std::string &root, const Options
       throw Error("the file format is not supported");
   }
   file->validate_unchanged(identity);
-  return definition;
+  return export_definition(definition);
 }
 
 std::vector<std::string> discover(const std::string &pattern, const std::string &root)
 {
+  BudgetScope scope;
+  MemoryReservation bookkeeping(scope.budget(), 64 * 1024);
+  check_count(pattern.size(), 4096, "glob pattern");
   if (pattern.find('\0') != std::string::npos) {
     throw Error("file SQL glob pattern contains NUL");
   }
@@ -1463,7 +1601,7 @@ std::vector<std::string> discover(const std::string &pattern, const std::string 
   }
   const auto close_directory = [](DIR *handle) { ::closedir(handle); };
   std::unique_ptr<DIR, decltype(close_directory)> handle(raw_handle, close_directory);
-  std::vector<std::string> matches;
+  BudgetVector<BudgetString> matches;
   while (true) {
     errno = 0;
     struct dirent *entry = ::readdir(handle.get());
@@ -1479,16 +1617,26 @@ std::vector<std::string> discover(const std::string &pattern, const std::string 
     }
     const std::string candidate = directory.path() + "/" + name;
     auto file = LocalFile::open_read(candidate, root);
-    matches.push_back(file.path());
+    check_count(matches.size() + 1, MAX_GLOB_MATCHES, "glob match");
+    matches.emplace_back(file.path().data(), file.path().size());
   }
   directory.validate_unchanged(identity);
   std::sort(matches.begin(), matches.end());
-  return matches;
+  MemoryReservation output(scope.budget());
+  reserve_standard_copy(output, matches.size() * sizeof(std::string));
+  for (const auto &path : matches) reserve_standard_copy(output, path.size() + 1);
+  std::vector<std::string> result;
+  result.reserve(matches.size());
+  for (const auto &path : matches) result.emplace_back(path.data(), path.size());
+  return result;
 }
 
 std::string Definition::serialize() const
 {
-  std::string blob;
+  BudgetScope scope;
+  MemoryReservation bookkeeping(scope.budget(), 64 * 1024);
+  check_count(columns.size(), MAX_COLUMNS, "column");
+  BudgetString blob;
   append_u32(blob, 0x46445346u); // "FSDF"
   append_u32(blob, 2);
   append_string(blob, path);
@@ -1511,11 +1659,15 @@ std::string Definition::serialize() const
     blob.push_back(columns[index].nullable ? '\1' : '\0');
     append_u32(blob, static_cast<uint32_t>(columns[index].scale));
   }
-  return blob;
+  MemoryReservation output(scope.budget());
+  reserve_standard_copy(output, blob.size() + 1);
+  return std::string(blob.data(), blob.size());
 }
 
 Definition Definition::deserialize(const std::string &blob)
 {
+  BudgetScope scope;
+  MemoryReservation bookkeeping(scope.budget(), 64 * 1024);
   BlobReader reader(blob);
   if (reader.u32() != 0x46445346u) {
     throw Error("the serialized definition has an unknown format");
@@ -1523,7 +1675,7 @@ Definition Definition::deserialize(const std::string &blob)
   if (reader.u32() != 2) {
     throw Error("the serialized definition has an unknown version");
   }
-  Definition definition;
+  WorkingDefinition definition;
   definition.path = reader.str();
   definition.options.format = static_cast<Format>(reader.u32());
   definition.options.header = reader.u8() != 0;
@@ -1538,28 +1690,34 @@ Definition Definition::deserialize(const std::string &blob)
   definition.file_inode = reader.u64();
   definition.file_ctime_ns = reader.i64();
   const uint32_t count = reader.u32();
+  check_count(count, MAX_COLUMNS, "column");
   for (uint32_t index = 0; index < count; ++index) {
-    Column column;
+    WorkingColumn column;
     column.name = reader.str();
     column.type = static_cast<Type>(reader.u32());
     column.nullable = reader.u8() != 0;
     column.scale = static_cast<int>(reader.u32());
     definition.columns.push_back(column);
   }
-  return definition;
+  return export_definition(definition);
 }
 
 class Scan::ScanImpl {
 public:
   ScanImpl(const Definition &definition, const std::string &root, const std::vector<int> &projection)
-      : definition_(definition), root_(root), projection_(projection)
+      : budget_(active_file_sql_budget ? active_file_sql_budget : std::make_shared<MemoryBudget>()),
+        bookkeeping_(budget_, 64 * 1024)
   {
+    BudgetScope scope(budget_);
+    check_count(projection.size(), MAX_COLUMNS, "projection");
+    definition_ = WorkingDefinition(definition);
+    projection_.assign(projection.begin(), projection.end());
     for (size_t index = 0; index < projection_.size(); ++index) {
       if (projection_[index] < 0 || static_cast<size_t>(projection_[index]) >= definition_.columns.size()) {
         throw Error("the column projection is out of range");
       }
     }
-    file_ = std::make_shared<LocalFile>(LocalFile::open_read(definition_.path, root_));
+    file_ = std::make_shared<LocalFile>(LocalFile::open_read(definition.path, root));
     check_unchanged();
     switch (definition_.options.format) {
       case Format::Csv:
@@ -1578,21 +1736,31 @@ public:
 
   bool next(std::vector<Cell> &row)
   {
+    BudgetScope scope(budget_);
     // Actual reads validate their held descriptor before/after I/O. Validate
     // again before publishing any row (including buffered rows) or EOF.
     row.clear();
-    std::vector<Cell> cells;
+    BudgetVector<WorkingCell> cells;
     const bool has_row = producer_->next_row(cells);
     check_unchanged();
     if (!has_row) {
       return false;
     }
-    row.swap(cells);
+    MemoryReservation output(budget_);
+    reserve_standard_copy(output, (row.capacity() + cells.size()) * sizeof(Cell));
+    for (const auto &cell : cells) {
+      reserve_standard_copy(output, cell.text.size() + 1);
+    }
+    row.reserve(cells.size());
+    for (const auto &cell : cells) {
+      row.push_back(Cell{std::string(cell.text.data(), cell.text.size()), cell.is_null});
+    }
     return true;
   }
 
   void rescan()
   {
+    BudgetScope scope(budget_);
     check_unchanged();
     producer_->reset();
   }
@@ -1605,9 +1773,10 @@ private:
     file_->validate_unchanged(expected);
   }
 
-  Definition definition_;
-  std::string root_;
-  std::vector<int> projection_;
+  std::shared_ptr<MemoryBudget> budget_;
+  MemoryReservation bookkeeping_;
+  WorkingDefinition definition_;
+  BudgetVector<int> projection_;
   std::shared_ptr<LocalFile> file_;
   std::unique_ptr<RowProducer> producer_;
 };

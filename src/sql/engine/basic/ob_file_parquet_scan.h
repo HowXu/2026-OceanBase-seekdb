@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "sql/engine/basic/ob_file_scan_utils.h"
+#include "sql/engine/basic/file_sql_memory.h"
 
 namespace oceanbase {
 namespace sql {
@@ -32,7 +33,7 @@ class LocalFile;
  * @brief One column of a parquet file.
  */
 struct ParquetColumn {
-  std::string name;
+  BudgetString name;
   Type type = Type::Varchar;
   bool nullable = false;
 };
@@ -62,7 +63,7 @@ public:
   /**
    * @brief The columns of the file, in file order.
    */
-  const std::vector<ParquetColumn> &schema() const;
+  const BudgetVector<ParquetColumn> &schema() const;
 
   /**
    * @brief The number of rows of the file.
@@ -75,7 +76,7 @@ public:
    * The values are returned in the order of the projection. An empty
    * projection only counts the rows.
    */
-  void set_projection(const std::vector<int> &projection);
+  void set_projection(const BudgetVector<int> &projection);
 
   /**
    * @brief Read the next row.
@@ -83,7 +84,7 @@ public:
    * @param nulls   receives the null flag of every projected column
    * @return false when the end of the file is reached
    */
-  bool next_row(std::vector<std::string> &texts, std::vector<bool> &nulls);
+  bool next_row(BudgetVector<BudgetString> &texts, BudgetVector<bool> &nulls);
 
   /**
    * @brief Restart the reader at the first row.

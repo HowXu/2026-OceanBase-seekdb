@@ -4,6 +4,7 @@
 #include <gtest/gtest.h>
 #include "sql/engine/basic/ob_file_scan_utils.h"
 #include "sql/engine/basic/file_sql_file_access.h"
+#include "sql/engine/basic/file_sql_memory.h"
 #include "data/file_sql_parquet_fixtures.h"
 #include <filesystem>
 #include <fstream>
@@ -227,6 +228,173 @@ TEST_F(FileScanTest, datetime_scale_null_columns_and_headerless_options)
   ASSERT_TRUE(scan.next(row)); EXPECT_EQ("a'b", row[0].text);
   ASSERT_TRUE(scan.next(row)); EXPECT_EQ("c;d", row[0].text);
   EXPECT_FALSE(scan.next(row));
+}
+
+TEST_F(FileScanTest, resource_csv_record_boundary)
+{
+  auto path = put("limit.csv", "value\n" + std::string(MAX_RECORD_BYTES, 'x') + "\n");
+  auto definition = infer(path, root, Options{});
+  ASSERT_EQ(1U, definition.columns.size());
+  Scan scan(definition, root, {0});
+  std::vector<Cell> row;
+  ASSERT_TRUE(scan.next(row));
+  EXPECT_EQ(MAX_RECORD_BYTES, row[0].text.size());
+  put("limit.csv", "value\n" + std::string(MAX_RECORD_BYTES + 1, 'x') + "\n");
+  EXPECT_THROW(infer(path, root, Options{}), Error);
+}
+
+TEST_F(FileScanTest, resource_json_record_boundary)
+{
+  const std::string prefix = "{\"value\":\"";
+  const std::string suffix = "\"}";
+  auto path = put("limit.jsonl", prefix + std::string(MAX_RECORD_BYTES - prefix.size() - suffix.size(), 'x') + suffix + "\n");
+  EXPECT_NO_THROW(infer(path, root, Options{}));
+  put("limit.jsonl", prefix + std::string(MAX_RECORD_BYTES + 1 - prefix.size() - suffix.size(), 'x') + suffix + "\n");
+  EXPECT_THROW(infer(path, root, Options{}), Error);
+}
+
+TEST_F(FileScanTest, resource_column_boundary_csv_and_json_union)
+{
+  std::string header;
+  std::string json;
+  for (size_t i = 0; i < MAX_COLUMNS; ++i) {
+    if (i) header += ',';
+    header += "c" + std::to_string(i);
+    json += "{\"c" + std::to_string(i) + "\":1}\n";
+  }
+  auto csv_path = put("columns.csv", header + "\n");
+  EXPECT_EQ(MAX_COLUMNS, infer(csv_path, root, Options{}).columns.size());
+  put("columns.csv", header + ",extra\n");
+  EXPECT_THROW(infer(csv_path, root, Options{}), Error);
+  auto json_path = put("columns.jsonl", json);
+  EXPECT_EQ(MAX_COLUMNS, infer(json_path, root, Options{}).columns.size());
+  put("columns.jsonl", json + "{\"extra\":1}\n");
+  EXPECT_THROW(infer(json_path, root, Options{}), Error);
+}
+
+TEST_F(FileScanTest, parquet_streams_multiple_pages_in_one_row_group)
+{
+  auto path = put("pages.parquet", std::string(
+      reinterpret_cast<const char *>(fixtures::multiple_pages), sizeof(fixtures::multiple_pages)));
+  auto definition = infer(path, root, Options{});
+  Scan scan(definition, root, {0});
+  std::vector<Cell> row;
+  for (const auto *expected : {"10", "20", "30"}) {
+    ASSERT_TRUE(scan.next(row));
+    ASSERT_EQ(1U, row.size());
+    EXPECT_EQ(expected, row[0].text);
+  }
+  EXPECT_FALSE(scan.next(row));
+  scan.rescan();
+  ASSERT_TRUE(scan.next(row));
+  EXPECT_EQ("10", row[0].text);
+}
+
+TEST_F(FileScanTest, parquet_rejects_page_count_and_chunk_overruns)
+{
+  for (const auto &bytes : {
+      std::string(reinterpret_cast<const char *>(fixtures::excess_page_values), sizeof(fixtures::excess_page_values)),
+      std::string(reinterpret_cast<const char *>(fixtures::chunk_overrun), sizeof(fixtures::chunk_overrun))}) {
+    auto path = put("overrun.parquet", bytes);
+    EXPECT_THROW({
+      auto definition = infer(path, root, Options{});
+      Scan scan(definition, root, {0});
+      std::vector<Cell> row;
+      while (scan.next(row)) {}
+    }, Error);
+  }
+}
+
+TEST_F(FileScanTest, parquet_rejects_mismatched_decompressed_page_size)
+{
+  auto bytes = std::string(reinterpret_cast<const char *>(fixtures::original), sizeof(fixtures::original));
+  ASSERT_EQ(0x3c, static_cast<unsigned char>(bytes[7]));
+  bytes[7] = static_cast<char>(0x3e); // Claim 31 bytes instead of the actual 30.
+  auto path = put("size.parquet", bytes);
+  EXPECT_THROW({
+    auto definition = infer(path, root, Options{});
+    Scan scan(definition, root, {0});
+    std::vector<Cell> row;
+    while (scan.next(row)) {}
+  }, Error);
+}
+
+TEST_F(FileScanTest, resource_footer_nesting_depth_is_bounded)
+{
+  std::string footer(256, static_cast<char>(0x1c));
+  footer.append(257, '\0');
+  std::string bytes = "PAR1" + footer;
+  const uint32_t size = footer.size();
+  for (int i = 0; i < 4; ++i) bytes.push_back(static_cast<char>(size >> (8 * i)));
+  bytes += "PAR1";
+  auto path = put("nested.parquet", bytes);
+  try {
+    infer(path, root, Options{});
+    FAIL() << "deeply nested footer accepted";
+  } catch (const Error &error) {
+    EXPECT_NE(std::string::npos, std::string(error.what()).find("nesting limit"));
+  }
+}
+
+TEST_F(FileScanTest, resource_footer_limit_before_allocation)
+{
+  auto path = root + "/footer.parquet";
+  std::ofstream stream(path, std::ios::binary);
+  stream.write("PAR1", 4);
+  stream.seekp(MAX_PARQUET_BYTES + 9);
+  const uint32_t size = MAX_PARQUET_BYTES + 1;
+  for (int i = 0; i < 4; ++i) stream.put(static_cast<char>(size >> (i * 8)));
+  stream.write("PAR1", 4);
+  stream.close();
+  try {
+    infer(path, root, Options{});
+    FAIL() << "oversized footer accepted";
+  } catch (const Error &error) {
+    EXPECT_NE(std::string::npos, std::string(error.what()).find("limit"));
+  }
+}
+
+TEST_F(FileScanTest, resource_snappy_declared_output_limit_before_allocation)
+{
+  auto bytes = std::string(reinterpret_cast<const char *>(fixtures::original), sizeof(fixtures::original));
+  // Original DataPageV2: two definition-level bytes at 42, then Snappy's
+  // uncompressed-length varint at 44. Declare 64 MiB + 1 without growing the file.
+  ASSERT_EQ(28, static_cast<unsigned char>(bytes[44]));
+  bytes[44] = static_cast<char>(0x81);
+  bytes[45] = static_cast<char>(0x80);
+  bytes[46] = static_cast<char>(0x80);
+  bytes[47] = static_cast<char>(0x20);
+  auto path = put("snappy.parquet", bytes);
+  try {
+    auto definition = infer(path, root, Options{});
+    Scan scan(definition, root, {0});
+    std::vector<Cell> row;
+    scan.next(row);
+    FAIL() << "oversized Snappy output accepted";
+  } catch (const Error &error) {
+    EXPECT_NE(std::string::npos, std::string(error.what()).find("limit"));
+  }
+}
+
+TEST_F(FileScanTest, resource_inference_and_scanner_use_one_budget)
+{
+  auto path = put("budget.csv", "value\n" + std::string(2 * 1024 * 1024, 'x') + "\n");
+  auto budget = std::make_shared<MemoryBudget>(1024 * 1024);
+  {
+    BudgetScope scope(budget);
+    EXPECT_THROW(infer(path, root, Options{}), Error);
+  }
+  EXPECT_EQ(0U, budget->used());
+  auto definition = infer(path, root, Options{});
+  {
+    BudgetScope scope(budget);
+    EXPECT_THROW({
+      Scan scan(definition, root, {0});
+      std::vector<Cell> row;
+      scan.next(row);
+    }, Error);
+  }
+  EXPECT_EQ(0U, budget->used());
 }
 
 TEST_F(FileScanTest, mutation_and_security)

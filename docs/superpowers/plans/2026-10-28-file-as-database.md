@@ -268,11 +268,13 @@ void charge(size_t bytes)
 }
 ```
 
-- [ ] **1. 先写边界与回收测试。** 16 MiB 记录可处理、16 MiB+1 失败；4096/4097 列；构造 Footer 或 Snappy 长度声明超过 64 MiB 的小文件，要求分配前失败；预算测试分别 charge 到边界、再加 1、释放后重用、模拟底层分配失败并核对未泄漏计费。
-- [ ] **2. 跑新测试，记录缺少限制的红灯。** 大规模 glob 用预算 helper/小测试预算验证分配路径，同时对固定 100000 上限建立边界断言；不在单测中创建百万文件。
-- [ ] **3. 实现常量、记录长度检查、元数据数量与偏移校验、深层容器记账。** Footer list/map、字典字符串、解压缓冲、CSV/JSONL 单元格及批次均须覆盖；长度相乘先检查溢出，禁止按恶意声明 resize 后才发现超限。超限抛出 Error，不截断或补 NULL。
-- [ ] **4. 跑扫描测试；用 Sanitizer 的独立 CMake 扫描构建检查越界、UB 和泄漏。** 另建 mktemp 构建目录，配置时传 `-DCMAKE_CXX_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer'` 和 `-DCMAKE_EXE_LINKER_FLAGS='-fsanitize=address,undefined'`，再 cmake --build/ctest，不覆盖普通构建。不能把环境不支持 Sanitizer 记作通过。
-- [ ] **5. 提交。** `fix(sql): bound file inference and parquet decoding memory`。
+- [x] **1. 先写边界与回收测试。** 16 MiB 记录可处理、16 MiB+1 失败；4096/4097 列；构造 Footer 或 Snappy 长度声明超过 64 MiB 的小文件，要求分配前失败；预算测试分别 charge 到边界、再加 1、释放后重用、模拟底层分配失败并核对未泄漏计费。
+- [x] **2. 跑新测试，记录缺少限制的红灯。** 大规模 glob 用预算 helper/小测试预算验证分配路径，同时对固定 100000 上限建立边界断言；不在单测中创建百万文件。
+- [x] **3. 实现常量、记录长度检查、元数据数量与偏移校验、深层容器记账。** Footer list/map、字典字符串、解压缓冲、CSV/JSONL 单元格及批次均须覆盖；长度相乘先检查溢出，禁止按恶意声明 resize 后才发现超限。超限抛出 Error，不截断或补 NULL。
+- [x] **4. 跑扫描测试；用 Sanitizer 的独立 CMake 扫描构建检查越界、UB 和泄漏。** 另建 mktemp 构建目录，配置时传 `-DCMAKE_CXX_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer'` 和 `-DCMAKE_EXE_LINKER_FLAGS='-fsanitize=address,undefined'`，再 cmake --build/ctest，不覆盖普通构建。不能把环境不支持 Sanitizer 记作通过。
+- [x] **5. 提交。** `fix(sql): bound file inference and parquet decoding memory`。
+
+**执行记录（任务 4）：** 新增共享 MemoryBudget、BudgetAllocator 和公开 std 边界的峰值预留；嵌套容器与字符串共用预算，扫描器在调用作用域结束后仍持有预算。记录/列数、Footer/页声明、Snappy 输出、集合长度、偏移、整数及混合编码宽度在分配或位移前校验；Parquet 列流限制在各自 ColumnChunk 内并校验解压长度。六个资源测试先暴露记录、列数及 Footer 限制缺失；修正 Snappy 夹具偏移后，临时移除长度 guard 的负对照确认测试能失败。新增多页、页/列块计数、解压长度及 Footer 嵌套回归。普通及 ASan/UBSan CTest 各 36 个 GTest 全通过；源码与头文件归属检查通过（补登记此前新增/迁移的四个头文件）。原版 file_sql 8 文件与用户文档哈希不变。未运行服务端或 SQL 端验证。
 
 ## Task 5: 迁移语法、系统开关与文件表原生计划
 

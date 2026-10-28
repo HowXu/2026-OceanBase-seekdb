@@ -29,6 +29,7 @@
 #include "sql/engine/basic/ob_file_parquet_scan.h"
 #include "sql/engine/basic/ob_file_scan_utils.h"
 #include "sql/engine/basic/file_sql_file_access.h"
+#include "sql/engine/basic/file_sql_memory.h"
 
 namespace oceanbase {
 namespace sql {
@@ -161,7 +162,11 @@ public:
     int shift = 0;
     while (true) {
       uint8_t byte = read_byte();
-      value |= (uint64_t)(byte & 0x7F) << shift;
+      if (shift == 63 && (byte & 0xfe) != 0) {
+        throw Error("corrupt thrift variable length integer");
+      }
+      if (shift == 63 && (byte & 0xfe) != 0) return false;
+    value |= (uint64_t)(byte & 0x7F) << shift;
       if ((byte & 0x80) == 0) {
         break;
       }
@@ -182,16 +187,39 @@ public:
     return (int64_t)(raw >> 1) ^ -(int64_t)(raw & 1);
   }
 
+  int32_t read_i32()
+  {
+    const int64_t value = read_zigzag();
+    if (value < INT32_MIN || value > INT32_MAX) throw Error("parquet integer overflow");
+    return static_cast<int32_t>(value);
+  }
+
+  uint32_t read_collection_size(size_t minimum_bytes = 1)
+  {
+    const uint64_t count = read_varint();
+    if (count > UINT32_MAX || count > remaining() / minimum_bytes) {
+      throw Error("parquet collection size limit exceeded");
+    }
+    return static_cast<uint32_t>(count);
+  }
+
+  void enter_skip()
+  {
+    if (skip_depth_ == 64) throw Error("parquet nesting limit exceeded");
+    ++skip_depth_;
+  }
+  void leave_skip() { --skip_depth_; }
+
   /**
    * @brief Read a length prefixed byte string.
    */
-  std::string read_binary()
+  BudgetString read_binary()
   {
     uint64_t len = read_varint();
     if (len > remaining()) {
       throw Truncated();
     }
-    std::string out(reinterpret_cast<const char *>(data_ + pos_), (size_t)len);
+    BudgetString out(reinterpret_cast<const char *>(data_ + pos_), (size_t)len);
     pos_ += (size_t)len;
     return out;
   }
@@ -230,6 +258,7 @@ private:
   const uint8_t *data_;
   size_t size_;
   size_t pos_;
+  size_t skip_depth_ = 0;
 };
 
 /**
@@ -268,10 +297,11 @@ public:
       field.bool_value = false;
     }
     if (delta == 0) {
-      field.id = (int)reader_.read_zigzag();
+      field.id = reader_.read_i32();
     } else {
       field.id = last_id_ + delta;
     }
+    if (field.id <= 0 || field.id > INT16_MAX) throw Error("corrupt parquet field id");
     last_id_ = field.id;
     return true;
   }
@@ -294,6 +324,11 @@ void skip_struct(CompactReader &reader)
 
 void skip_value(CompactReader &reader, uint8_t type)
 {
+  struct DepthGuard {
+    CompactReader &reader;
+    explicit DepthGuard(CompactReader &value) : reader(value) { reader.enter_skip(); }
+    ~DepthGuard() { reader.leave_skip(); }
+  } depth(reader);
   switch (type) {
     case COMPACT_BOOLEAN_TRUE:
     case COMPACT_BOOLEAN_FALSE: {
@@ -324,8 +359,9 @@ void skip_value(CompactReader &reader, uint8_t type)
       uint32_t size = header >> 4;
       uint8_t element_type = header & 0x0F;
       if (size == 15) {
-        size = (uint32_t)reader.read_varint();
+        size = reader.read_collection_size();
       }
+      check_count(size, reader.remaining(), "parquet collection size");
       for (uint32_t i = 0; i < size; ++i) {
         if (element_type == COMPACT_BOOLEAN_TRUE || element_type == COMPACT_BOOLEAN_FALSE) {
           reader.read_byte();
@@ -336,14 +372,20 @@ void skip_value(CompactReader &reader, uint8_t type)
       break;
     }
     case COMPACT_MAP: {
-      uint64_t size = reader.read_varint();
+      uint64_t size = reader.read_collection_size(2);
       if (size > 0) {
         uint8_t types = reader.read_byte();
         uint8_t key_type = types >> 4;
         uint8_t value_type = types & 0x0F;
         for (uint64_t i = 0; i < size; ++i) {
-          skip_value(reader, key_type);
-          skip_value(reader, value_type);
+          for (const auto kind : {key_type, value_type}) {
+            if (kind == COMPACT_BOOLEAN_TRUE || kind == COMPACT_BOOLEAN_FALSE) {
+              const auto value = reader.read_byte();
+              if (value != COMPACT_BOOLEAN_TRUE && value != COMPACT_BOOLEAN_FALSE) throw Error("corrupt parquet boolean");
+            } else {
+              skip_value(reader, kind);
+            }
+          }
         }
       }
       break;
@@ -367,8 +409,9 @@ void read_list_header(CompactReader &reader, uint32_t &size, uint8_t &element_ty
   size = header >> 4;
   element_type = header & 0x0F;
   if (size == 15) {
-    size = (uint32_t)reader.read_varint();
+    size = reader.read_collection_size();
   }
+  check_count(size, reader.remaining(), "parquet collection size");
 }
 
 /**
@@ -400,7 +443,7 @@ uint64_t read_le(const uint8_t *data, int size)
  * @brief One element of the schema of a parquet file.
  */
 struct SchemaElement {
-  std::string name;
+  BudgetString name;
   int type = -1;
   int type_length = 0;
   int repetition_type = PARQUET_REQUIRED;
@@ -421,14 +464,14 @@ struct ColumnMetaData {
   int64_t total_uncompressed_size = 0;
   int64_t data_page_offset = 0;
   int64_t dictionary_page_offset = -1;
-  std::vector<std::string> path_in_schema;
+  BudgetVector<BudgetString> path_in_schema;
 };
 
 /**
  * @brief One column chunk of a row group.
  */
 struct ColumnChunk {
-  std::string file_path;
+  BudgetString file_path;
   int64_t file_offset = 0;
   bool has_metadata = false;
   ColumnMetaData metadata;
@@ -439,7 +482,7 @@ struct ColumnChunk {
  */
 struct RowGroup {
   int64_t num_rows = 0;
-  std::vector<ColumnChunk> columns;
+  BudgetVector<ColumnChunk> columns;
 };
 
 /**
@@ -447,16 +490,16 @@ struct RowGroup {
  */
 struct FileMetaData {
   int64_t num_rows = 0;
-  std::vector<SchemaElement> schema;
-  std::vector<RowGroup> row_groups;
+  BudgetVector<SchemaElement> schema;
+  BudgetVector<RowGroup> row_groups;
 };
 
 /**
  * @brief One leaf column of the file.
  */
 struct LeafColumn {
-  std::string name;
-  std::vector<std::string> path;
+  BudgetString name;
+  BudgetVector<BudgetString> path;
   Type type = Type::Varchar;
   bool nullable = false;
   int parquet_type = PARQUET_INT64;
@@ -546,15 +589,15 @@ void parse_schema_element(CompactReader &reader, SchemaElement &element)
   while (fields.next_field(field)) {
     switch (field.id) {
       case 1: {
-        element.type = (int)reader.read_zigzag();
+        element.type = reader.read_i32();
         break;
       }
       case 2: {
-        element.type_length = (int)reader.read_zigzag();
+        element.type_length = reader.read_i32();
         break;
       }
       case 3: {
-        element.repetition_type = (int)reader.read_zigzag();
+        element.repetition_type = reader.read_i32();
         break;
       }
       case 4: {
@@ -562,11 +605,11 @@ void parse_schema_element(CompactReader &reader, SchemaElement &element)
         break;
       }
       case 5: {
-        element.num_children = (int)reader.read_zigzag();
+        element.num_children = reader.read_i32();
         break;
       }
       case 6: {
-        element.converted_type = (int)reader.read_zigzag();
+        element.converted_type = reader.read_i32();
         break;
       }
       case 7: {
@@ -604,7 +647,7 @@ void parse_column_metadata(CompactReader &reader, ColumnMetaData &metadata)
   while (fields.next_field(field)) {
     switch (field.id) {
       case 1: {
-        metadata.type = (int)reader.read_zigzag();
+        metadata.type = reader.read_i32();
         break;
       }
       case 2: {
@@ -630,7 +673,7 @@ void parse_column_metadata(CompactReader &reader, ColumnMetaData &metadata)
         break;
       }
       case 4: {
-        metadata.codec = (int)reader.read_zigzag();
+        metadata.codec = reader.read_i32();
         break;
       }
       case 5: {
@@ -708,6 +751,7 @@ void parse_row_group(CompactReader &reader, RowGroup &row_group)
         uint32_t size = 0;
         uint8_t element_type = COMPACT_STOP;
         read_list_header(reader, size, element_type);
+        check_count(size, MAX_COLUMNS, "parquet row group column");
         for (uint32_t i = 0; i < size; ++i) {
           ColumnChunk chunk;
           if (element_type == COMPACT_STRUCT) {
@@ -744,6 +788,7 @@ void parse_file_metadata(CompactReader &reader, FileMetaData &metadata)
         uint32_t size = 0;
         uint8_t element_type = COMPACT_STOP;
         read_list_header(reader, size, element_type);
+        check_count(size, MAX_COLUMNS + 1, "parquet schema column");
         for (uint32_t i = 0; i < size; ++i) {
           SchemaElement element;
           if (element_type == COMPACT_STRUCT) {
@@ -763,6 +808,7 @@ void parse_file_metadata(CompactReader &reader, FileMetaData &metadata)
         uint32_t size = 0;
         uint8_t element_type = COMPACT_STOP;
         read_list_header(reader, size, element_type);
+        check_count(size, reader.remaining(), "parquet row group count");
         for (uint32_t i = 0; i < size; ++i) {
           RowGroup row_group;
           if (element_type == COMPACT_STRUCT) {
@@ -788,9 +834,9 @@ void parse_file_metadata(CompactReader &reader, FileMetaData &metadata)
  * The schema is stored as a flat list in preorder, the children of an
  * element are the elements that follow it.
  */
-std::vector<int> compute_subtree_sizes(const std::vector<SchemaElement> &elements)
+BudgetVector<int> compute_subtree_sizes(const BudgetVector<SchemaElement> &elements)
 {
-  std::vector<int> sizes(elements.size(), 1);
+  BudgetVector<int> sizes(elements.size(), 1);
   for (int i = (int)elements.size() - 1; i >= 0; --i) {
     sizes[i] = 1;
     int child = i + 1;
@@ -808,13 +854,13 @@ std::vector<int> compute_subtree_sizes(const std::vector<SchemaElement> &element
 /**
  * @brief Split a dotted name into its parts.
  */
-std::vector<std::string> split_path(const std::string &name)
+BudgetVector<BudgetString> split_path(const BudgetString &name)
 {
-  std::vector<std::string> parts;
+  BudgetVector<BudgetString> parts;
   size_t start = 0;
   while (start <= name.size()) {
     size_t pos = name.find('.', start);
-    if (pos == std::string::npos) {
+    if (pos == BudgetString::npos) {
       parts.push_back(name.substr(start));
       break;
     }
@@ -866,17 +912,17 @@ void map_column_type(LeafColumn &column)
 /**
  * @brief Collect the leaf columns of the schema, in leaf order.
  */
-void collect_leaf_columns(const std::vector<SchemaElement> &elements,
-                           const std::vector<int> &sizes,
+void collect_leaf_columns(const BudgetVector<SchemaElement> &elements,
+                           const BudgetVector<int> &sizes,
                            int index,
-                           const std::string &prefix,
+                           const BudgetString &prefix,
                            int def_level,
                            int rep_level,
                            bool nullable,
-                           std::vector<LeafColumn> &columns)
+                           BudgetVector<LeafColumn> &columns)
 {
   const SchemaElement &element = elements[index];
-  std::string name = prefix.empty() ? element.name : prefix + "." + element.name;
+  BudgetString name = prefix.empty() ? element.name : prefix + "." + element.name;
   int def = def_level;
   int rep = rep_level;
   bool is_nullable = nullable;
@@ -921,7 +967,7 @@ void collect_leaf_columns(const std::vector<SchemaElement> &elements,
  *
  * @return false when the block is malformed
  */
-bool snappy_decompress(const uint8_t *src, size_t src_size, std::vector<uint8_t> &out)
+bool snappy_decompress(const uint8_t *src, size_t src_size, size_t expected_size, BudgetVector<uint8_t> &out)
 {
   size_t pos = 0;
   uint64_t length = 0;
@@ -931,6 +977,7 @@ bool snappy_decompress(const uint8_t *src, size_t src_size, std::vector<uint8_t>
       return false;
     }
     uint8_t byte = src[pos++];
+    if (shift == 63 && (byte & 0xfe) != 0) return false;
     length |= (uint64_t)(byte & 0x7F) << shift;
     if ((byte & 0x80) == 0) {
       break;
@@ -940,6 +987,8 @@ bool snappy_decompress(const uint8_t *src, size_t src_size, std::vector<uint8_t>
       return false;
     }
   }
+  check_count(length, MAX_PARQUET_BYTES, "Snappy decompressed page");
+  if (length != expected_size) throw Error("parquet decompressed page size mismatch");
   out.assign((size_t)length, 0);
   size_t written = 0;
   while (pos < src_size) {
@@ -1008,14 +1057,16 @@ bool snappy_decompress(const uint8_t *src, size_t src_size, std::vector<uint8_t>
 /**
  * @brief Decompress the content of a page.
  */
-std::vector<uint8_t> decompress_page(const uint8_t *data, size_t size, int codec)
+BudgetVector<uint8_t> decompress_page(const uint8_t *data, size_t size, int codec, size_t expected_size)
 {
+  check_count(expected_size, MAX_PARQUET_BYTES, "decompressed parquet page");
   if (codec == CODEC_UNCOMPRESSED) {
-    return std::vector<uint8_t>(data, data + size);
+    if (size != expected_size) throw Error("parquet decompressed page size mismatch");
+    return BudgetVector<uint8_t>(data, data + size);
   }
   if (codec == CODEC_SNAPPY) {
-    std::vector<uint8_t> out;
-    if (!snappy_decompress(data, size, out)) {
+    BudgetVector<uint8_t> out;
+    if (!snappy_decompress(data, size, expected_size, out)) {
       throw Error("corrupt snappy compressed page");
     }
     return out;
@@ -1078,9 +1129,12 @@ bool decode_hybrid(const uint8_t *data,
                    size_t size,
                    int width,
                    int count,
-                   std::vector<int32_t> &values,
+                   BudgetVector<int32_t> &values,
                    size_t &consumed)
 {
+  if (width < 0 || width > 32 || count < 0) {
+    throw Error("invalid parquet hybrid width or value count");
+  }
   values.clear();
   size_t pos = 0;
   BitReader reader(data, size);
@@ -1095,6 +1149,7 @@ bool decode_hybrid(const uint8_t *data,
         return false;
       }
       uint8_t byte = data[pos++];
+      if (shift == 63 && (byte & 0xfe) != 0) return false;
       header |= (uint64_t)(byte & 0x7F) << shift;
       if ((byte & 0x80) == 0) {
         break;
@@ -1119,9 +1174,12 @@ bool decode_hybrid(const uint8_t *data,
     } else {
       // a run of bit packed values
       uint64_t groups = header >> 1;
+      if (groups > UINT64_MAX / 8 || (width != 0 && groups > (size - pos) / width)) {
+        return false;
+      }
       uint64_t total = groups * 8;
-      size_t bytes = (size_t)((total * width + 7) / 8);
-      if (pos + bytes > size) {
+      size_t bytes = static_cast<size_t>(groups * width);
+      if (bytes > size - pos) {
         return false;
       }
       BitReader packed(data + pos, bytes);
@@ -1142,7 +1200,7 @@ bool decode_hybrid(const uint8_t *data,
 /**
  * @brief Check that the decoded levels are within the range of the schema.
  */
-bool levels_are_valid(const std::vector<int32_t> &levels, int max_level)
+bool levels_are_valid(const BudgetVector<int32_t> &levels, int max_level)
 {
   for (size_t i = 0; i < levels.size(); ++i) {
     if (levels[i] < 0 || levels[i] > max_level) {
@@ -1167,12 +1225,12 @@ size_t decode_levels(const uint8_t *data,
                      int max_level,
                      int count,
                      bool prefixed,
-                     std::vector<int32_t> &levels)
+                     BudgetVector<int32_t> &levels)
 {
   if (prefixed && size >= 4) {
     uint32_t len = (uint32_t)read_le(data, 4);
     if (len <= size - 4) {
-      std::vector<int32_t> candidate;
+      BudgetVector<int32_t> candidate;
       size_t consumed = 0;
       if (decode_hybrid(data + 4, len, width, count, candidate, consumed) && consumed <= len
           && levels_are_valid(candidate, max_level)) {
@@ -1192,7 +1250,7 @@ size_t decode_levels(const uint8_t *data,
  * @brief Format a double with the shortest representation that reads back
  *        to the same value.
  */
-std::string format_double(double value)
+BudgetString format_double(double value)
 {
   if (std::isnan(value)) {
     return "NaN";
@@ -1207,7 +1265,7 @@ std::string format_double(double value)
       break;
     }
   }
-  return std::string(buf);
+  return BudgetString(buf);
 }
 
 /**
@@ -1230,7 +1288,7 @@ void civil_from_days(int64_t days, int64_t &year, int64_t &month, int64_t &day)
 /**
  * @brief Format a date as year-month-day.
  */
-std::string format_date(int64_t days)
+BudgetString format_date(int64_t days)
 {
   int64_t year = 0;
   int64_t month = 0;
@@ -1238,7 +1296,7 @@ std::string format_date(int64_t days)
   civil_from_days(days, year, month, day);
   char buf[32];
   snprintf(buf, sizeof(buf), "%04lld-%02lld-%02lld", (long long)year, (long long)month, (long long)day);
-  return std::string(buf);
+  return BudgetString(buf);
 }
 
 /**
@@ -1246,7 +1304,7 @@ std::string format_date(int64_t days)
  *
  * The fractional part is appended when it is not zero.
  */
-std::string format_timestamp(int64_t value, int unit)
+BudgetString format_timestamp(int64_t value, int unit)
 {
   int64_t divisor = 1000;
   int digits = 3;
@@ -1283,7 +1341,7 @@ std::string format_timestamp(int64_t value, int unit)
            (long long)(seconds_of_day / 3600),
            (long long)((seconds_of_day % 3600) / 60),
            (long long)(seconds_of_day % 60));
-  std::string result(buf);
+  BudgetString result(buf);
   if (fraction != 0) {
     char frac[32];
     snprintf(frac, sizeof(frac), ".%0*lld", digits, (long long)fraction);
@@ -1295,7 +1353,7 @@ std::string format_timestamp(int64_t value, int unit)
 /**
  * @brief Format the nanosecond timestamp of an int96 value.
  */
-std::string format_int96(const uint8_t *data)
+BudgetString format_int96(const uint8_t *data)
 {
   uint64_t nanoseconds = read_le(data, 8);
   int32_t julian_day = (int32_t)read_le(data + 8, 4);
@@ -1321,7 +1379,7 @@ std::string format_int96(const uint8_t *data)
            (long long)(seconds_of_day / 3600),
            (long long)((seconds_of_day % 3600) / 60),
            (long long)(seconds_of_day % 60));
-  std::string result(buf);
+  BudgetString result(buf);
   if (fraction != 0) {
     char frac[32];
     snprintf(frac, sizeof(frac), ".%09lld", (long long)fraction);
@@ -1333,7 +1391,7 @@ std::string format_int96(const uint8_t *data)
 /**
  * @brief Convert one raw value into its textual form.
  */
-std::string format_value(const LeafColumn &column, const uint8_t *data, size_t size)
+BudgetString format_value(const LeafColumn &column, const uint8_t *data, size_t size)
 {
   switch (column.parquet_type) {
     case PARQUET_BOOLEAN: {
@@ -1346,9 +1404,9 @@ std::string format_value(const LeafColumn &column, const uint8_t *data, size_t s
       }
       if (column.converted_type == CONVERTED_UINT_8 || column.converted_type == CONVERTED_UINT_16
           || column.converted_type == CONVERTED_UINT_32) {
-        return std::to_string((uint32_t)value);
+        return budget_to_string((uint32_t)value);
       }
-      return std::to_string((int64_t)value);
+      return budget_to_string((int64_t)value);
     }
     case PARQUET_INT64: {
       int64_t value = (int64_t)read_le(data, 8);
@@ -1357,9 +1415,9 @@ std::string format_value(const LeafColumn &column, const uint8_t *data, size_t s
         return format_timestamp(value, column.time_unit);
       }
       if (column.converted_type == CONVERTED_UINT_64) {
-        return std::to_string((uint64_t)value);
+        return budget_to_string((uint64_t)value);
       }
-      return std::to_string(value);
+      return budget_to_string(value);
     }
     case PARQUET_INT96: {
       return format_int96(data);
@@ -1378,10 +1436,10 @@ std::string format_value(const LeafColumn &column, const uint8_t *data, size_t s
     }
     case PARQUET_BYTE_ARRAY:
     case PARQUET_FIXED_LEN_BYTE_ARRAY: {
-      return std::string(reinterpret_cast<const char *>(data), size);
+      return BudgetString(reinterpret_cast<const char *>(data), size);
     }
     default: {
-      return std::string(reinterpret_cast<const char *>(data), size);
+      return BudgetString(reinterpret_cast<const char *>(data), size);
     }
   }
 }
@@ -1393,12 +1451,14 @@ void decode_plain_values(const uint8_t *data,
                           size_t size,
                           const LeafColumn &column,
                           int count,
-                          std::vector<std::string> &values)
+                          BudgetVector<BudgetString> &values)
 {
+  if (count < 0) throw Error("negative parquet value count");
+  values.reserve(static_cast<size_t>(count));
   size_t pos = 0;
   switch (column.parquet_type) {
     case PARQUET_BOOLEAN: {
-      if ((size_t)((count + 7) / 8) > size) {
+      if ((static_cast<size_t>(count) + 7) / 8 > size) {
         throw Error("corrupt parquet page");
       }
       for (int i = 0; i < count; ++i) {
@@ -1473,8 +1533,8 @@ void decode_plain_values(const uint8_t *data,
       break;
     }
     case PARQUET_FIXED_LEN_BYTE_ARRAY: {
-      int length = column.type_length > 0 ? column.type_length : 0;
-      if (size < (size_t)count * length) {
+      int length = column.type_length;
+      if (length <= 0 || static_cast<size_t>(count) > size / static_cast<size_t>(length)) {
         throw Error("corrupt parquet page");
       }
       for (int i = 0; i < count; ++i) {
@@ -1495,8 +1555,8 @@ void decode_plain_values(const uint8_t *data,
 void decode_dictionary_values(const uint8_t *data,
                               size_t size,
                               int count,
-                              const std::vector<std::string> &dictionary,
-                              std::vector<std::string> &values)
+                              const BudgetVector<BudgetString> &dictionary,
+                              BudgetVector<BudgetString> &values)
 {
   if (count <= 0) {
     // the chunk holds no value at all, its dictionary is empty as well
@@ -1509,7 +1569,7 @@ void decode_dictionary_values(const uint8_t *data,
     throw Error("corrupt parquet page");
   }
   int width = data[0];
-  std::vector<int32_t> indices;
+  BudgetVector<int32_t> indices;
   size_t consumed = 0;
   if (!decode_hybrid(data + 1, size - 1, width, count, indices, consumed)) {
     throw Error("corrupt parquet page");
@@ -1552,19 +1612,19 @@ void parse_data_page_header(CompactReader &reader, PageHeader &header)
   while (fields.next_field(field)) {
     switch (field.id) {
       case 1: {
-        header.num_values = (int32_t)reader.read_zigzag();
+        header.num_values = reader.read_i32();
         break;
       }
       case 2: {
-        header.encoding = (int)reader.read_zigzag();
+        header.encoding = reader.read_i32();
         break;
       }
       case 3: {
-        header.definition_level_encoding = (int)reader.read_zigzag();
+        header.definition_level_encoding = reader.read_i32();
         break;
       }
       case 4: {
-        header.repetition_level_encoding = (int)reader.read_zigzag();
+        header.repetition_level_encoding = reader.read_i32();
         break;
       }
       default: {
@@ -1585,11 +1645,11 @@ void parse_dictionary_page_header(CompactReader &reader, PageHeader &header)
   while (fields.next_field(field)) {
     switch (field.id) {
       case 1: {
-        header.dictionary_num_values = (int32_t)reader.read_zigzag();
+        header.dictionary_num_values = reader.read_i32();
         break;
       }
       case 2: {
-        header.dictionary_encoding = (int)reader.read_zigzag();
+        header.dictionary_encoding = reader.read_i32();
         break;
       }
       default: {
@@ -1610,27 +1670,27 @@ void parse_data_page_header_v2(CompactReader &reader, PageHeader &header)
   while (fields.next_field(field)) {
     switch (field.id) {
       case 1: {
-        header.num_values = (int32_t)reader.read_zigzag();
+        header.num_values = reader.read_i32();
         break;
       }
       case 2: {
-        header.num_nulls = (int32_t)reader.read_zigzag();
+        header.num_nulls = reader.read_i32();
         break;
       }
       case 3: {
-        header.num_rows = (int32_t)reader.read_zigzag();
+        header.num_rows = reader.read_i32();
         break;
       }
       case 4: {
-        header.encoding = (int)reader.read_zigzag();
+        header.encoding = reader.read_i32();
         break;
       }
       case 5: {
-        header.definition_levels_byte_length = (int32_t)reader.read_zigzag();
+        header.definition_levels_byte_length = reader.read_i32();
         break;
       }
       case 6: {
-        header.repetition_levels_byte_length = (int32_t)reader.read_zigzag();
+        header.repetition_levels_byte_length = reader.read_i32();
         break;
       }
       case 7: {
@@ -1655,15 +1715,15 @@ void parse_page_header(CompactReader &reader, PageHeader &header)
   while (fields.next_field(field)) {
     switch (field.id) {
       case 1: {
-        header.type = (int)reader.read_zigzag();
+        header.type = reader.read_i32();
         break;
       }
       case 2: {
-        header.uncompressed_page_size = (int32_t)reader.read_zigzag();
+        header.uncompressed_page_size = reader.read_i32();
         break;
       }
       case 3: {
-        header.compressed_page_size = (int32_t)reader.read_zigzag();
+        header.compressed_page_size = reader.read_i32();
         break;
       }
       case 5: {
@@ -1696,9 +1756,12 @@ public:
   {
     file_ = file;
     size_ = file_->identity().size;
+    data_end_ = size_;
   }
 
   uint64_t size() const { return size_; }
+  uint64_t data_end() const { return data_end_; }
+  void set_data_end(uint64_t offset) { data_end_ = offset; }
 
   void read_at(uint64_t offset, void *data, size_t length)
   {
@@ -1713,6 +1776,7 @@ public:
 private:
   std::shared_ptr<LocalFile> file_;
   uint64_t size_ = 0;
+  uint64_t data_end_ = 0;
 };
 
 /**
@@ -1731,6 +1795,11 @@ public:
     if (metadata_.dictionary_page_offset >= 0 && (uint64_t)metadata_.dictionary_page_offset < start) {
       start = (uint64_t)metadata_.dictionary_page_offset;
     }
+    if (start < 4 || start > file_.data_end() || metadata_.total_compressed_size < 0
+        || static_cast<uint64_t>(metadata_.total_compressed_size) > file_.data_end() - start) {
+      throw Error("corrupt parquet column chunk bounds");
+    }
+    chunk_end_ = start + static_cast<uint64_t>(metadata_.total_compressed_size);
     next_offset_ = start;
   }
 
@@ -1738,7 +1807,7 @@ public:
    * @brief Read the next value of the column.
    * @return false when the column is exhausted
    */
-  bool next(std::string &text, bool &is_null)
+  bool next(BudgetString &text, bool &is_null)
   {
     while (page_position_ >= page_values_.size()) {
       if (!load_page()) {
@@ -1757,11 +1826,11 @@ private:
   {
     size_t capacity = 512;
     while (true) {
-      if (next_offset_ >= file_.size()) {
+      if (next_offset_ >= chunk_end_) {
         throw Error("corrupt parquet file");
       }
-      size_t available = (size_t)std::min((uint64_t)capacity, file_.size() - next_offset_);
-      std::vector<uint8_t> buffer(available);
+      size_t available = (size_t)std::min((uint64_t)capacity, chunk_end_ - next_offset_);
+      BudgetVector<uint8_t> buffer(available);
       file_.read_at(next_offset_, buffer.data(), available);
       try {
         CompactReader reader(buffer.data(), buffer.size());
@@ -1769,7 +1838,7 @@ private:
         header_size = reader.position();
         return true;
       } catch (Truncated &) {
-        if (capacity >= 65536) {
+        if (capacity >= 65536 || available == chunk_end_ - next_offset_) {
           throw Error("corrupt parquet page header");
         }
         capacity *= 4;
@@ -1787,10 +1856,16 @@ private:
       uint64_t header_size = 0;
       read_page_header(header, header_size);
       uint64_t data_offset = next_offset_ + header_size;
-      if (header.compressed_page_size < 0 || data_offset + (uint64_t)header.compressed_page_size > file_.size()) {
+      if (header.compressed_page_size < 0 || data_offset > chunk_end_
+          || static_cast<uint64_t>(header.compressed_page_size) > chunk_end_ - data_offset) {
         throw Error("corrupt parquet file");
       }
-      std::vector<uint8_t> raw((size_t)header.compressed_page_size);
+      if (header.uncompressed_page_size < 0) {
+        throw Error("negative parquet page size");
+      }
+      check_count(header.compressed_page_size, MAX_PARQUET_BYTES, "compressed parquet page");
+      check_count(header.uncompressed_page_size, MAX_PARQUET_BYTES, "decompressed parquet page");
+      BudgetVector<uint8_t> raw((size_t)header.compressed_page_size);
       if (!raw.empty()) {
         file_.read_at(data_offset, raw.data(), raw.size());
       }
@@ -1815,7 +1890,7 @@ private:
 
   void decode_dictionary_page(const PageHeader &header, const uint8_t *raw, size_t raw_size)
   {
-    std::vector<uint8_t> plain = decompress_page(raw, raw_size, metadata_.codec);
+    BudgetVector<uint8_t> plain = decompress_page(raw, raw_size, metadata_.codec, header.uncompressed_page_size);
     int count = header.dictionary_num_values;
     if (count < 0) {
       throw Error("corrupt parquet dictionary");
@@ -1833,19 +1908,22 @@ private:
   {
     page_values_.clear();
     page_nulls_.clear();
+    page_position_ = 0;
     int count = header.num_values;
-    if (count < 0) {
-      throw Error("corrupt parquet page");
+    if (count < 0 || count > metadata_.num_values - values_read_) {
+      throw Error("parquet page value count exceeds column chunk");
     }
-    std::vector<int32_t> def_levels;
+    page_values_.reserve(static_cast<size_t>(count));
+    page_nulls_.reserve(static_cast<size_t>(count));
+    BudgetVector<int32_t> def_levels;
     const uint8_t *values_data = NULL;
     size_t values_size = 0;
-    std::vector<uint8_t> plain;
+    BudgetVector<uint8_t> plain;
     if (header.type == PAGE_DATA) {
-      plain = decompress_page(raw, raw_size, metadata_.codec);
+      plain = decompress_page(raw, raw_size, metadata_.codec, header.uncompressed_page_size);
       size_t pos = 0;
       if (column_.max_rep_level > 0) {
-        std::vector<int32_t> rep_levels;
+        BudgetVector<int32_t> rep_levels;
         size_t used = decode_levels(plain.data() + pos,
                                     plain.size() - pos,
                                     bit_width(column_.max_rep_level),
@@ -1868,13 +1946,18 @@ private:
       values_data = plain.data() + pos;
       values_size = plain.size() - pos;
     } else {
+      if (header.repetition_levels_byte_length < 0 || header.definition_levels_byte_length < 0
+          || header.num_nulls < 0 || header.num_nulls > count || header.num_rows != count) {
+        throw Error("corrupt parquet v2 page lengths or counts");
+      }
       size_t rep_length = (size_t)header.repetition_levels_byte_length;
       size_t def_length = (size_t)header.definition_levels_byte_length;
-      if (rep_length + def_length > raw_size) {
+      if (rep_length > raw_size || def_length > raw_size - rep_length
+          || rep_length + def_length > static_cast<size_t>(header.uncompressed_page_size)) {
         throw Error("corrupt parquet page");
       }
       if (column_.max_rep_level > 0) {
-        std::vector<int32_t> rep_levels;
+        BudgetVector<int32_t> rep_levels;
         decode_levels(raw,
                       rep_length,
                       bit_width(column_.max_rep_level),
@@ -1894,11 +1977,13 @@ private:
       }
       const uint8_t *compressed = raw + rep_length + def_length;
       size_t compressed_size = raw_size - rep_length - def_length;
+      size_t expected_values_size = header.uncompressed_page_size - rep_length - def_length;
       if (header.is_compressed) {
-        plain = decompress_page(compressed, compressed_size, metadata_.codec);
+        plain = decompress_page(compressed, compressed_size, metadata_.codec, expected_values_size);
         values_data = plain.data();
         values_size = plain.size();
       } else {
+        if (compressed_size != expected_values_size) throw Error("parquet decompressed page size mismatch");
         values_data = compressed;
         values_size = compressed_size;
       }
@@ -1909,7 +1994,10 @@ private:
         num_nulls++;
       }
     }
-    std::vector<std::string> decoded;
+    if (header.type == PAGE_DATA_V2 && num_nulls != header.num_nulls) {
+      throw Error("parquet v2 null count mismatch");
+    }
+    BudgetVector<BudgetString> decoded;
     if (header.encoding == ENCODING_PLAIN) {
       decode_plain_values(values_data, values_size, column_, count - num_nulls, decoded);
     } else if (header.encoding == ENCODING_PLAIN_DICTIONARY || header.encoding == ENCODING_RLE_DICTIONARY) {
@@ -1923,7 +2011,7 @@ private:
     for (int i = 0; i < count; ++i) {
       bool is_null = (column_.max_def_level > 0 && def_levels[i] < column_.max_def_level);
       page_nulls_.push_back(is_null ? 1 : 0);
-      page_values_.push_back(is_null ? std::string() : decoded[next++]);
+      page_values_.push_back(is_null ? BudgetString() : decoded[next++]);
     }
   }
 
@@ -1932,10 +2020,11 @@ private:
   const LeafColumn &column_;
   const ColumnMetaData &metadata_;
   uint64_t next_offset_ = 0;
+  uint64_t chunk_end_ = 0;
   int64_t values_read_ = 0;
-  std::vector<std::string> dictionary_;
-  std::vector<std::string> page_values_;
-  std::vector<char> page_nulls_;
+  BudgetVector<BudgetString> dictionary_;
+  BudgetVector<BudgetString> page_values_;
+  BudgetVector<char> page_nulls_;
   size_t page_position_ = 0;
 };
 
@@ -1947,33 +2036,39 @@ private:
 class ParquetScanner::ParquetScannerImpl
 {
 public:
+  ParquetScannerImpl()
+      : budget_(active_file_sql_budget ? active_file_sql_budget : std::make_shared<MemoryBudget>()),
+        bookkeeping_(budget_, 64 * 1024) {}
+  const std::shared_ptr<MemoryBudget> &budget() const { return budget_; }
   void open(const std::shared_ptr<LocalFile> &file);
-  const std::vector<ParquetColumn> &schema() const { return schema_; }
+  const BudgetVector<ParquetColumn> &schema() const { return schema_; }
   uint64_t row_count() const { return num_rows_; }
-  void set_projection(const std::vector<int> &projection);
-  bool next_row(std::vector<std::string> &texts, std::vector<bool> &nulls);
+  void set_projection(const BudgetVector<int> &projection);
+  bool next_row(BudgetVector<BudgetString> &texts, BudgetVector<bool> &nulls);
   void reset();
 
 private:
   void start_row_group();
 
 private:
+  std::shared_ptr<MemoryBudget> budget_;
+  MemoryReservation bookkeeping_;
   FileReader file_;
-  std::vector<LeafColumn> leaves_;
-  std::vector<ParquetColumn> schema_;
-  std::vector<RowGroup> row_groups_;
+  BudgetVector<LeafColumn> leaves_;
+  BudgetVector<ParquetColumn> schema_;
+  BudgetVector<RowGroup> row_groups_;
   uint64_t num_rows_ = 0;
-  std::vector<int> projection_;
+  BudgetVector<int> projection_;
   size_t group_index_ = 0;
   int64_t row_in_group_ = 0;
   bool group_started_ = false;
-  std::vector<std::unique_ptr<ColumnStream>> streams_;
+  BudgetVector<std::shared_ptr<ColumnStream>> streams_;
 };
 
 void ParquetScanner::ParquetScannerImpl::open(const std::shared_ptr<LocalFile> &file)
 {
   file_.open(file);
-  const std::string &path = file->path();
+  const auto &path = file->path();
   uint64_t size = file_.size();
   if (size < 12) {
     throw Error("not a parquet file: " + path);
@@ -1992,10 +2087,12 @@ void ParquetScanner::ParquetScannerImpl::open(const std::shared_ptr<LocalFile> &
   if ((uint64_t)footer_length + 8 > size) {
     throw Error("corrupt parquet footer: " + path);
   }
-  std::vector<uint8_t> footer(footer_length);
+  check_count(footer_length, MAX_PARQUET_BYTES, "parquet footer");
+  BudgetVector<uint8_t> footer(footer_length);
   if (footer_length > 0) {
     file_.read_at(size - 8 - footer_length, footer.data(), footer.size());
   }
+  file_.set_data_end(size - 8 - footer_length);
   CompactReader reader(footer.data(), footer.size());
   FileMetaData metadata;
   try {
@@ -2007,8 +2104,18 @@ void ParquetScanner::ParquetScannerImpl::open(const std::shared_ptr<LocalFile> &
     throw Error("corrupt parquet schema: " + path);
   }
 
+  check_count(metadata.schema.size(), MAX_COLUMNS + 1, "parquet schema column");
+  if (metadata.schema[0].num_children < 0
+      || static_cast<size_t>(metadata.schema[0].num_children) != metadata.schema.size() - 1) {
+    throw Error("nested or corrupt parquet schema is not supported");
+  }
+  for (size_t i = 1; i < metadata.schema.size(); ++i) {
+    if (metadata.schema[i].num_children != 0) {
+      throw Error("nested parquet columns are not supported");
+    }
+  }
   leaves_.clear();
-  std::vector<int> sizes = compute_subtree_sizes(metadata.schema);
+  BudgetVector<int> sizes = compute_subtree_sizes(metadata.schema);
   const SchemaElement &root = metadata.schema[0];
   int child = 1;
   for (int c = 0; c < root.num_children; ++c) {
@@ -2049,19 +2156,19 @@ void ParquetScanner::ParquetScannerImpl::open(const std::shared_ptr<LocalFile> &
   if (total_rows != (uint64_t)metadata.num_rows) {
     throw Error("parquet row group counts differ from file row count: " + path);
   }
-  row_groups_ = metadata.row_groups;
+  row_groups_ = std::move(metadata.row_groups);
   num_rows_ = metadata.num_rows;
   reset();
 }
 
-void ParquetScanner::ParquetScannerImpl::set_projection(const std::vector<int> &projection)
+void ParquetScanner::ParquetScannerImpl::set_projection(const BudgetVector<int> &projection)
 {
   projection_.clear();
   for (size_t i = 0; i < projection.size(); ++i) {
     // the projection is only checked against the schema when the file is
     // already open, it may be set before the file is read
     if (!schema_.empty() && (projection[i] < 0 || (size_t)projection[i] >= schema_.size())) {
-      throw Error("parquet column index out of range: " + std::to_string(projection[i]));
+      throw Error("parquet column index out of range: " + budget_to_string(projection[i]));
     }
     projection_.push_back(projection[i]);
   }
@@ -2079,7 +2186,7 @@ void ParquetScanner::ParquetScannerImpl::start_row_group()
   for (size_t i = 0; i < projection_.size(); ++i) {
     size_t column_index = (size_t)projection_[i];
     if (projection_[i] < 0 || column_index >= leaves_.size()) {
-      throw Error("parquet column index out of range: " + std::to_string(projection_[i]));
+      throw Error("parquet column index out of range: " + budget_to_string(projection_[i]));
     }
     const LeafColumn &leaf = leaves_[column_index];
     const ColumnChunk *chunk = NULL;
@@ -2095,11 +2202,11 @@ void ParquetScanner::ParquetScannerImpl::start_row_group()
     if (chunk == NULL || !chunk->has_metadata) {
       throw Error("parquet row group is missing a column chunk");
     }
-    streams_.emplace_back(new ColumnStream(file_, leaf, chunk->metadata));
+    streams_.push_back(std::allocate_shared<ColumnStream>(BudgetAllocator<ColumnStream>(), file_, leaf, chunk->metadata));
   }
 }
 
-bool ParquetScanner::ParquetScannerImpl::next_row(std::vector<std::string> &texts, std::vector<bool> &nulls)
+bool ParquetScanner::ParquetScannerImpl::next_row(BudgetVector<BudgetString> &texts, BudgetVector<bool> &nulls)
 {
   texts.clear();
   nulls.clear();
@@ -2115,7 +2222,7 @@ bool ParquetScanner::ParquetScannerImpl::next_row(std::vector<std::string> &text
       start_row_group();
     }
     for (size_t i = 0; i < projection_.size(); ++i) {
-      std::string text;
+      BudgetString text;
       bool is_null = false;
       if (!streams_[i]->next(text, is_null)) {
         throw Error("parquet column ended before the declared row count");
@@ -2147,10 +2254,11 @@ ParquetScanner::~ParquetScanner()
 
 void ParquetScanner::open(const std::shared_ptr<LocalFile> &file)
 {
+  BudgetScope scope(impl_->budget());
   impl_->open(file);
 }
 
-const std::vector<ParquetColumn> &ParquetScanner::schema() const
+const BudgetVector<ParquetColumn> &ParquetScanner::schema() const
 {
   return impl_->schema();
 }
@@ -2160,13 +2268,15 @@ uint64_t ParquetScanner::row_count() const
   return impl_->row_count();
 }
 
-void ParquetScanner::set_projection(const std::vector<int> &projection)
+void ParquetScanner::set_projection(const BudgetVector<int> &projection)
 {
+  BudgetScope scope(impl_->budget());
   impl_->set_projection(projection);
 }
 
-bool ParquetScanner::next_row(std::vector<std::string> &texts, std::vector<bool> &nulls)
+bool ParquetScanner::next_row(BudgetVector<BudgetString> &texts, BudgetVector<bool> &nulls)
 {
+  BudgetScope scope(impl_->budget());
   return impl_->next_row(texts, nulls);
 }
 

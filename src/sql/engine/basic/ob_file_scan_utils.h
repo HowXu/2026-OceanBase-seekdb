@@ -20,6 +20,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace oceanbase {
@@ -36,7 +37,7 @@ namespace file_sql {
 class Error : public std::runtime_error
 {
 public:
-  explicit Error(const std::string &message) : std::runtime_error(message) {}
+  explicit Error(std::string_view message) : std::runtime_error(std::string(message.substr(0, 1024))) {}
 };
 
 /**
@@ -141,7 +142,7 @@ const char *type_name(Type type);
 /**
  * @brief Infer the type of a single textual value.
  */
-Type infer_type(const std::string &text);
+Type infer_type(std::string_view text);
 
 /**
  * @brief Combine the types of two values of the same column.

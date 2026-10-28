@@ -3,6 +3,7 @@
  */
 #include "sql/engine/basic/file_sql_file_access.h"
 #include "sql/engine/basic/ob_file_scan_utils.h"
+#include "sql/engine/basic/file_sql_memory.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -23,6 +24,7 @@ namespace oceanbase { namespace sql { namespace file_sql {
 namespace {
 std::string canonical_path(const std::string &path)
 {
+  check_count(path.size(), PATH_MAX - 1, "path");
   if (path.find('\0') != std::string::npos) {
     throw Error("file SQL path contains NUL");
   }
