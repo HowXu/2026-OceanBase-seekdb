@@ -308,6 +308,19 @@ TEST_F(FileScanTest, security_internal_links_and_directory_replacement)
   EXPECT_THROW(scan.rescan(), Error);
 }
 
+TEST_F(FileScanTest, security_checks_file_identity_before_returning_eof)
+{
+  auto path = put("eof.csv", "a\n1\n");
+  auto definition = infer(path, root, Options{});
+  Scan scan(definition, root, {0});
+  std::vector<Cell> row;
+  ASSERT_TRUE(scan.next(row));
+  ASSERT_FALSE(scan.next(row));
+  put("eof.csv", "a\n2\n");
+  EXPECT_THROW(scan.next(row), Error);
+  EXPECT_THROW(scan.rescan(), Error);
+}
+
 TEST_F(FileScanTest, security_parquet_replacement_and_truncation)
 {
   const auto bytes = std::string(reinterpret_cast<const char *>(fixtures::original), sizeof(fixtures::original));

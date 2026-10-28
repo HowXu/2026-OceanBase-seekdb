@@ -1578,7 +1578,8 @@ public:
 
   bool next(std::vector<Cell> &row)
   {
-    check_unchanged();
+    // Actual reads validate their held descriptor before/after I/O. Validate
+    // again before publishing any row (including buffered rows) or EOF.
     row.clear();
     std::vector<Cell> cells;
     const bool has_row = producer_->next_row(cells);

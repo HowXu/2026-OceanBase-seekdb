@@ -248,6 +248,8 @@ void validate_unchanged(const FileIdentity &expected) const;
 
 **执行记录（任务 3）：** 四个新增安全用例先失败，证明旧逻辑不能识别同大小/mtime 的替换及恢复 mtime 的改写，也未拒绝路径 NUL。新增 move-only LocalFile，按授权 root 及规范化路径逐组件 openat/O_NOFOLLOW；CSV/JSONL/Parquet 推断和读取共享同一打开句柄，不按裸路径重开读取。持有句柄与当前目录项均校验 device/inode/size/mtime_ns/ctime_ns，推断完成、扫描前后及重扫复核。glob 以受约束目录句柄枚举，异常用 RAII 关闭 DIR。新增所有权、只读/CLOEXEC、边界、FIFO、目录替换及 128 次失败路径的 fd 回收测试。普通 GTest 21/21 通过，独立 CMake ASan/UBSan CTest 通过；源码清单与原版 8 个文件完整性检查通过，用户文档哈希不变。尚未接入当前 SQL 会话权限复核（任务 5/6），COPY 发布仍待任务 9；无服务端 SQL 验证。
 
+**任务 3 性能复核：** 一次性 CMake Release 对比（临时工程 `/tmp/seekdb-task2-io-benchmark`，同一份 10000 行 CSV，三次执行）发现逐行两次完整目录遍历使扫描耗时由协作者约 4–7 ms 增至约 90–97 ms。已修正：Linux 支持时以 openat2 的 NO_SYMLINKS/NO_MAGICLINKS 一次性核验规范化目录项，仅检查身份，内容仍由原持有 fd 读取；不支持或容器过滤时保留已测试的逐组件安全路径。实际 I/O 前后校验，缓冲行及 EOF 则在发布前校验一次，避免冗余检查。相同数据实测约 8.8–9.1 ms；这是本机小规模测量，不代表 SQL 或大文件性能结论。增加 EOF 后修改测试，普通及 ASan/UBSan 共 22 个 GTest 均通过。
+
 ## Task 4: 对记录、元数据、解压和容器分配施加预算
 
 **Files:** 创建 `file_sql_memory.h`；修改扫描/Parquet/文件访问实现及 CMake 单测。

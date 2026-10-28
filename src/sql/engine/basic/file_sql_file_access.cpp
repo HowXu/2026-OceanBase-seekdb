@@ -12,6 +12,12 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#if defined(__linux__)
+#include <sys/syscall.h>
+#if __has_include(<linux/openat2.h>)
+#include <linux/openat2.h>
+#endif
+#endif
 
 namespace oceanbase { namespace sql { namespace file_sql {
 namespace {
@@ -162,6 +168,30 @@ void LocalFile::validate_unchanged(const FileIdentity &expected) const
   }
   // Check the current directory entry as well as the held descriptor. A rename
   // replacement must not be hidden by an otherwise unchanged old descriptor.
+#if defined(SYS_openat2) && defined(RESOLVE_NO_SYMLINKS)
+  // The stored path is already canonical and root-authorized. Resolve every
+  // component without links in one kernel call, instead of walking the whole
+  // root twice for every row. This descriptor is used only for identity checks;
+  // all content reads still use the originally authorized descriptor.
+  struct open_how how = {};
+  how.flags = O_PATH | O_CLOEXEC;
+  how.resolve = RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS;
+  const int fd = static_cast<int>(::syscall(SYS_openat2, AT_FDCWD, path_.c_str(), &how, sizeof(how)));
+  if (fd >= 0) {
+    struct stat info;
+    const int status = ::fstat(fd, &info);
+    ::close(fd);
+    if (status != 0 || info.st_size < 0 || identity_of(info) != expected) {
+      throw Error("file SQL input was replaced: " + path_);
+    }
+    return;
+  }
+  // Older kernels/headers and syscall-filtered containers retain the safe
+  // component-by-component fallback; they never fall back to a bare read open.
+  if (errno != ENOSYS && errno != EINVAL && errno != EPERM) {
+    throw Error("cannot revalidate authorized file SQL path: " + path_);
+  }
+#endif
   auto entry = open(path_, root_, directory_);
   if (entry.identity() != expected || identity() != expected) {
     throw Error("file SQL input was replaced: " + path_);
