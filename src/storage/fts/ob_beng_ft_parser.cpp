@@ -42,6 +42,8 @@ int ObBEngFTParser::get_next_token(
   word_freq = 0;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
+  } else if (ascii_only_) {
+    ret = get_next_ascii_token(word, word_len, char_len, word_freq);
   } else if (OB_ISNULL(token_stream_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(token_stream_->get_next(token, token_freq))) {
@@ -62,6 +64,49 @@ int ObBEngFTParser::get_next_token(
   return ret;
 }
 
+int ObBEngFTParser::get_next_ascii_token(
+    const char *&word, int64_t &word_len, int64_t &char_len, int64_t &word_freq)
+{
+  int ret = OB_SUCCESS;
+  const ObCharsetInfo *cs = analysis_ctx_.cs_;
+  const char *text = doc_.ptr_;
+  const int64_t length = doc_.len_;
+  auto delimiter = [cs](char ch) {
+    return ob_isspace(cs, ch) || ob_iscntrl(cs, ch) || ob_ispunct(cs, ch);
+  };
+  bool found = false;
+  while (!found && ascii_pos_ < length) {
+    while (ascii_pos_ < length && delimiter(text[ascii_pos_])) {
+      ++ascii_pos_;
+    }
+    int64_t begin = ascii_pos_;
+    while (ascii_pos_ < length && !delimiter(text[ascii_pos_])) {
+      ++ascii_pos_;
+    }
+    int64_t end = ascii_pos_;
+    // Preserve the normalizer's exact character classification and trimming.
+    while (begin < end && !ob_isalnum(cs, text[begin])) { ++begin; }
+    while (end > begin && !ob_isalnum(cs, text[end - 1])) { --end; }
+    if (begin < end) {
+      ObString normalized;
+      // Keep charset-specific case conversion, with one persistent token copy.
+      if (OB_FAIL(ObCharset::tolower(cs, ObString(end - begin, text + begin), normalized, allocator_))) {
+        break;
+      } else {
+        word = normalized.ptr();
+        word_len = normalized.length();
+        char_len = word_len;
+        word_freq = 1;
+        found = true;
+      }
+    }
+  }
+  if (OB_SUCC(ret) && !found) {
+    ret = OB_ITER_END;
+  }
+  return ret;
+}
+
 int ObBEngFTParser::init(ObFTParserParam *param)
 {
   int ret = OB_SUCCESS;
@@ -76,7 +121,15 @@ int ObBEngFTParser::init(ObFTParserParam *param)
     analysis_ctx_.cs_ = param->cs_;
     analysis_ctx_.filter_stopword_ = false;
     analysis_ctx_.need_grouping_ = false;
-    if (OB_FAIL(english_analyzer_.init(analysis_ctx_, *param->allocator_))) {
+    ascii_pos_ = 0;
+    ascii_only_ = CHARSET_UTF8MB4 == ObCharset::charset_type_by_coll(
+        static_cast<ObCollationType>(param->cs_->number));
+    for (int64_t i = 0; ascii_only_ && i < param->ft_length_; ++i) {
+      ascii_only_ = static_cast<unsigned char>(param->fulltext_[i]) < 0x80;
+    }
+    if (ascii_only_) {
+      is_inited_ = true;
+    } else if (OB_FAIL(english_analyzer_.init(analysis_ctx_, *param->allocator_))) {
     } else if (OB_FAIL(segment(doc_, token_stream_))) {
     } else if (OB_ISNULL(token_stream_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -111,6 +164,8 @@ void ObBEngFTParser::reset()
   doc_.reset();
   token_stream_ = nullptr;
   is_inited_ = false;
+  ascii_only_ = false;
+  ascii_pos_ = 0;
 }
 
 ObBasicEnglishFTParserDesc::ObBasicEnglishFTParserDesc() {}
