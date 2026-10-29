@@ -769,7 +769,10 @@ OB_DEF_SERIALIZE(ObAlterTableArg)
               lock_priority_);
 
   LST_DO_CODE(OB_UNIS_ENCODE,
-              data_version_);
+              data_version_,
+              is_ai_column_retry_,
+              ai_column_id_,
+              ai_retry_where_);
 
   return ret;
 }
@@ -818,7 +821,10 @@ OB_DEF_DESERIALIZE(ObAlterTableArg)
               lock_priority_);
 
   LST_DO_CODE(OB_UNIS_DECODE,
-              data_version_);
+              data_version_,
+              is_ai_column_retry_,
+              ai_column_id_,
+              ai_retry_where_);
   return ret;
 }
 
@@ -859,7 +865,10 @@ OB_DEF_SERIALIZE_SIZE(ObAlterTableArg)
                 lock_session_id_,
                 lock_session_create_ts_,
                 lock_priority_,
-                data_version_);
+                data_version_,
+                is_ai_column_retry_,
+                ai_column_id_,
+                ai_retry_where_);
   }
 
   if (OB_FAIL(ret)) {

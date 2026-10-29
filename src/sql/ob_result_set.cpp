@@ -150,6 +150,7 @@ OB_INLINE int ObResultSet::open_plan()
         if (OB_UNLIKELY(my_session_.is_zombie())) {
           //session has been killed some moment ago
           ret = OB_ERR_SESSION_INTERRUPTED;
+        } else if (OB_FAIL(AIColumnStrictRead::check(get_exec_context(), *physical_plan_))) {
         } else {
           if (OB_SUCC(ret)) {
             do {

@@ -28,6 +28,8 @@
 #include "share/ob_ddl_common.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "sql/printer/ob_schema_printer.h"
+#include "sql/engine/dml/ob_ai_column_dml_service.h"
+#include "sql/ob_sql_utils.h"
 #include "share/autoincrement/ob_i_tablet_autoincrement_admin.h"
 #include "storage/blocksstable/index_block/ob_index_block_util.h"
 #include "sql/resolver/ddl/ob_index_builder_util.h"
@@ -12411,10 +12413,53 @@ int ObDDLService::check_add_list_subpartition(const ObPartition &orig_part, cons
   }
   return ret;
 }
+int ObDDLService::retry_ai_column(obcall::ObAlterTableArg &alter_table_arg)
+{
+  int ret = OB_SUCCESS;
+  int tmp_ret = OB_SUCCESS;
+  ObArenaAllocator allocator("AIColRetryDDL");
+  ObSchemaGetterGuard schema_guard;
+  const ObTableSchema *table = nullptr;
+  const ObDatabaseSchema *database = nullptr;
+  ObSEArray<ObString, 3> statements;
+  ObMySQLTransaction trans;
+  bool commit = false;
+  const bool old_worker_flag = ObSQLUtils::is_ai_column_worker_thread();
+  if (OB_FAIL(get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
+  } else if (OB_FAIL(schema_guard.get_table_schema(
+      alter_table_arg.alter_table_schema_.get_origin_database_name(),
+      alter_table_arg.alter_table_schema_.get_origin_table_name(), false, table))
+      || nullptr == table) {
+    ret = OB_TABLE_NOT_EXIST;
+  } else if (OB_FAIL(schema_guard.get_database_schema(table->get_database_id(), database))
+      || nullptr == database) {
+    ret = OB_SCHEMA_ERROR;
+  } else if (OB_FAIL(sql::AIColumnDmlService::build_retry_statements(*table,
+      database->get_database_name_str(), alter_table_arg.ai_column_id_,
+      alter_table_arg.ai_retry_where_, allocator, statements))) {
+  } else if (OB_FAIL(trans.start(sql_proxy_, false))) {
+  } else {
+    ObSQLUtils::set_ai_column_worker_thread(true);
+    for (int64_t i = 0; OB_SUCC(ret) && i < statements.count(); ++i) {
+      int64_t affected = 0;
+      ret = trans.write(statements.at(i).ptr(), affected);
+    }
+    commit = OB_SUCC(ret);
+  }
+  if (trans.is_started() && OB_SUCCESS != (tmp_ret = trans.end(commit))) {
+    if (OB_SUCC(ret)) { ret = tmp_ret; }
+  }
+  ObSQLUtils::set_ai_column_worker_thread(old_worker_flag);
+  return ret;
+}
+
 int ObDDLService::alter_table(obcall::ObAlterTableArg &alter_table_arg,
                               obcall::ObAlterTableRes &res)
 {
   int ret = OB_SUCCESS;
+  if (alter_table_arg.is_ai_column_retry_) {
+    return retry_ai_column(alter_table_arg);
+  }
   int64_t start_usec = 0;
   int64_t end_usec = 0;
   int64_t cost_usec = 0;

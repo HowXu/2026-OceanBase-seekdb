@@ -254,6 +254,27 @@ TEST_F(AIColumnDmlTest, NoAffectedColumnsMeansNoMutation)
       affected, "unused-request", allocator_, statements));
   EXPECT_EQ(0, statements.count());
 }
+TEST_F(AIColumnDmlTest, RetryBuildsAtomicSingleColumnSetStatements)
+{
+  ObSEArray<ObString, 3> statements;
+  ASSERT_EQ(OB_SUCCESS, AIColumnDmlService::build_retry_statements(table_, "test", 20,
+      "(`id` IN (1,3))", allocator_, statements));
+  ASSERT_EQ(3, statements.count());
+  const std::string erase(statements.at(0).ptr());
+  const std::string invalidate(statements.at(1).ptr());
+  const std::string enqueue(statements.at(2).ptr());
+  EXPECT_NE(std::string::npos, erase.find("DELETE"));
+  EXPECT_NE(std::string::npos, invalidate.find("UUID()"));
+  EXPECT_NE(std::string::npos, invalidate.find("`tags` = NULL"));
+  EXPECT_EQ(std::string::npos, invalidate.find("`score` = NULL"));
+  EXPECT_NE(std::string::npos, enqueue.find("JSON_OBJECT('input'"));
+  for (int64_t i = 0; i < statements.count(); ++i) {
+    EXPECT_NE(std::string::npos, std::string(statements.at(i).ptr()).find("`id` IN (1,3)"));
+    expect_parseable(statements.at(i));
+  }
+  EXPECT_EQ(OB_INVALID_ARGUMENT, AIColumnDmlService::build_retry_statements(table_, "test", 18,
+      "1=1", allocator_, statements));
+}
 } // namespace
 } // namespace sql
 } // namespace oceanbase

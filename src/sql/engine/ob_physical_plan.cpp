@@ -74,6 +74,7 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     base_constraints_(allocator_),
     strict_constrinats_(allocator_),
     non_strict_constrinats_(allocator_),
+    ai_column_refs_(allocator_),
     expr_frame_info_(allocator_),
     stat_(),
     op_stats_(),

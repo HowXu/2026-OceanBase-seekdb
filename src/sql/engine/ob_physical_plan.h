@@ -33,6 +33,7 @@
 #include "sql/monitor/ob_phy_operator_stats.h"
 #include "sql/monitor/ob_plan_info_manager.h"
 #include "sql/engine/ob_subschema_ctx.h"
+#include "sql/engine/dml/ob_ai_column_strict_read.h"
 
 namespace oceanbase
 {
@@ -56,6 +57,7 @@ class ObSqlSchemaGuard;
 typedef common::ObFixedArray<common::ObFixedArray<int64_t, common::ObIAllocator>, common::ObIAllocator> PhyRowParamMap;
 typedef common::ObFixedArray<ObTableLocation, common::ObIAllocator> TableLocationFixedArray;
 typedef common::ObFixedArray<ObPlanPwjConstraint, common::ObIAllocator> PlanPwjConstraintArray;
+typedef common::ObFixedArray<AIColumnRef, common::ObIAllocator> AIColumnRefFixedArray;
 
 class ObPhysicalPlan : public ObPlanCacheObject
 {
@@ -331,6 +333,8 @@ public:
   }
 
   inline bool contain_paramed_column_field() const { return contain_paramed_column_field_; }
+  inline AIColumnRefFixedArray &get_ai_column_refs() { return ai_column_refs_; }
+  inline const AIColumnRefFixedArray &get_ai_column_refs() const { return ai_column_refs_; }
   inline ObExprFrameInfo &get_expr_frame_info() { return expr_frame_info_; }
   inline const ObExprFrameInfo &get_expr_frame_info() const { return expr_frame_info_; }
 
@@ -470,6 +474,7 @@ private:
   // If t1, t2 need to satisfy non-strict constraints, then for each partition of t1 after partition pruning, there must be a partition of t2 on the same physical machine
   PlanPwjConstraintArray non_strict_constrinats_;
 public:
+  AIColumnRefFixedArray ai_column_refs_;
   ObExprFrameInfo expr_frame_info_;
 
   ObPlanStat stat_;

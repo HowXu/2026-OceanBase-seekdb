@@ -285,6 +285,72 @@ int AIColumnDmlService::build_mutations(const ObTableSchema &table, const ObStri
   return ret;
 }
 
+int AIColumnDmlService::build_retry_statements(const ObTableSchema &table,
+    const ObString &database_name, const uint64_t column_id, const ObString &predicate,
+    ObIAllocator &allocator, ObIArray<ObString> &statements)
+{
+  int ret = OB_SUCCESS;
+  const ObColumnSchemaV2 *column = table.get_column_schema(column_id);
+  const AIColumnSchema *definition = nullptr;
+  ObSqlString target;
+  if (OB_ISNULL(column) || !column->is_ai_column()
+      || OB_ISNULL(definition = column->get_ai_column_schema()) || predicate.empty()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(ai_append_identifier(target, database_name))
+      || OB_FAIL(target.append("."))
+      || OB_FAIL(ai_append_identifier(target, table.get_table_name_str()))) {
+  } else {
+    const ObColumnSchemaV2 *state = table.get_column_schema(definition->get_state_column_id());
+    const ObColumnSchemaV2 *request = table.get_column_schema(definition->get_request_column_id());
+    const ObColumnSchemaV2 *result_spec = table.get_column_schema(definition->get_result_spec_column_id());
+    ObIJsonBase *root = nullptr;
+    ObString input, config;
+    if (OB_ISNULL(state) || OB_ISNULL(request) || OB_ISNULL(result_spec)) {
+      ret = OB_SCHEMA_ERROR;
+    } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&allocator, definition->get_normalized_expr(),
+        ObJsonInType::JSON_TREE, ObJsonInType::JSON_TREE, root)) || nullptr == root) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (OB_FAIL(ai_json_string(*root, "input_expr", input))
+        || OB_FAIL(ai_json_string(*root, "config_expr", config))) {
+    } else {
+      ObSqlString sql;
+      if (OB_FAIL(sql.append_fmt("DELETE FROM %s.%s WHERE table_id=%lu AND column_id=%lu "
+          "AND request_id IN (SELECT ", OB_SYS_DATABASE_NAME, OB_ALL_AI_COLUMN_TASK_TNAME,
+          table.get_table_id(), column_id))) {
+      } else if (OB_FAIL(ai_append_identifier(sql, request->get_column_name_str()))
+          || OB_FAIL(sql.append_fmt(" FROM %s WHERE %s)", target.ptr(), predicate.ptr()))
+          || OB_FAIL(ai_save_statement(sql, allocator, statements))) {
+      } else if (OB_FAIL(sql.assign_fmt("UPDATE %s SET ", target.ptr()))
+          || OB_FAIL(ai_append_identifier(sql, column->get_column_name_str()))
+          || OB_FAIL(sql.append(" = NULL,"))
+          || OB_FAIL(ai_append_identifier(sql, state->get_column_name_str()))
+          || OB_FAIL(sql.append(" = 1,"))
+          || OB_FAIL(ai_append_identifier(sql, request->get_column_name_str()))
+          || OB_FAIL(sql.append(" = UUID(),"))
+          || OB_FAIL(ai_append_identifier(sql, result_spec->get_column_name_str()))
+          || OB_FAIL(sql.append_fmt(" = %ld WHERE %s", definition->get_schema_version(), predicate.ptr()))
+          || OB_FAIL(ai_save_statement(sql, allocator, statements))) {
+      } else if (OB_FAIL(sql.assign_fmt("INSERT INTO %s.%s (table_id,column_id,request_id,schema_version,"
+          "pk_hash,pk_blob,rowkey_predicate,state,retry_count,eligible_ts,input_payload,result_spec) "
+          "SELECT %lu,%lu,", OB_SYS_DATABASE_NAME, OB_ALL_AI_COLUMN_TASK_TNAME,
+          table.get_table_id(), column_id))
+          || OB_FAIL(ai_append_identifier(sql, request->get_column_name_str()))
+          || OB_FAIL(sql.append_fmt(",%ld,'','','1=1',0,0,NOW(6),JSON_OBJECT('input',(%.*s)),"
+              "JSON_SET(CAST(", definition->get_schema_version(), input.length(), input.ptr()))
+          || OB_FAIL(ai_append_literal(sql, definition->get_normalized_expr(), allocator))
+          || OB_FAIL(sql.append_fmt(" AS JSON),'$.config',CAST((%.*s) AS JSON)) FROM %s WHERE %s AND ",
+              config.length(), config.ptr(), target.ptr(), predicate.ptr()))
+          || OB_FAIL(ai_append_identifier(sql, request->get_column_name_str()))
+          || OB_FAIL(sql.append(" IS NOT NULL AND "))
+          || OB_FAIL(ai_append_identifier(sql, result_spec->get_column_name_str()))
+          || OB_FAIL(sql.append_fmt(" = %ld", definition->get_schema_version()))
+          || OB_FAIL(ai_save_statement(sql, allocator, statements))) {
+      }
+    }
+  }
+  return ret;
+}
+
 int AIColumnDmlService::maintain(ObTableModifyOp &op, const ObDMLBaseCtDef &ctdef, ObDmlEventType event)
 {
   int ret = OB_SUCCESS;

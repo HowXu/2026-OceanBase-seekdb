@@ -38,6 +38,9 @@ public:
       const common::ObIArray<uint64_t> &affected, const common::ObString &request_id,
       common::ObIAllocator &allocator, common::ObIArray<common::ObString> &statements);
   static int maintain(ObTableModifyOp &op, const ObDMLBaseCtDef &ctdef, ObDmlEventType event);
+  static int build_retry_statements(const share::schema::ObTableSchema &table,
+      const common::ObString &database_name, uint64_t column_id, const common::ObString &predicate,
+      common::ObIAllocator &allocator, common::ObIArray<common::ObString> &statements);
 };
 } // namespace sql
 } // namespace oceanbase

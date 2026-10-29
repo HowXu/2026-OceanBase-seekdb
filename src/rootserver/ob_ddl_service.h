@@ -158,6 +158,7 @@ public:
 
   virtual int alter_table(obcall::ObAlterTableArg &alter_table_arg,
                           obcall::ObAlterTableRes &res);
+  int retry_ai_column(obcall::ObAlterTableArg &alter_table_arg);
   virtual int drop_table(const obcall::ObDropTableArg &drop_table_arg, const obcall::ObDDLRes &res);
   int check_table_exists(const obcall::ObTableItem &table_item,
                          const share::schema::ObTableType expected_table_type,
