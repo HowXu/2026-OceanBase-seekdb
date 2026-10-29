@@ -37,8 +37,7 @@ struct ObTextDaaTParam
   ObTextDaaTParam()
     : dim_iters_(nullptr), base_param_(nullptr), allocator_(nullptr), relevance_collector_(nullptr),
       bm25_param_est_ctx_(), mode_flag_(sql::ObMatchAgainstMode::NATURAL_LANGUAGE_MODE),
-      function_lookup_mode_(false),
-      direct_relevance_filter_(false) {}
+      function_lookup_mode_(false) {}
   ~ObTextDaaTParam() {}
   TO_STRING_KV(K_(base_param), KP_(dim_iters), K_(bm25_param_est_ctx),  K_(mode_flag), K_(function_lookup_mode));
   ObIArray<ObISRDaaTDimIter *> *dim_iters_;
@@ -56,7 +55,8 @@ public:
   ObTextDaaTIter() : ObSRDaaTIterImpl(),
       bm25_param_estimator_(),
       mode_flag_(sql::ObMatchAgainstMode::NATURAL_LANGUAGE_MODE),
-      function_lookup_mode_(false) {}
+      function_lookup_mode_(false),
+      direct_relevance_filter_(false) {}
   virtual ~ObTextDaaTIter() { reset(); }
 
   int init(const ObTextDaaTParam &param);
