@@ -95,12 +95,38 @@ protected:
   virtual int cache_result(int64_t &count, const ObDatum &id_datum, const double relevance);
   virtual int project_results(const int64_t count);
   int init_merge_heap(const int64_t count);
+  OB_INLINE bool heap_empty() const
+  {
+    return nullptr != simple_merge_ ? simple_merge_->ObSRSimpleMerger::empty() : merge_heap_->empty();
+  }
+  OB_INLINE bool heap_unique() const
+  {
+    return nullptr != simple_merge_ ? simple_merge_->ObSRSimpleMerger::is_unique_champion()
+                                    : merge_heap_->is_unique_champion();
+  }
+  OB_INLINE int heap_top(const ObSRMergeItem *&item)
+  {
+    return nullptr != simple_merge_ ? simple_merge_->ObSRSimpleMerger::top(item) : merge_heap_->top(item);
+  }
+  OB_INLINE int heap_pop()
+  {
+    return nullptr != simple_merge_ ? simple_merge_->ObSRSimpleMerger::pop() : merge_heap_->pop();
+  }
+  OB_INLINE int heap_push(const ObSRMergeItem &item)
+  {
+    return nullptr != simple_merge_ ? simple_merge_->ObSRSimpleMerger::push(item) : merge_heap_->push(item);
+  }
+  OB_INLINE int heap_rebuild()
+  {
+    return nullptr != simple_merge_ ? simple_merge_->ObSRSimpleMerger::rebuild() : merge_heap_->rebuild();
+  }
 protected:
   ObIAllocator *iter_allocator_;
   ObSparseRetrievalMergeParam *iter_param_;
   ObIArray<ObISRDaaTDimIter *> *dim_iters_;
   ObSRMergeCmp merge_cmp_;
   ObSRMergeHeap *merge_heap_;
+  ObSRSimpleMerger *simple_merge_;
   ObSRDaaTRelevanceCollector *relevance_collector_;
   ObFixedArray<const ObDatum *, ObIAllocator> iter_domain_ids_; // record every dim iter's output domain id, one (ObDatum *) for one dim iter
   ObFixedArray<ObDocIdExt, ObIAllocator> buffered_domain_ids_; // cache for output
