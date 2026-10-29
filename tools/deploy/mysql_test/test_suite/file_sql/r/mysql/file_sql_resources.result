@@ -7,6 +7,8 @@ ERROR HY000: Exceed query memory limit (mem_limit=LIMIT, mem_hold=HELD),  please
 ERROR HY000: Exceed query memory limit (mem_limit=LIMIT, mem_hold=HELD),  please check whether the query_memory_limit_percentage configuration item is reasonable.
 # a long full-file inference is interrupted by the query deadline
 ERROR HY000: Timeout, query has reached the maximum query timeout: 20000(us), maybe you can adjust the session variable ob_query_timeout or query_timeout hint, and try again.
+# KILL QUERY also interrupts full-file inference
+ERROR 70100: Query execution was interrupted
 # resource failure does not poison the next query
 n
 1

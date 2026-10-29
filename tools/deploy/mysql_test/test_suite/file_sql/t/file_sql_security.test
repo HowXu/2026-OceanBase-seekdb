@@ -1,7 +1,8 @@
 # owner: database-competition
 # description: Cached file scans recheck policy and identities on every execution.
 --disable_query_log
-let $SECURITY_DIR = $OBSERVER_DIR/file_sql_security;
+let $SECURITY_TOKEN = query_get_value("select connection_id() as token",token,1);
+let $SECURITY_DIR = $OBSERVER_DIR/file_sql_security_$SECURITY_TOKEN;
 exec mkdir -p "$SECURITY_DIR/denied";
 --write_file $SECURITY_DIR/input.csv
 id,name
@@ -16,14 +17,21 @@ exec python3 -c "import os; from pathlib import Path; p=Path('$SECURITY_DIR/inpu
 --error 4016
 execute file_sql_identity;
 deallocate prepare file_sql_identity;
-eval prepare file_sql_policy from "select name from read_csv('$SECURITY_DIR/input.csv')";
---echo # re-preparing observes the new file
+# Use a distinct SQL cache key: DEALLOCATE does not evict a shared cached plan.
+eval prepare file_sql_policy from "select name as current_name from read_csv('$SECURITY_DIR/input.csv')";
+--echo # a fresh SQL plan observes the new file
 execute file_sql_policy;
 --echo # a cached plan cannot bypass the current feature switch
 set session enable_file_sql=OFF;
 --error 1235
 execute file_sql_policy;
 set session enable_file_sql=ON;
+eval prepare file_sql_copy_policy from "copy (select 1 as id) to '$SECURITY_DIR/copy.csv'";
+execute file_sql_copy_policy;
+remove_file $SECURITY_DIR/copy.csv;
+--disable_result_log
+eval describe select * from read_csv('$SECURITY_DIR/input.csv');
+--enable_result_log
 --echo # a cached plan cannot retain a previous secure_file_priv grant
 connect (file_sql_policy_admin,localhost,root,,test,$OBMYSQL_PORT,$OBSERVER_DIR/run/sql.sock);
 connection file_sql_policy_admin;
@@ -32,13 +40,35 @@ eval set global secure_file_priv='$SECURITY_DIR/denied';
 connection default;
 --error 1227
 execute file_sql_policy;
+--echo # fresh metadata and COPY cannot use the stale session root either
+--error 1227
+eval describe select * from read_csv('$SECURITY_DIR/input.csv');
+--error 1227
+execute file_sql_copy_policy;
+--error 1227
+eval copy (select 2 as id) to '$SECURITY_DIR/fresh.csv';
+connection file_sql_policy_admin;
+eval set global secure_file_priv='$OLD_FILE_SQL_ROOT';
+connection default;
+--echo # restoring policy permits the unchanged prepared definition
+execute file_sql_policy;
+execute file_sql_copy_policy;
+deallocate prepare file_sql_policy;
+deallocate prepare file_sql_copy_policy;
+remove_file $SECURITY_DIR/copy.csv;
+--echo # revocation while COPY is active prevents publication and cleans the temp inode
+send_eval copy (select sleep(2) as waited) to '$SECURITY_DIR/revoked.csv';
+exec python3 -c "import time,sys; from pathlib import Path; p=Path('$SECURITY_DIR'); found=any(bool(list(p.glob('.seekdb-copy-*'))) or time.sleep(0.01) for _ in range(100)); sys.exit(0 if found else 1)";
+connection file_sql_policy_admin;
+eval set global secure_file_priv='$SECURITY_DIR/denied';
+connection default;
+--error 1227
+reap;
+exec python3 -c "from pathlib import Path; p=Path('$SECURITY_DIR'); assert not (p/'revoked.csv').exists() and not list(p.glob('.seekdb-copy-*'))";
 connection file_sql_policy_admin;
 eval set global secure_file_priv='$OLD_FILE_SQL_ROOT';
 disconnect file_sql_policy_admin;
 connection default;
---echo # restoring policy permits the unchanged prepared definition
-execute file_sql_policy;
-deallocate prepare file_sql_policy;
 set session enable_file_sql=OFF;
 remove_file $SECURITY_DIR/input.csv;
 exec rmdir "$SECURITY_DIR/denied" "$SECURITY_DIR";

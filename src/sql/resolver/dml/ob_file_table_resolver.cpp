@@ -293,7 +293,7 @@ int ObSelectResolver::resolve_file_copy(const ParseNode &node, ObSelectIntoItem 
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "the file COPY");
   }
-  OZ (session_info_->get_secure_file_priv(root));
+  OZ (get_file_sql_secure_root(*allocator_, root));
   try {
     file_sql::Definition output;
     output.options.format = file_sql::Format::Csv;
@@ -387,7 +387,7 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(file_table_options(args_node, options, has_format, false, &option_memory))) {
-    } else if (OB_SUCC(ret) && OB_FAIL(session_info_->get_secure_file_priv(secure_file_priv))) {
+    } else if (OB_SUCC(ret) && OB_FAIL(get_file_sql_secure_root(*allocator_, secure_file_priv))) {
     } else if (OB_SUCC(ret) && OB_FAIL(ObResolverUtils::check_secure_path(secure_file_priv, path))) {
     }
     // the format of the file is the one of the function when it is not given

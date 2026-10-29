@@ -1,7 +1,8 @@
 # owner: database-competition
 # description: Query memory applies to inference/cached scans; long inference observes timeouts.
 --disable_query_log
-let $RESOURCE_DIR = $OBSERVER_DIR/file_sql_resources;
+let $RESOURCE_TOKEN = query_get_value("select connection_id() as token",token,1);
+let $RESOURCE_DIR = $OBSERVER_DIR/file_sql_resources_$RESOURCE_TOKEN;
 exec mkdir -p "$RESOURCE_DIR";
 exec python3 -c "from pathlib import Path; Path('$RESOURCE_DIR/large.csv').write_text('id,payload'+chr(10)+'1,'+'a'*12582912+chr(10))";
 exec awk 'BEGIN {print "id,name"; for(i=0;i<5000000;i++) print "1,a"}' > "$RESOURCE_DIR/long.csv";
@@ -28,6 +29,19 @@ set session ob_query_timeout=20000;
 --error 4012
 eval select count(*) from read_csv('$RESOURCE_DIR/long.csv');
 set session ob_query_timeout=10000000;
+--echo # KILL QUERY also interrupts full-file inference
+connect (file_sql_killer,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection default;
+send_eval select /* file_sql_cancel_probe */ count(*) from read_csv('$RESOURCE_DIR/long.csv');
+connection file_sql_killer;
+let $wait_timeout = 3;
+let $wait_condition = select count(*) > 0 from information_schema.processlist where id=$RESOURCE_TOKEN and info like '%file_sql_cancel_probe%';
+--source mysql_test/include/wait_condition.inc
+eval kill query $RESOURCE_TOKEN;
+connection default;
+--error 1317
+reap;
+disconnect file_sql_killer;
 --echo # resource failure does not poison the next query
 eval select count(*) as n from read_csv('$RESOURCE_DIR/large.csv');
 eval alter system set memory_budget='$OLD_FILE_SQL_MEMORY_BUDGET';

@@ -89,13 +89,14 @@ int ObFileTableOp::check_file_privilege()
   const ObBasicSessionInfo *session = GET_MY_SESSION(ctx_);
   bool enabled = false;
   ObString current_root;
+  ObArenaAllocator root_allocator("FileSQLRoot");
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(session->get_sys_variable(share::SYS_VAR_ENABLE_FILE_SQL, enabled))) {
   } else if (!enabled) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "the file functions");
-  } else if (OB_FAIL(session->get_secure_file_priv(current_root))) {
+  } else if (OB_FAIL(get_file_sql_secure_root(root_allocator, current_root))) {
   } else if (current_root != MY_SPEC.root_.ob_string()) {
     // A cached plan must not retain authority granted by an older session
     // setting. Re-resolve the query if the authorized root has changed.

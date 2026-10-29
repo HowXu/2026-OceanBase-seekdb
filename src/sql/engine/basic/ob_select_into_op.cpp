@@ -93,13 +93,14 @@ int ObSelectIntoOp::check_file_copy_access()
   int ret = OB_SUCCESS;
   bool enabled = false;
   ObString root;
+  ObArenaAllocator root_allocator("FileSQLRoot");
   CK (ctx_.get_my_session() != nullptr);
   OZ (ctx_.get_my_session()->get_sys_variable(share::SYS_VAR_ENABLE_FILE_SQL, enabled));
   if (OB_SUCC(ret) && !enabled) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "the file COPY");
   }
-  OZ (ctx_.get_my_session()->get_secure_file_priv(root));
+  OZ (get_file_sql_secure_root(root_allocator, root));
   if (OB_SUCC(ret)) {
     const auto &blob = MY_SPEC.external_properties_.str_;
     file_sql::MemoryReservation blob_memory(file_sql::active_file_sql_budget);
@@ -121,7 +122,8 @@ int ObSelectIntoOp::open_file_copy()
     OZ (ctx_.check_status());
     if (OB_SUCC(ret)) {
       ObString root;
-      OZ (ctx_.get_my_session()->get_secure_file_priv(root));
+      ObArenaAllocator root_allocator("FileSQLRoot");
+      OZ (get_file_sql_secure_root(root_allocator, root));
       OZ (ctx_.get_my_session()->get_sql_select_limit(top_limit_cnt_));
       const auto &blob = MY_SPEC.external_properties_.str_;
       file_sql::MemoryReservation blob_memory(scope.budget());

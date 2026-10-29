@@ -8,8 +8,34 @@
 #include "sql/executor/ob_memory_tracker.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "lib/worker.h"
+#include "share/ob_server_struct.h"
+#include "share/schema/ob_multi_version_schema_service.h"
 
 namespace oceanbase { namespace sql {
+
+// Session variables are snapshots: a different connection may have revoked the
+// global root. Copy under the schema guard so concurrent updates cannot leave a
+// borrowed pointer to a retired schema.
+inline int get_file_sql_secure_root(common::ObIAllocator &allocator, common::ObString &root)
+{
+  int ret = common::OB_SUCCESS;
+  share::schema::ObSchemaGetterGuard guard;
+  const share::schema::ObSysVariableSchema *variables = nullptr;
+  const share::schema::ObSysVarSchema *value = nullptr;
+  if (OB_ISNULL(GCTX.schema_service_)) {
+    ret = common::OB_NOT_INIT;
+  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(guard))) {
+  } else if (OB_FAIL(guard.get_sys_variable_schema(variables))) {
+  } else if (OB_ISNULL(variables)) {
+    ret = common::OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(variables->get_sysvar_schema(share::SYS_VAR_SECURE_FILE_PRIV, value))) {
+  } else if (OB_ISNULL(value)) {
+    ret = common::OB_ERR_UNEXPECTED;
+  } else {
+    ret = common::ob_write_string(allocator, value->get_value(), root);
+  }
+  return ret;
+}
 
 class FileSqlQueryError : public file_sql::Error {
 public:
