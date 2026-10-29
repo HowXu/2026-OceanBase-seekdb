@@ -145,7 +145,7 @@ function do_init
   fi
   (
     cd "${TOPDIR}/rust" &&
-      rustup toolchain install --no-self-update
+      RUSTUP_AUTO_INSTALL=1 rustup show active-toolchain
   ) || return $?
 
   end_time="$(date +%s)"
