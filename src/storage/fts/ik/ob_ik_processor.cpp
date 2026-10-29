@@ -108,27 +108,33 @@ int TokenizeContext::current_char_type(ObFTCharUtil::CharType &type)
 
 int TokenizeContext::prepare_next_char()
 {
+  return classify_char(cursor_, next_char_len_, next_char_type_);
+}
+
+int TokenizeContext::classify_char(int64_t offset, int64_t &char_len,
+                                 ObFTCharUtil::CharType &type) const
+{
   int ret = OB_SUCCESS;
   if (is_utf8mb4_) {
-    const unsigned char *input = reinterpret_cast<const unsigned char *>(fulltext_ + cursor_);
+    const unsigned char *input = reinterpret_cast<const unsigned char *>(fulltext_ + offset);
     ob_wc_t unicode = 0;
-    const int char_len = common::ob_charset_decode_unicode<CHARSET_UTF8MB4>(
-        input, input + (fulltext_len_ - cursor_), unicode);
-    if (char_len > 0) {
-      next_char_len_ = char_len;
-      next_char_type_ = ObFTCharUtil::classify_unicode(unicode);
+    const int decoded_len = common::ob_charset_decode_unicode<CHARSET_UTF8MB4>(
+        input, input + (fulltext_len_ - offset), unicode);
+    if (decoded_len > 0) {
+      char_len = decoded_len;
+      type = ObFTCharUtil::classify_unicode(unicode);
       return OB_SUCCESS;
     }
     // Preserve the existing validation and error handling for malformed input.
   }
   if (OB_FAIL(ObCharset::first_valid_char(coll_type_,
-                                          fulltext_ + cursor_,
-                                          fulltext_len_ - cursor_,
-                                          next_char_len_))) {
+                                          fulltext_ + offset,
+                                          fulltext_len_ - offset,
+                                          char_len))) {
   } else if (OB_FAIL(ObFTCharUtil::classify_first_char(coll_type_,
-                                                       fulltext_ + cursor_,
-                                                       next_char_len_,
-                                                       next_char_type_))) {
+                                                       fulltext_ + offset,
+                                                       char_len,
+                                                       type))) {
   }
   return ret;
 }

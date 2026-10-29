@@ -47,6 +47,7 @@ public:
 
   int current_char(const char *&ch, uint8_t &char_len);
   int current_char_type(ObFTCharUtil::CharType &type);
+  int classify_char(int64_t offset, int64_t &char_len, ObFTCharUtil::CharType &type) const;
 
   int step_next();
 
