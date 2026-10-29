@@ -34,12 +34,22 @@ int ObTextDaaTIter::init(const ObTextDaaTParam &param)
   } else {
     mode_flag_ = param.mode_flag_;
     function_lookup_mode_ = param.function_lookup_mode_;
+    const ObExpr *filter = iter_param_->filter_expr_;
+    const ObExpr *score = iter_param_->relevance_proj_expr_;
+    // Fuse precisely BOOL(the projected double score). Other predicates keep
+    // the general expression evaluator, including comparisons and conjunctions.
+    direct_relevance_filter_ = !function_lookup_mode_ && iter_param_->eval_ctx_->is_vectorized()
+        && nullptr != filter && nullptr != score && T_OP_BOOL == filter->type_
+        && 1 == filter->arg_cnt_ && filter->args_[0] == score
+        && ObDoubleType == score->datum_meta_.type_
+        && filter->is_batch_result() && score->is_batch_result();
   }
   return ret;
 }
 
 void ObTextDaaTIter::reset()
 {
+  direct_relevance_filter_ = false;
   bm25_param_estimator_.reset();
   // this class can know the type of dim_iters_, but ObSRDaaTIterImpl maybe not
   if (OB_NOT_NULL(dim_iters_)) {
@@ -73,6 +83,41 @@ int ObTextDaaTIter::pre_process()
   } else if (iter_param_->need_project_relevance()) {
     if (OB_FAIL(bm25_param_estimator_.do_estimation(*iter_param_->eval_ctx_))) {
     }
+  }
+  return ret;
+}
+
+int ObTextDaaTIter::filter_on_demand(const int64_t count, const double relevance, bool &need_project)
+{
+  int ret = OB_SUCCESS;
+  if (!direct_relevance_filter_) {
+    ret = ObSRDaaTIterImpl::filter_on_demand(count, relevance, need_project);
+  } else if (OB_UNLIKELY(count >= iter_param_->eval_ctx_->max_batch_size_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    // Identical to BOOL(double), including negative values, signed zero and NaN.
+    // Publish expression datums once the accepted output batch is complete.
+    need_project = 0.0 != relevance;
+  }
+  return ret;
+}
+
+int ObTextDaaTIter::project_results(const int64_t count)
+{
+  int ret = ObSRDaaTIterImpl::project_results(count);
+  if (OB_SUCC(ret) && direct_relevance_filter_) {
+    ObExpr *filter = iter_param_->filter_expr_;
+    ObEvalCtx &ctx = *iter_param_->eval_ctx_;
+    ObDatum *datums = filter->locate_datums_for_update(ctx, count);
+    for (int64_t i = 0; i < count; ++i) {
+      datums[i].set_int32(1);
+    }
+    filter->get_evaluated_flags(ctx).set_all(count);
+    sql::ObEvalInfo &info = filter->get_eval_info(ctx);
+    info.evaluated_ = true;
+    info.point_to_frame_ = true;
+    info.notnull_ = true;
+    info.cnt_ = ctx.get_batch_size();
   }
   return ret;
 }
