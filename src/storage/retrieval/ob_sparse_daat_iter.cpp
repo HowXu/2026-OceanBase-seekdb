@@ -26,7 +26,8 @@ namespace storage
 ObSRMergeCmp::ObSRMergeCmp()
   : cmp_func_(nullptr),
     iter_ids_(nullptr),
-    is_inited_(false)
+    is_inited_(false),
+    binary_doc_id_(false)
 {
 }
 
@@ -41,6 +42,8 @@ int ObSRMergeCmp::init(
     iter_ids_ = iter_ids;
     common::ObDatumBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(id_meta.type_, id_meta.cs_type_);
     cmp_func_ = basic_funcs->null_first_cmp_;
+    binary_doc_id_ = common::ObVarcharType == id_meta.type_
+                     && common::CS_TYPE_BINARY == id_meta.cs_type_;
     if (OB_ISNULL(cmp_func_)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
@@ -59,9 +62,16 @@ int ObSRMergeCmp::cmp(
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else {
+    const ObDatum &left = get_id_datum(l.iter_idx_);
+    const ObDatum &right = get_id_datum(r.iter_idx_);
     int tmp_ret = 0;
-    if (OB_FAIL(cmp_func_(
-            get_id_datum(l.iter_idx_), get_id_datum(r.iter_idx_), tmp_ret, nullptr))) {
+    if (binary_doc_id_ && !left.is_null() && !right.is_null()) {
+      // The binary collation compares bytes and then lengths, including trailing spaces.
+      const int64_t compare_len = MIN(left.len_, right.len_);
+      const int cmp = compare_len > 0 ? MEMCMP(left.ptr_, right.ptr_, compare_len) : 0;
+      cmp_ret = cmp != 0 ? (cmp < 0 ? -1 : 1)
+                        : (left.len_ < right.len_ ? -1 : (left.len_ > right.len_ ? 1 : 0));
+    } else if (OB_FAIL(cmp_func_(left, right, tmp_ret, nullptr))) {
     } else {
       cmp_ret = tmp_ret;
     }

@@ -46,3 +46,46 @@ where match(body) against('OceanBase ABC' in natural language mode)
 order by score desc, id;
 
 drop table ft_ik_decode_regression;
+
+# Exercise document ID merge order, equal scores, NULL text and batch boundaries.
+create table ft_merge_id_regression (
+  id bigint primary key,
+  body varchar(255),
+  fulltext index ft_body (body) with parser beng
+);
+
+insert into ft_merge_id_regression
+select n, case when mod(n, 10) = 9 then null else
+  case mod(n, 4)
+    when 0 then 'database database audit common'
+    when 1 then 'database performance common'
+    when 2 then 'audit performance common'
+    else 'database audit performance common'
+  end end
+from (
+  select a.n + 10 * b.n + 100 * c.n as n
+  from (select 0 n union all select 1 union all select 2 union all select 3 union all select 4
+        union all select 5 union all select 6 union all select 7 union all select 8 union all select 9) a
+  cross join (select 0 n union all select 1 union all select 2 union all select 3 union all select 4
+        union all select 5 union all select 6 union all select 7 union all select 8 union all select 9) b
+  cross join (select 0 n union all select 1 union all select 2 union all select 3 union all select 4
+        union all select 5 union all select 6 union all select 7 union all select 8 union all select 9) c
+) seeds;
+
+select id, match(body) against('database audit performance common') as score
+from ft_merge_id_regression where match(body) against('database audit performance common')
+order by id;
+
+select id, match(body) against('+database -audit' in boolean mode) as score
+from ft_merge_id_regression where match(body) against('+database -audit' in boolean mode)
+order by id;
+
+select id, match(body) against('database database audit common' in boolean mode) as score
+from ft_merge_id_regression where match(body) against('database database audit common' in boolean mode)
+order by id;
+
+select id, match(body) against('database audit performance common') as score
+from ft_merge_id_regression where match(body) against('database audit performance common')
+order by score desc, id limit 257 offset 249;
+
+drop table ft_merge_id_regression;
