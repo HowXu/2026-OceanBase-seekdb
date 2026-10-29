@@ -2,7 +2,7 @@ name: FTS Validation
 
 on:
   push:
-    branches: [codex/2026-competition-fts]
+    branches: [2026-competition-fts]
   workflow_dispatch:
 
 permissions:
