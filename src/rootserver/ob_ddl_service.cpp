@@ -7456,6 +7456,8 @@ int ObDDLService::fill_new_column_attributes(
     new_column_schema.set_skip_index_attr(alter_column_schema.get_skip_index_attr().get_packed_value());
     new_column_schema.set_lob_chunk_size(alter_column_schema.get_lob_chunk_size());
     if (OB_FAIL(new_column_schema.get_local_session_var().deep_copy(alter_column_schema.get_local_session_var()))) {
+    } else if (alter_column_schema.is_ai_column()
+        && OB_FAIL(new_column_schema.set_ai_column_schema(*alter_column_schema.get_ai_column_schema()))) {
     }
   }
   return ret;
@@ -22532,6 +22534,7 @@ int ObDDLService::drop_column_online(
     ::localtime_r(&t.tv_sec, &tm);
 #endif
     new_column_schema->set_unused();
+    new_column_schema->reset_ai_column_schema();
     new_column_schema->set_prev_column_id(new_column_schema->get_column_id());
     new_column_schema->set_next_column_id(new_column_schema->get_column_id());
     new_column_schema->drop_not_null_cst(); // change column to null.

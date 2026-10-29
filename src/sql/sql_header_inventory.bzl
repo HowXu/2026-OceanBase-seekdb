@@ -422,6 +422,7 @@ SQL_COMPOSITION_HEADERS = [
 ]
 
 SQL_PRIVATE_HEADERS = [
+    "resolver/ddl/ob_ai_column_resolver.h",
     "code_generator/ob_code_generator.h",
     "code_generator/ob_dml_cg_service.h",
     "code_generator/ob_static_engine_cg.h",
@@ -528,6 +529,7 @@ SQL_PRIVATE_HEADERS = [
     "engine/cmd/ob_vector_index_refresh.h",
     "engine/direct_load/table_load/ob_table_load_context_service.h",
     "engine/dml/ob_conflict_checker.h",
+    "engine/dml/ob_ai_column_dml_service.h",
     "engine/dml/ob_dml_service.h",
     "engine/dml/ob_table_delete_op.h",
     "engine/dml/ob_table_insert_op.h",

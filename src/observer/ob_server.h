@@ -45,6 +45,7 @@
 
 #include "observer/mysql/ob_diag.h"
 
+#include "observer/ai_column/ob_ai_column_worker.h"
 #include "observer/omt/ob_server_runtime_controller.h"
 #include "observer/omt/ob_worker_processor.h"
 #include "data_plane/memtable/ob_lock_wait_service.h"
@@ -471,6 +472,7 @@ private:
   rootserver::ObDebugSyncBroadcasterAdapter debug_sync_broadcaster_;
 
   omt::ObServerRuntimeController server_runtime_controller_;
+  AIColumnWorker ai_column_worker_;
 
   // virtual table related
   ObVirtualDataAccessService vt_data_service_;

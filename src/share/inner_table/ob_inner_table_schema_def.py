@@ -342,7 +342,8 @@ all_column_def = dict(
       ('sub_data_type', 'int', 'false', '0'),
       ('skip_index_attr', 'int', 'false', '0'),
       ('lob_chunk_size', 'int', 'false', 'OB_DEFAULT_LOB_CHUNK_SIZE'),
-      ('local_session_vars', 'longtext', 'true')
+      ('local_session_vars', 'longtext', 'true'),
+      ('ai_column_info', 'longtext', 'true')
   ]
   )
 
@@ -2466,6 +2467,60 @@ all_objauth_mysql_def = dict(
   )
 def_table_schema(**all_objauth_mysql_def)
 def_table_schema(**gen_history_table_def(1134, all_objauth_mysql_def))
+
+
+all_ai_column_def = dict(
+    owner = 'seekdb',
+    table_name = '__all_ai_column',
+    table_id = '1135',
+    table_type = 'SYSTEM_TABLE',
+    gm_columns = ['gmt_create', 'gmt_modified'],
+    rowkey_columns = [('table_id', 'int'), ('column_id', 'int')],
+    is_cluster_private = False,
+    meta_record_in_sys = False,
+    normal_columns = [
+        ('column_name', 'varchar:OB_MAX_COLUMN_NAME_LENGTH', 'false'),
+        ('expression', 'longtext', 'false'),
+        ('normalized_expr', 'longtext', 'false'),
+        ('schema_version', 'int', 'false'),
+        ('max_retries', 'int', 'false', 2),
+        ('mode', 'varchar:8', 'false', 'async'),
+        ('dependency_ids', 'longtext', 'false'),
+        ('state_column_id', 'int', 'false'),
+        ('request_column_id', 'int', 'false'),
+        ('result_spec_column_id', 'int', 'false')
+    ]
+)
+def_table_schema(**all_ai_column_def)
+
+all_ai_column_task_def = dict(
+    owner = 'seekdb',
+    table_name = '__all_ai_column_task',
+    table_id = '1136',
+    table_type = 'SYSTEM_TABLE',
+    gm_columns = ['gmt_create', 'gmt_modified'],
+    rowkey_columns = [('table_id', 'int'), ('column_id', 'int'), ('request_id', 'varchar:64')],
+    is_cluster_private = False,
+    meta_record_in_sys = False,
+    normal_columns = [
+        ('schema_version', 'int', 'false'),
+        ('pk_hash', 'varchar:64', 'false'),
+        ('pk_blob', 'longtext', 'false'),
+        ('rowkey_predicate', 'longtext', 'false'),
+        ('state', 'int', 'false', 0),
+        ('retry_count', 'int', 'false', 0),
+        ('eligible_ts', 'timestamp:6', 'false'),
+        ('lease_owner', 'varchar:64', 'false', ''),
+        ('lease_expire_ts', 'int', 'false', 0),
+        ('lease_version', 'int', 'false', 0),
+        ('input_payload', 'longtext', 'false'),
+        ('result_spec', 'longtext', 'false'),
+        ('response_payload', 'longtext', 'true'),
+        ('error_code', 'int', 'false', 0),
+        ('error_message', 'longtext', 'true')
+    ]
+)
+def_table_schema(**all_ai_column_task_def)
 
 
 # Reserved position (placeholder before this line)

@@ -1,0 +1,26 @@
+drop database if exists ai_column_show_regression;
+create database ai_column_show_regression;
+create table ai_column_show_regression.plain(id bigint primary key);
+show ai columns from ai_column_show_regression.plain;
+Column_name	Expression	Sync_mode	Max_retries
+call DBMS_AI_SERVICE.DROP_AI_MODEL('ai_column_show_model');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('ai_column_show_model',
+'{"type":"completion","model_name":"ddl-only"}');
+create table ai_column_show_regression.docs(
+id bigint primary key,
+content varchar(200),
+tags json AI COLUMN(AI_COMPLETE('ai_column_show_model',content))
+WITH(sync_mode='async',max_retries=1)
+);
+show ai columns from ai_column_show_regression.docs;
+Column_name	Expression	Sync_mode	Max_retries
+tags	AI_COMPLETE('ai_column_show_model',content)	async	1
+show ai columns from ai_column_show_regression.docs like 'ta%';
+Column_name	Expression	Sync_mode	Max_retries
+tags	AI_COMPLETE('ai_column_show_model',content)	async	1
+show ai columns from ai_column_show_regression.docs where Max_retries = 0;
+Column_name	Expression	Sync_mode	Max_retries
+show ai columns from ai_column_show_regression.missing;
+ERROR 42S02: Table 'ai_column_show_regression.missing' doesn't exist
+drop database ai_column_show_regression;
+call DBMS_AI_SERVICE.DROP_AI_MODEL('ai_column_show_model');

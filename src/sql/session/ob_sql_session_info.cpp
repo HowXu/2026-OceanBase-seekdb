@@ -308,6 +308,7 @@ void ObSQLSessionInfo::reset(bool skip_sys_var)
   in_bytes_ = 0;
   out_bytes_ = 0;
   is_lock_session_ = false;
+  ai_column_internal_access_ = false;
   job_info_ = nullptr;
   executing_sql_stat_record_.reset();
 }

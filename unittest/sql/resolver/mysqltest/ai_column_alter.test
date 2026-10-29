@@ -1,0 +1,37 @@
+connection default;
+--disable_warnings
+drop database if exists ai_column_alter_regression;
+--enable_warnings
+create database ai_column_alter_regression;
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('ai_column_alter_model');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('ai_column_alter_model',
+  '{"type":"completion","model_name":"ddl-only"}');
+create table ai_column_alter_regression.docs(id bigint primary key, content varchar(200));
+alter table ai_column_alter_regression.docs add column tags json
+  AI COLUMN(AI_COMPLETE('ai_column_alter_model',content)) WITH(max_retries=1);
+select count(*) = 1 as added
+from oceanbase.__all_ai_column a join oceanbase.__all_table t using(table_id)
+join oceanbase.__all_database d using(database_id)
+where d.database_name = 'ai_column_alter_regression' and t.table_name = 'docs';
+alter table ai_column_alter_regression.docs modify column tags json
+  AI COLUMN(AI_COMPLETE('ai_column_alter_model',concat('new:',content))) WITH(max_retries=3);
+select count(*) = 1 and max(a.max_retries) = 3
+  and max(a.expression like '%new:%') = 1 as modified
+from oceanbase.__all_ai_column a join oceanbase.__all_table t using(table_id)
+join oceanbase.__all_database d using(database_id)
+where d.database_name = 'ai_column_alter_regression' and t.table_name = 'docs';
+--error 1235
+alter table ai_column_alter_regression.docs drop column content;
+alter table ai_column_alter_regression.docs drop column tags;
+select count(*) = 0 as removed
+from oceanbase.__all_ai_column a join oceanbase.__all_table t using(table_id)
+join oceanbase.__all_database d using(database_id)
+where d.database_name = 'ai_column_alter_regression' and t.table_name = 'docs';
+select count(*) = 0 as hidden_names_removed
+from oceanbase.__all_column c join oceanbase.__all_table t using(table_id)
+join oceanbase.__all_database d using(database_id)
+where d.database_name = 'ai_column_alter_regression' and t.table_name = 'docs'
+  and c.column_name like '__ai_%';
+drop database ai_column_alter_regression;
+call DBMS_AI_SERVICE.DROP_AI_MODEL('ai_column_alter_model');

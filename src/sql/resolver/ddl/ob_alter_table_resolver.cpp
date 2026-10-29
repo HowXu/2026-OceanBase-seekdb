@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "config_bridge.h"
 #include "sql/resolver/ddl/ob_alter_table_resolver.h"
+#include "sql/resolver/ddl/ob_ai_column_resolver.h"
 #include "sql/resolver/expr/ob_raw_expr_part_expr_checker.h"
 #include "sql/resolver/dml/ob_delete_resolver.h"
 #include "sql/resolver/ddl/ob_index_builder_util.h"
@@ -606,6 +607,10 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
         if (OB_FAIL(resolve_drop_column_nodes_for_mysql(*node.children_[drop_col_act_position_list.at(i)], reduced_visible_col_set, drop_column_names_set))) {
         }
       }
+    }
+    if (OB_SUCC(ret)) {
+      ret = AIColumnResolver::finish_alter_table(*table_schema_,
+          alter_table_stmt->get_alter_table_arg().alter_table_schema_);
     }
     if (OB_SUCC(ret)) {
       for (int64_t i = 0; OB_SUCC(ret) && i < add_index_action_idxs.count(); ++i) {
@@ -3455,7 +3460,9 @@ int ObAlterTableResolver::resolve_add_column(const ParseNode &node, ObColumnName
 
         //add column
         if (OB_SUCC(ret)) {
-          if (OB_FAIL(alter_table_stmt->add_column(alter_column_schema))) {
+          if (OB_FAIL(AIColumnResolver::append_alter_column(*table_schema_,
+              alter_table_stmt->get_alter_table_arg().alter_table_schema_, alter_column_schema,
+              *session_info_, schema_checker_))) {
           } else if (FALSE_IT(alter_table_stmt->set_sql_mode(session_info_->get_sql_mode()))) {
           }
         }
@@ -3929,7 +3936,9 @@ int ObAlterTableResolver::resolve_change_column(const ParseNode &node)
       }
       if (OB_SUCC(ret)) {
         alter_table_stmt->set_sql_mode(session_info_->get_sql_mode());
-        if (OB_FAIL(alter_table_stmt->add_column(alter_column_schema))) {
+        if (OB_FAIL(AIColumnResolver::append_alter_column(*table_schema_,
+              alter_table_stmt->get_alter_table_arg().alter_table_schema_, alter_column_schema,
+              *session_info_, schema_checker_))) {
         }
       }
     }
@@ -4078,7 +4087,9 @@ int ObAlterTableResolver::resolve_modify_column(const ParseNode &node,
           }
         }
         if (OB_SUCC(ret)) {
-          if (OB_FAIL(alter_table_stmt->add_column(alter_column_schema))) {
+          if (OB_FAIL(AIColumnResolver::append_alter_column(*table_schema_,
+              alter_table_stmt->get_alter_table_arg().alter_table_schema_, alter_column_schema,
+              *session_info_, schema_checker_))) {
           }
         }
         if (OB_SUCC(ret)) {

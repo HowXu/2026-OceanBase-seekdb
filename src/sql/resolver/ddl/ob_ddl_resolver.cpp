@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "config_bridge.h"
 #include "ob_ddl_resolver.h"
+#include "sql/resolver/ddl/ob_ai_column_resolver.h"
 #include "data_plane/blocksstable/ob_index_block_util.h"
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/resolver/ddl/ob_index_builder_util.h"
@@ -2068,6 +2069,7 @@ int ObDDLResolver::resolve_normal_column_attribute(ObColumnSchemaV2 &column,
   ObObjParam default_value;
   default_value.set_null();
   bool is_set_cur_default = false;
+  int64_t ai_attribute_count = 0;
 
   SMART_VAR(ObSArray<ObConstraint>, alter_csts) {
     ObCreateTableStmt *create_table_stmt = nullptr;
@@ -2084,6 +2086,13 @@ int ObDDLResolver::resolve_normal_column_attribute(ObColumnSchemaV2 &column,
     for (int64_t i = 0; OB_SUCC(ret) && i < attrs_node->num_child_; ++i) {
       ParseNode *attr_node = attrs_node->children_[i];
       switch (attr_node->type_) {
+      case T_AI_COLUMN:
+        if (++ai_attribute_count > 1) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "multiple AI definitions for one column");
+        } else if (OB_FAIL(AIColumnResolver::resolve_column_attribute(*attr_node, column))) {
+        }
+        break;
       case T_CONSTR_NOT_NULL: {
         if (OB_FAIL(resolve_normal_column_attribute_constr_not_null(column, attr_node, resolve_stat))) {
         }
@@ -2291,6 +2300,12 @@ int ObDDLResolver::resolve_normal_column_attribute(ObColumnSchemaV2 &column,
         SQL_RESV_LOG(WARN, "Wrong column attribute", K(ret), K(attr_node->type_));
         break;
       }
+    }
+    if (OB_SUCC(ret) && column.is_ai_column()
+        && (resolve_stat.is_set_default_value_ || resolve_stat.is_primary_key_
+            || !column.is_nullable() || column.is_autoincrement())) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "AI column defaults, primary keys, NOT NULL or auto increment");
     }
     if (OB_SUCC(ret) && stmt::T_ALTER_TABLE == stmt_->get_stmt_type() && alter_csts.count() > 0) {
       AlterTableSchema* alter_table_schema = &alter_table_stmt->get_alter_table_arg().alter_table_schema_;

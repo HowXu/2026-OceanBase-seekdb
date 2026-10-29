@@ -1,0 +1,24 @@
+connection default;
+--disable_warnings
+drop database if exists ai_column_show_regression;
+--enable_warnings
+create database ai_column_show_regression;
+create table ai_column_show_regression.plain(id bigint primary key);
+show ai columns from ai_column_show_regression.plain;
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('ai_column_show_model');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('ai_column_show_model',
+  '{"type":"completion","model_name":"ddl-only"}');
+create table ai_column_show_regression.docs(
+  id bigint primary key,
+  content varchar(200),
+  tags json AI COLUMN(AI_COMPLETE('ai_column_show_model',content))
+    WITH(sync_mode='async',max_retries=1)
+);
+show ai columns from ai_column_show_regression.docs;
+show ai columns from ai_column_show_regression.docs like 'ta%';
+show ai columns from ai_column_show_regression.docs where Max_retries = 0;
+--error 1146
+show ai columns from ai_column_show_regression.missing;
+drop database ai_column_show_regression;
+call DBMS_AI_SERVICE.DROP_AI_MODEL('ai_column_show_model');

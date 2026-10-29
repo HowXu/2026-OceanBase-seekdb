@@ -1325,6 +1325,12 @@ int ObServer::start()
       FLOG_INFO("server metadata is ready");
     }
 
+    if (FAILEDx(ai_column_worker_.start(sql_proxy_))) {
+      LOG_ERROR("fail to start AI column worker", KR(ret));
+    } else {
+      FLOG_INFO("success to start AI column worker");
+    }
+
     if (FAILEDx(net_frame_.start())) {
       LOG_ERROR("fail to start net frame", KR(ret));
     } else {
@@ -1553,6 +1559,8 @@ int ObServer::stop()
   int fail_ret = OB_SUCCESS;
   FLOG_INFO("[OBSERVER_NOTICE] stop observer begin");
   LOG_DBA_INFO_V2(OB_SERVER_STOP_BEGIN, "observer stop begin.");
+
+  ai_column_worker_.stop();
 
   if (in_process_) {
     // DDL retries must observe cancellation while schema and SQL services are still available.

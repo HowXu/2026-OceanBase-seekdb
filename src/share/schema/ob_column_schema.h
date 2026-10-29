@@ -22,6 +22,7 @@
 #include "lib/container/ob_array.h"
 #include "lib/hash/ob_hashmap.h"
 #include "share/schema/ob_schema_struct.h"
+#include "share/schema/ob_ai_column_schema.h"
 #include "share/schema/ob_schema_utils.h"
 #include "common/rowkey/ob_rowkey_info.h"
 
@@ -68,9 +69,21 @@ int assign(const ObColumnSchemaV2 &src_schema);
 
 //set methods
   
-  inline void set_table_id(const uint64_t id) { table_id_ = id; }
-  inline void set_column_id(const uint64_t id) { column_id_ = id; }
-  inline void set_schema_version(const int64_t schema_version) { schema_version_ = schema_version; }
+  inline void set_table_id(const uint64_t id)
+  {
+    table_id_ = id;
+    if (is_ai_column()) { ai_column_schema_->set_table_id(id); }
+  }
+  inline void set_column_id(const uint64_t id)
+  {
+    column_id_ = id;
+    if (is_ai_column()) { ai_column_schema_->set_column_id(id); }
+  }
+  inline void set_schema_version(const int64_t schema_version)
+  {
+    schema_version_ = schema_version;
+    if (is_ai_column()) { ai_column_schema_->set_schema_version(schema_version); }
+  }
   inline void set_rowkey_position(const int64_t rowkey_position) { rowkey_position_ = rowkey_position; }
   inline void set_order_in_rowkey(const common::ObOrderType order_in_rowkey) { order_in_rowkey_ = order_in_rowkey; }
   inline void set_udt_set_id(const uint64_t id) { udt_set_id_ = id; }
@@ -137,8 +150,15 @@ int assign(const ObColumnSchemaV2 &src_schema);
     return deep_copy_obj(default_value, cur_default_value_);
   }
   inline int set_cur_default_value_v2(const common::ObObj default_value) { return deep_copy_obj(default_value, cur_default_value_); }
-  inline int set_column_name(const char *col_name) { return deep_copy_str(col_name, column_name_); }
-  inline int set_column_name(const common::ObString &col_name) { return deep_copy_str(col_name, column_name_); }
+  inline int set_column_name(const char *col_name) { return set_column_name(common::ObString::make_string(col_name)); }
+  inline int set_column_name(const common::ObString &col_name)
+  {
+    int ret = deep_copy_str(col_name, column_name_);
+    if (OB_SUCC(ret) && is_ai_column()) {
+      ret = ai_column_schema_->set_column_name(column_name_);
+    }
+    return ret;
+  }
   inline int set_comment(const char *comment) { return deep_copy_str(comment, comment_); }
   inline int set_comment(const common::ObString &comment) { return deep_copy_str(comment, comment_); }
   inline void set_on_update_current_timestamp(const bool is_on_update_for_timestamp) { on_update_current_timestamp_ = is_on_update_for_timestamp; }
@@ -341,6 +361,12 @@ int assign(const ObColumnSchemaV2 &src_schema);
 
   int convert_column_id(const hash::ObHashMap<uint64_t, uint64_t> &column_id_map);
 
+  bool is_ai_column() const { return nullptr != ai_column_schema_; }
+  AIColumnSchema *get_ai_column_schema() { return ai_column_schema_; }
+  const AIColumnSchema *get_ai_column_schema() const { return ai_column_schema_; }
+  int set_ai_column_schema(const AIColumnSchema &definition);
+  void reset_ai_column_schema();
+
   int serialize_extended_type_info(char *buf, const int64_t buf_len, int64_t &pos) const;
   int deserialize_extended_type_info(const char *buf, const int64_t data_len, int64_t &pos);
 
@@ -398,6 +424,7 @@ private:
   ObSkipIndexColumnAttr skip_index_attr_;
   int64_t lob_chunk_size_;
   share::ObLocalSessionVar local_session_vars_;
+  AIColumnSchema *ai_column_schema_;
 };
 
 inline int32_t ObColumnSchemaV2::get_data_length() const

@@ -150,7 +150,8 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_ENGINE)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_OPEN_TABLES)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_CREATE_USER)
-            && OB_UNLIKELY(parse_tree.type_ != T_SHOW_CHECK_TABLE)) {
+            && OB_UNLIKELY(parse_tree.type_ != T_SHOW_CHECK_TABLE)
+            && OB_UNLIKELY(parse_tree.type_ != T_SHOW_AI_COLUMNS)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     real_id = 1;
@@ -361,6 +362,38 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             }
           }
         }();
+        break;
+      }
+      case T_SHOW_AI_COLUMNS: {
+        if (parse_tree.num_child_ != 3 || nullptr == parse_tree.children_
+            || nullptr == parse_tree.children_[0]) {
+          ret = OB_ERR_UNEXPECTED;
+        } else {
+          ObString show_db_name;
+          ObString show_table_name;
+          uint64_t show_db_id = OB_INVALID_ID;
+          uint64_t show_table_id = OB_INVALID_ID;
+          bool is_view = false;
+          bool allow_show = false;
+          show_resv_ctx.condition_node_ = parse_tree.children_[2];
+          show_resv_ctx.stmt_type_ = stmt::T_SHOW_COLUMNS;
+          if (OB_FAIL(resolve_show_from_table(parse_tree.children_[0], parse_tree.children_[1],
+              database_name.empty(), T_SHOW_COLUMNS, real_id, show_db_name, show_db_id,
+              show_table_name, show_table_id, is_view))) {
+          } else if (OB_FAIL(schema_checker_->check_table_show(session_priv, enable_role_id_array,
+              show_db_name, show_table_name, allow_show))) {
+          } else if (!allow_show) {
+            ret = OB_ERR_NO_TABLE_PRIVILEGE;
+            LOG_USER_ERROR(OB_ERR_NO_TABLE_PRIVILEGE, static_cast<int>(strlen("SHOW")), "SHOW",
+                session_priv.user_name_.length(), session_priv.user_name_.ptr(),
+                session_priv.host_name_.length(), session_priv.host_name_.ptr(),
+                show_table_name.length(), show_table_name.ptr());
+          } else {
+            GEN_SQL_STEP_1(ObShowSqlSet::SHOW_AI_COLUMNS);
+            GEN_SQL_STEP_2(ObShowSqlSet::SHOW_AI_COLUMNS, OB_SYS_DATABASE_NAME,
+                OB_ALL_AI_COLUMN_TNAME, show_table_id);
+          }
+        }
         break;
       }
       case T_SHOW_COLUMNS: {
@@ -1806,6 +1839,7 @@ int ObShowResolver::resolve_like_or_where_clause(ObShowResolverContext &ctx)
                  && parse_tree->type_ != T_SHOW_COLLATION
                  && parse_tree->type_ != T_SHOW_TRACE
                  && parse_tree->type_ != T_SHOW_COLUMNS
+                 && parse_tree->type_ != T_SHOW_AI_COLUMNS
                  && parse_tree->type_ != T_SHOW_TABLE_STATUS
                  && parse_tree->type_ != T_SHOW_INDEXES
                  && parse_tree->type_ != T_SHOW_PARAMETERS
@@ -2376,6 +2410,13 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_COLUMNS,
                         R"(SELECT "FIELD" AS "FIELD", "TYPE" AS "TYPE", "NULL" AS "NULL", "KEY" AS "KEY", "DEFAULT" AS "DEFAULT", "EXTRA" AS "EXTRA" )"
                         R"(FROM %s.%s  WHERE TABLE_ID = %ld AND IS_HIDDEN = 0)",
                        "Field");
+DEFINE_SHOW_CLAUSE_SET(SHOW_AI_COLUMNS,
+                       NULL,
+                       "SELECT column_name AS `Column_name`, expression AS `Expression`, "
+                       "mode AS `Sync_mode`, max_retries AS `Max_retries` "
+                       "FROM %s.%s WHERE table_id = %lu ORDER BY column_id",
+                       NULL,
+                       "Column_name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_FULL_COLUMNS,
                        NULL,
                        "SELECT field AS `Field`, type AS `Type`, collation AS `Collation`, `NULL` AS `Null`, `KEY` AS `Key`, `DEFAULT` AS `Default`, extra AS `Extra`, `PRIVILEGES` AS `Privileges`, `COMMENT` AS `Comment` \

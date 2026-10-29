@@ -310,6 +310,7 @@ SHARE_INTERFACE_CLOSURE_HEADERS = [
     "resource/ob_server_resource.h",
     "resource_limit_calculator/ob_resource_commmon.h",
     "resource_limit_calculator/ob_resource_limit_calculator_def.h",
+    "schema/ob_ai_column_schema.h",
     "schema/ob_ai_model_mgr.h",
     "schema/ob_ddl_epoch.h",
     "schema/ob_mock_fk_parent_table_mgr.h",

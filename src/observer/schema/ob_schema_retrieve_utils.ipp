@@ -1036,6 +1036,21 @@ int ObSchemaRetrieveUtils::fill_column_schema(const bool check_deleted, T &resul
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, skip_index_attr, column, uint64_t , true, true, ObSkipIndexColumnAttr::OB_DEFAULT_SKIP_INDEX_COLUMN_ATTR);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, lob_chunk_size, column, int64_t, true, true, OB_DEFAULT_LOB_CHUNK_SIZE);
 
+    ObString ai_column_info;
+    EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "ai_column_info",
+        ai_column_info, true, false, ObString(""));
+    if (OB_SUCC(ret) && !ai_column_info.empty()) {
+      AIColumnSchema definition;
+      if (OB_FAIL(definition.deserialize_from_hex(ai_column_info))) {
+      } else if (definition.get_table_id() != column.get_table_id()
+          || definition.get_column_id() != column.get_column_id()
+          || definition.get_schema_version() != column.get_schema_version()
+          || definition.get_column_name() != column.get_column_name_str()) {
+        ret = OB_SCHEMA_ERROR;
+      } else if (OB_FAIL(column.set_ai_column_schema(definition))) {
+      }
+    }
+
     common::ColumnType default_type = column.get_data_type();
     if (column.is_generated_column()) {
       default_type = ObVarcharType;

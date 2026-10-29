@@ -1836,6 +1836,8 @@ int ObDMLResolver::resolve_basic_column_item(const TableItem &table_item,
   ObColumnRefRawExpr *col_expr = NULL;
   ObSchemaGetterGuard *schema_guard = NULL;
   ColumnItem column_item;
+  include_hidden = include_hidden || ObSQLUtils::is_ai_column_worker_thread()
+      || (nullptr != session_info_ && session_info_->is_ai_column_internal_access());
   if (NULL == stmt) {
     stmt = get_stmt();
   }

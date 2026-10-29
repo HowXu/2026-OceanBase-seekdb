@@ -2,6 +2,16 @@
 
 OBSERVER_UNITY_GROUPS = [
     struct(
+        name = "ob_server_ai_column_0",
+        language = "c++",
+        srcs = [
+            "src/observer/ai_column/ob_ai_column_result_converter.cpp",
+            "src/observer/ai_column/ob_ai_column_worker.cpp",
+        ],
+        generated_srcs = [],
+        external_srcs = [],
+    ),
+    struct(
         name = "ob_server_ai_service_0",
         language = "c++",
         srcs = [

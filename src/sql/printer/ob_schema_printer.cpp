@@ -211,6 +211,13 @@ int ObSchemaPrinter::print_table_definition_columns(const ObTableSchema &table_s
         if (OB_SUCC(ret) && col->is_generated_column()) {
           if (OB_FAIL(print_generated_column_definition(*col, buf, buf_len, table_schema, pos))) {
           }
+        } else if (OB_SUCC(ret) && col->is_ai_column()) {
+          const AIColumnSchema &definition = *col->get_ai_column_schema();
+          if (OB_FAIL(databuff_printf(buf, buf_len, pos,
+              " AI COLUMN (%.*s) WITH (sync_mode='async', max_retries=%ld)",
+              definition.get_expression().length(), definition.get_expression().ptr(),
+              definition.get_max_retries()))) {
+          }
         }
         // mysql mode
         if (OB_SUCC(ret)) {
@@ -231,7 +238,7 @@ int ObSchemaPrinter::print_table_definition_columns(const ObTableSchema &table_s
             SHARE_SCHEMA_LOG(WARN, "fail to print geometry srid", K(ret), K(srid));
           }
         }
-        if (OB_SUCC(ret) && !col->is_generated_column()) {
+        if (OB_SUCC(ret) && !col->is_generated_column() && !col->is_ai_column()) {
           //if column is not permit null and default value does not specify , don't  display DEFAULT NULL
           if (OB_SUCC(ret)) {
             if (!(ObNullType == col->get_cur_default_value().get_type() && !col->is_nullable())

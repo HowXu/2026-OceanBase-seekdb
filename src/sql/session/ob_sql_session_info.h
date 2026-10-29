@@ -859,6 +859,8 @@ public:
   ObOptimizerTraceImpl& get_optimizer_tracer() { return optimizer_tracer_; }
   void set_is_lock_session(bool v) { is_lock_session_ = v; }
   bool is_lock_session() const { return is_lock_session_; }
+  void set_ai_column_internal_access(bool v) { ai_column_internal_access_ = v; }
+  bool is_ai_column_internal_access() const { return ai_column_internal_access_; }
   int64_t get_plsql_exec_time();
   int64_t get_plsql_compile_time() { return plsql_compile_time_; }
   void update_pure_sql_exec_time(int64_t elapsed_time);
@@ -1005,6 +1007,7 @@ private:
   char action_buf_[common::OB_MAX_ACT_NAME_LENGTH];
   char client_info_buf_[common::OB_MAX_CLIENT_INFO_LENGTH];
   bool is_lock_session_ = false;
+  bool ai_column_internal_access_ = false;
 
 public:
   inline int64_t get_in_bytes() const { return ATOMIC_LOAD(&in_bytes_); }

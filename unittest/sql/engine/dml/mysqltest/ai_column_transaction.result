@@ -1,0 +1,70 @@
+drop database if exists ai_column_tx_regression;
+create database ai_column_tx_regression;
+call DBMS_AI_SERVICE.DROP_AI_MODEL('ai_column_tx_model');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('ai_column_tx_model',
+'{"type":"completion","model_name":"ddl-only"}');
+create table ai_column_tx_regression.docs(
+id bigint primary key, title varchar(100), content varchar(200),
+tags json AI COLUMN(AI_COMPLETE('ai_column_tx_model',content)),
+label varchar(400) AI COLUMN(AI_COMPLETE('ai_column_tx_model',concat('Label: ',content)))
+);
+set @ai_tx_table = (select table_id from oceanbase.__all_table t
+join oceanbase.__all_database d using(database_id)
+where d.database_name = 'ai_column_tx_regression' and t.table_name = 'docs');
+set session sql_mode = 'NO_BACKSLASH_ESCAPES';
+start transaction;
+insert into ai_column_tx_regression.docs(id,title,content)
+values(1,'one','first'),(2,'two','second');
+select count(*) = 4 and count(distinct request_id) = 2
+and min(eligible_ts <= now(6)) = 1 as insert_enqueues_two_groups
+from oceanbase.__all_ai_column_task where table_id = @ai_tx_table;
+insert_enqueues_two_groups
+1
+select count(*) = 2 as results_start_null
+from ai_column_tx_regression.docs where tags is null and label is null;
+results_start_null
+1
+select @@session.sql_mode = 'NO_BACKSLASH_ESCAPES' as caller_mode_preserved;
+caller_mode_preserved
+1
+set @ai_tx_request = (select request_id from oceanbase.__all_ai_column_task
+where table_id = @ai_tx_table and rowkey_predicate = '`id` = 1' limit 1);
+update ai_column_tx_regression.docs set title = 'ordinary' where id = 1;
+select count(*) = 2 as unrelated_update_keeps_group
+from oceanbase.__all_ai_column_task where table_id = @ai_tx_table and request_id = @ai_tx_request;
+unrelated_update_keeps_group
+1
+update ai_column_tx_regression.docs set content = 'changed' where id = 1;
+select count(*) = 0 as dependency_change_cancels_old_group
+from oceanbase.__all_ai_column_task where table_id = @ai_tx_table and request_id = @ai_tx_request;
+dependency_change_cancels_old_group
+1
+select count(*) = 4 and count(distinct request_id) = 2 as dependency_change_replaces_group
+from oceanbase.__all_ai_column_task where table_id = @ai_tx_table;
+dependency_change_replaces_group
+1
+update ai_column_tx_regression.docs set id = 3 where id = 1;
+select count(*) = 0 as old_key_tasks_removed
+from oceanbase.__all_ai_column_task where table_id = @ai_tx_table and rowkey_predicate = '`id` = 1';
+old_key_tasks_removed
+1
+select count(*) = 2 as new_key_tasks_created
+from oceanbase.__all_ai_column_task where table_id = @ai_tx_table and rowkey_predicate = '`id` = 3';
+new_key_tasks_created
+1
+delete from ai_column_tx_regression.docs where id = 3;
+select count(*) = 2 as delete_removes_only_its_tasks
+from oceanbase.__all_ai_column_task where table_id = @ai_tx_table;
+delete_removes_only_its_tasks
+1
+rollback;
+select count(*) = 0 as rollback_removes_rows from ai_column_tx_regression.docs;
+rollback_removes_rows
+1
+select count(*) = 0 as rollback_removes_tasks
+from oceanbase.__all_ai_column_task where table_id = @ai_tx_table;
+rollback_removes_tasks
+1
+set session sql_mode = default;
+drop database ai_column_tx_regression;
+call DBMS_AI_SERVICE.DROP_AI_MODEL('ai_column_tx_model');
