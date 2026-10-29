@@ -42,6 +42,8 @@ int ObBEngFTParser::get_next_token(
   word_freq = 0;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
+  } else if (ascii_only_) {
+    ret = get_next_ascii_token(word, word_len, char_len, word_freq);
   } else if (OB_ISNULL(token_stream_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(token_stream_->get_next(token, token_freq))) {
@@ -76,7 +78,14 @@ int ObBEngFTParser::init(ObFTParserParam *param)
     analysis_ctx_.cs_ = param->cs_;
     analysis_ctx_.filter_stopword_ = false;
     analysis_ctx_.need_grouping_ = false;
-    if (OB_FAIL(english_analyzer_.init(analysis_ctx_, *param->allocator_))) {
+    ascii_only_ = param->cs_ == ObCharset::get_charset(CS_TYPE_UTF8MB4_GENERAL_CI)
+                  || param->cs_ == ObCharset::get_charset(CS_TYPE_UTF8MB4_BIN);
+    for (uint32_t i = 0; ascii_only_ && i < doc_.len_; ++i) {
+      ascii_only_ = static_cast<unsigned char>(doc_.ptr_[i]) < 0x80;
+    }
+    if (ascii_only_) {
+      is_inited_ = true;
+    } else if (OB_FAIL(english_analyzer_.init(analysis_ctx_, *param->allocator_))) {
     } else if (OB_FAIL(segment(doc_, token_stream_))) {
     } else if (OB_ISNULL(token_stream_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -86,6 +95,44 @@ int ObBEngFTParser::init(ObFTParserParam *param)
   }
   if (OB_FAIL(ret) && OB_UNLIKELY(!is_inited_)) {
     reset();
+  }
+  return ret;
+}
+
+int ObBEngFTParser::get_next_ascii_token(
+    const char *&word, int64_t &word_len, int64_t &char_len, int64_t &word_freq)
+{
+  int ret = OB_SUCCESS;
+  const ObCharsetInfo *cs = analysis_ctx_.cs_;
+  // Match the whitespace tokenizer's delimiter rules without multibyte decoding.
+  while (cursor_ < doc_.len_
+         && (ob_isspace(cs, doc_.ptr_[cursor_]) || ob_iscntrl(cs, doc_.ptr_[cursor_])
+             || ob_ispunct(cs, doc_.ptr_[cursor_]))) {
+    ++cursor_;
+  }
+  const uint32_t start = cursor_;
+  while (cursor_ < doc_.len_
+         && !(ob_isspace(cs, doc_.ptr_[cursor_]) || ob_iscntrl(cs, doc_.ptr_[cursor_])
+              || ob_ispunct(cs, doc_.ptr_[cursor_]))) {
+    ++cursor_;
+  }
+  if (start == cursor_) {
+    ret = OB_ITER_END;
+  } else {
+    const uint32_t len = cursor_ - start;
+    char *buf = static_cast<char *>(allocator_.alloc(len));
+    if (OB_ISNULL(buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      // These UTF-8 collations use the same byte case mapping for ASCII.
+      for (uint32_t i = 0; i < len; ++i) {
+        buf[i] = ob_tolower(cs, doc_.ptr_[start + i]);
+      }
+      word = buf;
+      word_len = len;
+      char_len = len;
+      word_freq = 1;
+    }
   }
   return ret;
 }
@@ -110,6 +157,8 @@ void ObBEngFTParser::reset()
   english_analyzer_.reset();
   doc_.reset();
   token_stream_ = nullptr;
+  ascii_only_ = false;
+  cursor_ = 0;
   is_inited_ = false;
 }
 
