@@ -1,0 +1,60 @@
+# owner: database-competition
+# description: Ordinary globs ignore dotfiles; explicit dot patterns remain usable.
+--disable_query_log
+let $GLOB_TOKEN = query_get_value("select connection_id() as token",token,1);
+let $GLOB_DIR = $OBSERVER_DIR/file_sql_glob_$GLOB_TOKEN;
+exec mkdir -p "$GLOB_DIR";
+--write_file $GLOB_DIR/basic.csv
+id
+1
+EOF
+--write_file $GLOB_DIR/basic.jsonl
+{"id":1}
+EOF
+--write_file $GLOB_DIR/invalid.txt
+not a table
+EOF
+--write_file $GLOB_DIR/simple.parquet
+file discovery does not decode file contents
+EOF
+--write_file $GLOB_DIR/._basic.csv
+sidecar metadata
+EOF
+--write_file $GLOB_DIR/._basic.jsonl
+sidecar metadata
+EOF
+--write_file $GLOB_DIR/._invalid.txt
+sidecar metadata
+EOF
+--write_file $GLOB_DIR/._simple.parquet.b64
+sidecar metadata
+EOF
+--write_file $GLOB_DIR/.hidden.csv
+id
+2
+EOF
+set session enable_file_sql=ON;
+--echo # wildcard discovery has the same visible result with hidden sidecars present
+ eval select substring_index(file,'/',-1) as file from glob('$GLOB_DIR/*') order by file;
+--echo # extension patterns also require an explicit leading dot
+ eval select substring_index(file,'/',-1) as file from glob('$GLOB_DIR/*.csv') order by file;
+--echo # explicit dot patterns do not make hidden files globally inaccessible
+ eval select substring_index(file,'/',-1) as file from glob('$GLOB_DIR/.*') order by file;
+ eval select substring_index(file,'/',-1) as file from glob('$GLOB_DIR/.hidden.csv');
+ eval select id from read_csv('$GLOB_DIR/.hidden.csv');
+--echo # row execution retains the same glob semantics
+alter system set _rowsets_max_rows=0;
+ eval select /*+ use_plan_cache(none) */ substring_index(file,'/',-1) as file from glob('$GLOB_DIR/*') order by file;
+alter system set _rowsets_max_rows=256;
+set session enable_file_sql=OFF;
+remove_file $GLOB_DIR/basic.csv;
+remove_file $GLOB_DIR/basic.jsonl;
+remove_file $GLOB_DIR/invalid.txt;
+remove_file $GLOB_DIR/simple.parquet;
+remove_file $GLOB_DIR/._basic.csv;
+remove_file $GLOB_DIR/._basic.jsonl;
+remove_file $GLOB_DIR/._invalid.txt;
+remove_file $GLOB_DIR/._simple.parquet.b64;
+remove_file $GLOB_DIR/.hidden.csv;
+exec rmdir "$GLOB_DIR";
+--enable_query_log

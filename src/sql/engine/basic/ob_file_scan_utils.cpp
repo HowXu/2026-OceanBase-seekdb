@@ -1653,7 +1653,7 @@ std::vector<std::string> discover(const std::string &pattern, const std::string 
       break;
     }
     const std::string name(entry->d_name);
-    if (name == "." || name == ".." || (!mask.empty() && ::fnmatch(mask.c_str(), name.c_str(), 0) != 0)) {
+    if (name == "." || name == ".." || (!mask.empty() && ::fnmatch(mask.c_str(), name.c_str(), FNM_PERIOD) != 0)) {
       continue;
     }
     const std::string candidate = directory.path() + "/" + name;

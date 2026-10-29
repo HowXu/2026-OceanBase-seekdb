@@ -1,0 +1,26 @@
+# wildcard discovery has the same visible result with hidden sidecars present
+file
+basic.csv
+basic.jsonl
+invalid.txt
+simple.parquet
+# extension patterns also require an explicit leading dot
+file
+basic.csv
+# explicit dot patterns do not make hidden files globally inaccessible
+file
+._basic.csv
+._basic.jsonl
+._invalid.txt
+._simple.parquet.b64
+.hidden.csv
+file
+.hidden.csv
+id
+2
+# row execution retains the same glob semantics
+file
+basic.csv
+basic.jsonl
+invalid.txt
+simple.parquet

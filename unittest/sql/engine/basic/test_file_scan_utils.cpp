@@ -676,6 +676,28 @@ TEST_F(FileScanTest, security_descriptor_ownership_bounds_and_directory_root)
   EXPECT_TRUE(S_ISDIR(info.st_mode));
 }
 
+TEST_F(FileScanTest, glob_requires_an_explicit_leading_dot_for_hidden_files)
+{
+  const auto visible = put("visible.csv", "a\n1\n");
+  const auto underscore = put("_visible.csv", "a\n2\n");
+  const auto sidecar = put("._visible.csv", "metadata");
+  const auto hidden = put(".hidden.csv", "a\n3\n");
+  const auto keep = put(".keep", "metadata");
+  const std::vector<std::string> visible_files{underscore, visible};
+  for (const auto *mask : {"*", "*.csv", "?*.csv", "[v_]*.csv"}) {
+    SCOPED_TRACE(mask);
+    EXPECT_EQ(visible_files, discover(root + "/" + mask, root));
+  }
+  EXPECT_EQ((std::vector<std::string>{sidecar, hidden, keep}), discover(root + "/.*", root));
+  EXPECT_EQ((std::vector<std::string>{sidecar}), discover(root + "/._*.csv", root));
+  EXPECT_EQ((std::vector<std::string>{hidden}), discover(hidden, root));
+  // Globbing does not make hidden files inaccessible through explicit paths.
+  Scan scan(infer(hidden, root, Options{}), root, {0});
+  std::vector<Cell> row;
+  ASSERT_TRUE(scan.next(row)); EXPECT_EQ("3", row[0].text);
+  EXPECT_FALSE(scan.next(row));
+}
+
 TEST_F(FileScanTest, security_glob_failures_do_not_leak_directory_descriptors)
 {
   put("one.csv", "a\n1\n");
