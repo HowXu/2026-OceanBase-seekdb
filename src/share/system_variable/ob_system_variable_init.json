@@ -10976,6 +10976,19 @@
     "background_cn": "",
     "ref_url": ""
   },
+  "ai_column_strict_read": {
+    "id": 10755,
+    "name": "ai_column_strict_read",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "bool",
+    "info": "reject reads referencing AI columns with rows that are not ready",
+    "flags": "SESSION | MYSQL_ONLY | NEED_SERIALIZE",
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
   "enable_file_sql": {
     "id": 10754,
     "name": "enable_file_sql",

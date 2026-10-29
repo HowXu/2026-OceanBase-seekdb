@@ -1,0 +1,19 @@
+# Registration, default and session isolation for AI column strict reads.
+connection default;
+set session ai_column_strict_read = default;
+select @@session.ai_column_strict_read as strict_read_defaults_off;
+set session ai_column_strict_read = on;
+select @@session.ai_column_strict_read as strict_read_on;
+connect (ai_column_session, $OBMYSQL_MS0, $OBMYSQL_USR, $OBMYSQL_PWD, test, $OBMYSQL_PORT);
+select @@session.ai_column_strict_read as independent_session_defaults_off;
+set session ai_column_strict_read = on;
+--error 1231
+set session ai_column_strict_read = 2;
+select @@session.ai_column_strict_read as invalid_value_preserves_setting;
+disconnect ai_column_session;
+connection default;
+select @@session.ai_column_strict_read as original_session_still_on;
+--error 1228
+set global ai_column_strict_read = off;
+set session ai_column_strict_read = off;
+select @@session.ai_column_strict_read as strict_read_off;

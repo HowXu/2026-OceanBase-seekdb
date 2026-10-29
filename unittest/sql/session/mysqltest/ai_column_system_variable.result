@@ -1,0 +1,26 @@
+set session ai_column_strict_read = default;
+select @@session.ai_column_strict_read as strict_read_defaults_off;
+strict_read_defaults_off
+0
+set session ai_column_strict_read = on;
+select @@session.ai_column_strict_read as strict_read_on;
+strict_read_on
+1
+select @@session.ai_column_strict_read as independent_session_defaults_off;
+independent_session_defaults_off
+0
+set session ai_column_strict_read = on;
+set session ai_column_strict_read = 2;
+ERROR 42000: Variable 'ai_column_strict_read' can't be set to the value of '2'
+select @@session.ai_column_strict_read as invalid_value_preserves_setting;
+invalid_value_preserves_setting
+1
+select @@session.ai_column_strict_read as original_session_still_on;
+original_session_still_on
+1
+set global ai_column_strict_read = off;
+ERROR HY000: Variable 'ai_column_strict_read' is a SESSION variable and can't be used with SET GLOBAL
+set session ai_column_strict_read = off;
+select @@session.ai_column_strict_read as strict_read_off;
+strict_read_off
+0
