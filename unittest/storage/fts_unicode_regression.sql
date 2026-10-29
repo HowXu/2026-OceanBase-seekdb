@@ -7,6 +7,8 @@ set names utf8mb4;
 select tokenize('OceanBase 数据库 全文索引 ABC xyz 123', 'ik') as tokens;
 select tokenize('ＡＢＣ ｘｙｚ １２３ abc.def@example.com 3.14 -42', 'ik') as tokens;
 select tokenize('中文、ひらがな カタカナ 한글 😀 𠀀 é', 'ik') as tokens;
+select tokenize(_utf8mb4'中文 ＡＢＣ１２３ 😀' collate utf8mb4_bin, 'ik') as tokens;
+select tokenize(cast(concat('ABC', char(0), '中文 😀') as char character set utf8mb4), 'ik') as tokens;
 select tokenize('，。！？；：、—（）【】　\t\n', 'ik') as tokens;
 select tokenize('中华人民共和国人民大会堂 ＡＢＣ１２３ 😀', 'ik', '[{"additional_args": [{"ik_mode": "smart"}]}]') as tokens;
 select tokenize('中华人民共和国人民大会堂 ＡＢＣ１２３ 😀', 'ik', '[{"additional_args": [{"ik_mode": "max_word"}]}]') as tokens;

@@ -47,6 +47,25 @@ public:
     SURROGATE_LOW = 6,
   };
 
+  static CharType classify_unicode(const ob_wc_t unicode, const bool allow_surrogates = false)
+  {
+    CharType type = CharType::USELESS;
+    if (ObUnicodeBlockUtils::is_alpha(unicode)) {
+      type = CharType::ENGLISH_LETTER;
+    } else if (ObUnicodeBlockUtils::is_arabic(unicode)) {
+      type = CharType::ARABIC_LETTER;
+    } else if (ObUnicodeBlockUtils::is_chinese(unicode)) {
+      type = CharType::CHINESE;
+    } else if (ObUnicodeBlockUtils::is_other_cjk(unicode)) {
+      type = CharType::OTHER_CJK;
+    } else if (allow_surrogates && ObUnicodeBlockUtils::check_high_surrogate(unicode)) {
+      type = CharType::SURROGATE_HIGH;
+    } else if (allow_surrogates && ObUnicodeBlockUtils::check_low_surrogate(unicode)) {
+      type = CharType::SURROGATE_LOW;
+    }
+    return type;
+  }
+
   static int classify_first_char(ObCollationType coll_type,
                                  const char *input,
                                  const uint8_t char_len,
@@ -448,20 +467,9 @@ inline int ObFTCharUtil::do_classify(const char *input, const uint8_t char_len, 
   ob_wc_t unicode = 0;
   type = CharType::USELESS;
 
-  // Decode once; classification priority and charset-specific surrogate handling stay unchanged.
   if (OB_FAIL(decode_unicode<CS_TYPE>(input, char_len, unicode))) {
-  } else if (ObUnicodeBlockUtils::is_alpha(unicode)) {
-    type = CharType::ENGLISH_LETTER;
-  } else if (ObUnicodeBlockUtils::is_arabic(unicode)) {
-    type = CharType::ARABIC_LETTER;
-  } else if (ObUnicodeBlockUtils::is_chinese(unicode)) {
-    type = CharType::CHINESE;
-  } else if (ObUnicodeBlockUtils::is_other_cjk(unicode)) {
-    type = CharType::OTHER_CJK;
-  } else if (CS_TYPE != CHARSET_UTF8MB4 && ObUnicodeBlockUtils::check_high_surrogate(unicode)) {
-    type = CharType::SURROGATE_HIGH;
-  } else if (CS_TYPE != CHARSET_UTF8MB4 && ObUnicodeBlockUtils::check_low_surrogate(unicode)) {
-    type = CharType::SURROGATE_LOW;
+  } else {
+    type = classify_unicode(unicode, CS_TYPE != CHARSET_UTF8MB4);
   }
   return ret;
 }

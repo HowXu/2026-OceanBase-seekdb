@@ -52,7 +52,7 @@ TokenizeContext::TokenizeContext(ObCollationType coll_type,
                                  int64_t fulltext_len,
                                  bool is_smart)
     : coll_type_(coll_type), fulltext_(fulltext), fulltext_len_(fulltext_len), cursor_(0),
-      next_char_len_(0), handle_size_(0), is_smart_(is_smart), token_list_(allocator),
+      next_char_len_(0), is_utf8mb4_(false), handle_size_(0), is_smart_(is_smart), token_list_(allocator),
       result_list_(allocator)
 {
 }
@@ -63,7 +63,14 @@ int TokenizeContext::init()
 
   if (OB_ISNULL(fulltext_) || fulltext_len_ <= 0) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(prepare_next_char())) {
+  } else {
+    if (coll_type_ > CS_TYPE_INVALID && coll_type_ < CS_TYPE_MAX) {
+      const ObCharsetInfo *cs = ObCharset::get_charset(coll_type_);
+      is_utf8mb4_ = nullptr != cs && nullptr != cs->cset && cs->mbminlen == 1 && cs->mbmaxlen == 4
+                   && ObCharset::charset_type_by_coll(coll_type_) == CHARSET_UTF8MB4;
+    }
+    if (OB_FAIL(prepare_next_char())) {
+    }
   }
   return ret;
 }
@@ -102,6 +109,18 @@ int TokenizeContext::current_char_type(ObFTCharUtil::CharType &type)
 int TokenizeContext::prepare_next_char()
 {
   int ret = OB_SUCCESS;
+  if (is_utf8mb4_) {
+    const unsigned char *input = reinterpret_cast<const unsigned char *>(fulltext_ + cursor_);
+    ob_wc_t unicode = 0;
+    const int char_len = common::ob_charset_decode_unicode<CHARSET_UTF8MB4>(
+        input, input + (fulltext_len_ - cursor_), unicode);
+    if (char_len > 0) {
+      next_char_len_ = char_len;
+      next_char_type_ = ObFTCharUtil::classify_unicode(unicode);
+      return OB_SUCCESS;
+    }
+    // Preserve the existing validation and error handling for malformed input.
+  }
   if (OB_FAIL(ObCharset::first_valid_char(coll_type_,
                                           fulltext_ + cursor_,
                                           fulltext_len_ - cursor_,
