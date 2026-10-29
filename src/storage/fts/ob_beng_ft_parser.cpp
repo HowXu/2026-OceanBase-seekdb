@@ -89,8 +89,23 @@ int ObBEngFTParser::get_next_ascii_token(
     while (end > begin && !ob_isalnum(cs, text[end - 1])) { --end; }
     if (begin < end) {
       ObString normalized;
-      // Keep charset-specific case conversion, with one persistent token copy.
-      if (OB_FAIL(ObCharset::tolower(cs, ObString(end - begin, text + begin), normalized, allocator_))) {
+      // The two common collations share the ASCII byte case table. Keep the
+      // general charset conversion for every other UTF-8 collation.
+      if (cs == ObCharset::get_charset(CS_TYPE_UTF8MB4_GENERAL_CI)
+          || cs == ObCharset::get_charset(CS_TYPE_UTF8MB4_BIN)) {
+        char *buf = static_cast<char *>(allocator_.alloc(end - begin));
+        if (OB_ISNULL(buf)) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+        } else {
+          for (int64_t i = begin; i < end; ++i) {
+            buf[i - begin] = ob_tolower(cs, text[i]);
+          }
+          normalized.assign_ptr(buf, end - begin);
+        }
+      } else {
+        ret = ObCharset::tolower(cs, ObString(end - begin, text + begin), normalized, allocator_);
+      }
+      if (OB_FAIL(ret)) {
         break;
       } else {
         word = normalized.ptr();

@@ -1,0 +1,19 @@
+["audit", "tokenizer", "database", "performance", "indexing"]
+["punctuation", "123", "example", "abcd", "abc", "email"]
+["café", "audit", "database", "performance", "😀", "中文", "ａｂｃ"]
+["abc", "0123", "xyz"]
+["def", "abc", "ghi"]
+[]
+["0123456789", "abcdefghijklmnopqrstuvwxyz"]
+["tokenizer", "audit", "performance", "database", "indexing"]
+1
+4
+1
+2
+2
+1
+2
+3
+4
+3
+4
