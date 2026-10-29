@@ -10,9 +10,9 @@
 
 **最新验收范围：用户要求只以原版官方五套 AI Column 测试全部通过为目标。不再扩展额外 SHOW、故障恢复或性能专项；只为定位官方失败点补必要的小测试。官方 test/result/Mock 不修改，也不以硬编码模型行为或绕过内核语义换取通过。**
 
-Parser 和 Strict Read 系统变量注册已验证并提交为 `86aa5207e`。Schema/DDL、事务 DML 维护及后台 Worker 已提交为 `4f41681b9`。条件 RETRY 与 strict read 执行检查已完成首轮实现并成功构建，但最后一项官方测试尚未通过，不能把编译成功当作功能验收。
+Parser 和 Strict Read 系统变量注册已提交为 `86aa5207e`；Schema/DDL、事务 DML 维护及后台 Worker 已提交为 `4f41681b9`；条件 RETRY 与 strict read 首轮实现已提交为 `a8dc178cf`。后续差异修复和最终验收记录随本次完成提交落盘。
 
-**当前官方验证为 5/5：** 2026-10-29 使用同一最终功能二进制按 `ai_column_ddl`、`ai_column_t1_dml`、`ai_column_worker`、`ai_column_retry_strict`、`ai_column_vector_index` 顺序原样串行运行，五套全部通过。证据目录为 `/var/tmp/seekdb-task3-evidence/rebuilt-official-20261029-190623`，日志为 `official-five-serial-second.log`。官方 test/result/Mock 未修改。
+**当前官方验证为 5/5：** 2026-10-29 使用同一最终功能二进制按 `ai_column_ddl`、`ai_column_t1_dml`、`ai_column_worker`、`ai_column_retry_strict`、`ai_column_vector_index` 顺序原样串行运行，五套全部通过。最终清理诊断后的复验证据目录为 `/var/tmp/seekdb-task3-evidence/rebuilt-official-20261029-190926`，日志为 `official-five-final.log`。官方 test/result/Mock 未修改。
 
 本阶段已实现业务事务内任务创建/失效/删除、独立 AI 嵌套 SQL 标记、受控隐藏列访问、提交后的持久化 Worker、HTTP 外事务调用、按 request 组发布、失败重试、JSON/整数/向量转换及旧 request 防覆盖。官方 Worker 的 HTTP 400 后成功、慢旧请求不覆盖新结果、最终失败和向量索引链路均通过原版断言。转换器独立测试 6/6 通过；`git diff --check` 通过，官方夹具未修改。
 
