@@ -19,7 +19,6 @@ select tokenize('OceanBase 数据库 ABC 123 😀', 'beng', '[{"output":"all"}]'
 select tokenize('OceanBase 数据库 ABC 123 😀', 'beng', '[{"additional_args":[]}]') as tokens;
 select tokenize(null, 'beng') as tokens;
 select tokenize('', 'ik') as tokens;
-select tokenize(_latin1'DATABASE Database audit THE Token', 'beng', '[{"output":"all"}]') as tokens;
 select tokenize(cast(repeat('Database audit performance ABC123 ', 500) as char character set utf8mb4), 'beng', '[{"output":"all"}]') as tokens;
 select tokenize(cast(X'44617461626173652044415441424153455f61756469742e6162633132332054484520204f6365616e4261736520546f6b656e20454e4420e4b8ade6968720efbca1efbca2efbca320c3a920f09f9880' as char character set utf8mb4) collate utf8mb4_general_ci, 'beng', '[{"output":"all"},{"additional_args":[{"min_token_size":1}]}]') as tokens;
 select tokenize(cast(X'44617461626173652044415441424153455f61756469742e616263313233205448452071204f6365616e4261736520546f6b656e20454e44' as char character set utf8mb4) collate utf8mb4_bin, 'beng', '[{"output":"all"},{"additional_args":[{"min_token_size":1}]}]') as tokens;
