@@ -10,7 +10,7 @@ select tokenize('中文、ひらがな カタカナ 한글 😀 𠀀 é', 'ik')
 select tokenize('，。！？；：、—（）【】　\t\n', 'ik') as tokens;
 select tokenize('中华人民共和国人民大会堂 ＡＢＣ１２３ 😀', 'ik', '[{"additional_args": [{"ik_mode": "smart"}]}]') as tokens;
 select tokenize('中华人民共和国人民大会堂 ＡＢＣ１２３ 😀', 'ik', '[{"additional_args": [{"ik_mode": "max_word"}]}]') as tokens;
-select tokenize(repeat('中文 OceanBase１２３ 😀，', 100), 'ik', '[{"output": "all"}]') as tokens;
+select tokenize(cast(repeat('中文 OceanBase１２３ 😀，', 100) as char character set utf8mb4), 'ik', '[{"output": "all"}]') as tokens;
 
 drop table if exists ft_ik_decode_regression;
 
