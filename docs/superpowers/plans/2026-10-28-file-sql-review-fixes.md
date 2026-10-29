@@ -63,3 +63,13 @@ Files: the scan library/tests; `src/sql/resolver/dml/ob_file_table_resolver.cpp`
 ## Evidence
 
 Initial live reproductions: `/home/howxu/seekdb-file-sql-final-evidence/contest-final-review.json` (11 probes). New RED/GREEN/build/SQL logs will be retained under that evidence directory. Passing earlier tests does not close these newly discovered findings.
+
+## Follow-up: judge glob failure (2026-10-29)
+
+The user supplied a real official-case diff with four extra hidden sidecar files. This is a file SQL failure, unrelated to the pending AI COLUMN scope question.
+
+- [x] Add `glob_requires_an_explicit_leading_dot_for_hidden_files` and `file_sql_glob` SQL regression; observe both fail with hidden filenames in wildcard results.
+- [x] Change only the production `fnmatch` flag from `0` to `FNM_PERIOD`. Do not filter named fixtures, delete sidecars, or change official scripts/expectations. Preserve explicit dot patterns and direct hidden-file reads.
+- [x] Build server/test targets with `-j3` after stopping the dedicated instance. Run 58 scan tests, three CTests, official plus eight special SQL cases, independent ASan/UBSan and 100 real COPY-race invocations.
+- [x] Run the unchanged official case with four extra sidecars injected before its Parquet decode; verify original cleanup executes and the case exits 0. Keep the injection adapter in `/tmp`, not repository production/test tooling.
+- [x] Record RED/GREEN evidence, original eight-file hashes and unchanged user-document hash. Commit this focused fix only, without pushing. External judge re-submission remains the user's validation step.

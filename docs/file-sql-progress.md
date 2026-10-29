@@ -2,25 +2,27 @@
 
 ## 当前状态（2026-10-29）
 
-任务 1–10 及提测前审查发现的四项问题已完成修复与验证。用户完成本机 SSH 服务、主机信任和公钥认证准备后，**未修改的官方原版 `file_sql_basic` 与七个专项在最新同一轮全部通过（8/8，退出码均为 0）**。构建、单测、专项和官方流程分别记录，不据此估分或宣称隐藏测试、全库回归通过。按用户追加要求运行的 AI COLUMN 五项测试仍为 **0/5**，均在 `AI COLUMN` 建表语法处报 1064，见末节；文件 SQL 验收不能代替 AI COLUMN 通过。
+任务 1–10、提测前审查的四项问题，以及随后外部评测反馈的 glob 隐藏文件问题已完成修复与本机验证。用户完成本机 SSH 服务、主机信任和公钥认证准备后，**未修改的官方原版 `file_sql_basic` 与八个专项在最新同一轮全部通过（9/9，退出码均为 0）**。另外在原版夹具安装时加入评测中出现的四个隐藏旁车文件，再次完整运行原版 `file_sql_basic` 也通过；这不等于外部评测平台已重新提测通过。构建、单测、专项和官方流程分别记录，不据此估分或宣称隐藏测试、全库回归通过。按用户追加要求运行的 AI COLUMN 五项测试仍为 **0/5**，均在 `AI COLUMN` 建表语法处报 1064，见末节；文件 SQL 验收不能代替 AI COLUMN 通过。
 
 | 检查 | 本轮结果 |
 | --- | --- |
 | seekdb 与三个测试目标的 CMake `-j3` 构建 | 退出 0 |
-| `file_scan_utils` / `file_table_op` / `file_sql_parser` CTest | 3/3 通过，最近约 1.50 s |
-| 扫描库 GTest | 57/57，通过三个 test cases，含 8 项内存测试 |
-| 独立扫描库 ASan/UBSan CTest | 通过，开启 leak detection / halt-on-error，约 12.32 s |
+| `file_scan_utils` / `file_table_op` / `file_sql_parser` CTest | 3/3 通过，最近约 1.55 s |
+| 扫描库 GTest | 58/58，通过三个 test cases，含 8 项内存测试 |
+| 独立扫描库 ASan/UBSan CTest | 通过，开启 leak detection / halt-on-error，约 11.99 s |
 | COPY 两个 writer 同目标并发发布 | 100/100 次，恰好一个赢家 |
-| `file_sql_copy` 专项 | 通过，约 0.292 s |
-| `file_sql_describe` 专项 | 通过，约 0.041 s |
-| `file_sql_regression` 专项 | 通过，约 0.053 s |
-| `file_sql_resources` 专项 | 通过，约 0.682 s |
-| `file_sql_security` 专项 | 通过，约 2.121 s |
+| `file_sql_copy` 专项 | 通过，约 0.558 s |
+| `file_sql_describe` 专项 | 通过，约 0.038 s |
+| `file_sql_regression` 专项 | 通过，约 0.051 s |
+| `file_sql_resources` 专项 | 通过，约 0.671 s |
+| `file_sql_security` 专项 | 通过，约 2.114 s |
 | `file_sql_types` 专项 | 通过，约 0.016 s |
-| `file_sql_diagnostics` 专项 | 通过，约 0.027 s；严格语法、空白值、错误定位及行/批等价 |
+| `file_sql_diagnostics` 专项 | 通过，约 0.029 s；严格语法、空白值、错误定位及行/批等价 |
+| `file_sql_glob` 专项 | 通过，约 0.025 s；默认忽略点文件、显式匹配、直接读取及行/批等价 |
 | 官方原版八个文件与比赛基线的逐字节比较 | 8/8 未改 |
 | SQL 源码/头归属与 `git diff --check` | 通过 |
-| 官方 `file_sql_basic` 原版整流程 | 通过，约 0.577 s；SSH/SCP 安装、SQL 断言与清理均执行 |
+| 官方 `file_sql_basic` 原版整流程 | 通过，约 0.666 s；SSH/SCP 安装、SQL 断言与清理均执行 |
+| 原版流程＋四个评测同名隐藏旁车文件 | 通过，约 0.639 s；在解码 Parquet 前已加入，原版清理后无遗留 |
 
 计时只代表本机该次执行，不是性能承诺。ASan/UBSan 仅覆盖独立扫描库，不代表对整个服务端做过 Sanitizer 验证。
 
@@ -33,7 +35,7 @@
 3. JSON 数字扫描原先允许 `+1`、`01`、`1.`，COUNT 甚至接受 `1e`。现在分别校验整数、小数和指数部分及 token 边界；13 个非法数字和 8 个合法数字有库层覆盖，SQL 同时覆盖值投影与 COUNT。
 4. 原先错误转发多传一个 `"%s"`，客户端只收到字面量 `%s`。现按 OB_ERR_UNEXPECTED 自带的格式转发异常文本；CSV 列数、未闭引号、UTF-8 和 JSON 解析/重复键错误附带记录号、起始字节与文件。重扫复位定位计数，不包装或吞掉原生资源/取消异常。
 
-初始五个聚焦单测中四个失败、合法 JSON 对照通过，证据为 `review-scan-red.log`；新增 SQL 测试在旧版本复现 CSV 错误仅返回 `%s` 及坏引号 COUNT 意外成功，见 `review-sql-red.log`。空格/制表符分隔符对照还单独走过 RED/GREEN。最终扫描库 57/57，官方及七专项 8/8。只更新本轮自加 COPY/安全专项中原先错误断言 `%s` 的期望，并对动态路径作稳定替换；未修改官方八文件。
+初始五个聚焦单测中四个失败、合法 JSON 对照通过，证据为 `review-scan-red.log`；新增 SQL 测试在旧版本复现 CSV 错误仅返回 `%s` 及坏引号 COUNT 意外成功，见 `review-sql-red.log`。空格/制表符分隔符对照还单独走过 RED/GREEN。该阶段扫描库 57/57，官方及七专项 8/8；随后隐藏文件回归见下节。只更新本轮自加 COPY/安全专项中原先错误断言 `%s` 的期望，并对动态路径作稳定替换；未修改官方八文件。
 
 实际错误示例：
 
@@ -42,6 +44,16 @@ ERROR HY000: file SQL record 3, byte 6: the CSV row has 2 values but the file ha
 ```
 
 执行计划见 [审查修复计划](superpowers/plans/2026-10-28-file-sql-review-fixes.md)。
+
+## 外部评测反馈：glob 隐藏文件（2026-10-29）
+
+用户提供的真实 `file_sql_basic.reject` 在 glob 结果中多出 `._basic.csv`、`._basic.jsonl`、`._invalid.txt`、`._simple.parquet.b64`。这是赛题二失败；之前本机目录没有这些文件，本机基础用例通过未覆盖该环境。
+
+根因是 `discover()` 使用 `fnmatch(..., 0)`，普通 `*` 也匹配文件名开头的点。先补库层和 SQL 回归，旧版本均实际失败，SQL diff 重现四个旁车名以及额外普通隐藏文件。生产代码仅将匹配标志改为标准 `FNM_PERIOD`；普通 `*`、`*.csv`、`?*.csv` 不隐式匹配点文件，显式 `.*`、`._*.csv`、完整隐藏文件名及按路径读取仍正常。不是针对这些名字过滤，也不删除输入文件。
+
+最新扫描库 58/58，三 CTest 通过，官方及八专项 9/9。另在原版 include 创建专用夹具目录后、Parquet 解码前加入四个旁车文件：原版测试、SSH/SCP 安装和清理均未改，完整执行退出 0。一次性适配器记录了注入时目录只有四个旁车文件、解码尚未开始，以及最终目录被官方清理；没有在 glob 断言后才注入来伪造覆盖。
+
+证据：`glob-red.log`、`glob-sql-red.log`、`glob-scan-green.log`、`glob-official-and-special-sql.log`、`glob-official-with-sidecars.json`。该验证针对这次已复现的失败，不声称所有隐藏用例或外部平台已通过。
 
 ## 版本与修改范围
 
@@ -101,7 +113,8 @@ ctest --test-dir build_file_sql_server \
 python3 /tmp/seekdb-file-sql-run-regression.py \
   file_sql.file_sql_basic file_sql.file_sql_copy file_sql.file_sql_describe \
   file_sql.file_sql_regression file_sql.file_sql_resources \
-  file_sql.file_sql_security file_sql.file_sql_types file_sql.file_sql_diagnostics
+  file_sql.file_sql_security file_sql.file_sql_types file_sql.file_sql_diagnostics \
+  file_sql.file_sql_glob
 
 python3 tools/module_check/sql_source_ownership_check.py .
 python3 tools/module_check/sql_header_ownership_check.py .
@@ -124,7 +137,7 @@ ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=halt_on_error=1 \
   ctest --test-dir "$asan_dir" --output-on-failure
 ```
 
-最新运行证据保存在 `/home/howxu/seekdb-file-sql-final-evidence/`，含最新 `review-ctest.log`、`review-scan-green.log`（57 项）、`review-official-and-special-sql.log`（官方与七专项）、`review-copy-race.log`（100 次）、`review-asan-ctest.log`、逐用例 JSON 和 `review-original-fixtures.json`（原版八文件 SHA256 清单）。`/tmp` 脚本和构建日志可能随重启消失，不能当作永久测试工具。
+最新运行证据保存在 `/home/howxu/seekdb-file-sql-final-evidence/`，含最新 `glob-ctest.log`、`glob-scan-green.log`（58 项）、`glob-official-and-special-sql.log`（官方与八专项）、`glob-official-with-sidecars.json`、`glob-copy-race.log`（100 次）、`glob-asan-ctest.log`、逐用例 JSON 和 `glob-original-fixtures.json`（原版八文件 SHA256 清单）。`/tmp` 脚本和构建日志可能随重启消失，不能当作永久测试工具。
 
 源码归属为 1157 production + 7 separate = 1164 workspace；头归属为 1276 tracked / 151 public roots / 257 interface closure / 4 composition / 864 private。上层 include/seam 检查无违规。
 
@@ -142,7 +155,7 @@ ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=halt_on_error=1 \
 ssh -o BatchMode=yes -o ConnectTimeout=5 127.0.0.1 true
 ```
 
-环境就绪后，实际执行 `file_sql.file_sql_basic`，未修改的 include 通过 SSH/SCP 安装和解码夹具，原版全部 SQL 断言及末尾清理通过，约 0.577 s。随后七个专项全部通过。未替换 Parquet 夹具、跳过 include、修改期望结果或关闭 SSH 主机密钥校验；助手未修改 SSH 配置。
+环境就绪后，实际执行 `file_sql.file_sql_basic`，未修改的 include 通过 SSH/SCP 安装和解码夹具，最新原版全部 SQL 断言及末尾清理通过，约 0.666 s。随后八个专项全部通过。未替换 Parquet 夹具、跳过 include、修改期望结果或关闭 SSH 主机密钥校验；助手未修改 SSH 配置。
 
 尚未运行完整 AI function mock 回归、全库 mysqltest、整个服务端 Sanitizer，也没有独立第二审阅者的结论。当前记录不等于这些范围通过。
 

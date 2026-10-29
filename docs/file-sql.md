@@ -2,7 +2,7 @@
 
 文件 SQL 将本机 CSV、JSONL 和受支持的 Parquet 文件暴露为原生关系。扫描器只负责读取和转换，过滤、表达式、聚合、排序与 JOIN 使用 seekdb 的优化器和执行器，不会先导入普通表。
 
-实际验收状态见 [验证记录](file-sql-progress.md)。官方原版 `file_sql_basic` 与七个专项已通过（8/8）；构建、单测和 SQL 验收分别记录，不把这些结果扩大为全库回归通过。
+实际验收状态见 [验证记录](file-sql-progress.md)。官方原版 `file_sql_basic` 与八个专项已通过（9/9）；构建、单测和 SQL 验收分别记录，不把这些结果扩大为全库回归通过。
 
 ## 开启与授权
 
@@ -42,6 +42,7 @@ SELECT file FROM glob('/absolute/file_sql_data/*.csv') ORDER BY file;
 - CSV/JSONL 采用全量推断，仅接受 `sample_size = -1`，不缓存整个输入文件。
 - 推断类型包括 BIGINT、DOUBLE、BOOLEAN、DATE、DATETIME、VARCHAR 和全 NULL 类型；DATETIME 保留支持的小数秒精度。数值计算使用对应的原生 SQL 类型。
 - 空 CSV/JSONL 可计数为零，不虚构数据列。
+- `glob` 的普通通配符不匹配文件名开头的点；显式 `.*` 或完整隐藏文件名仍可发现隐藏文件，隐藏文件也可按授权路径直接读取。不对 `._` 或其他具体文件名做硬编码过滤。
 - Parquet 支持平面 schema、多个 Row Group、列裁剪、可空字典及已覆盖的 DataPage V1/V2 路径。不是完整的 Parquet/Arrow 实现；不支持的 schema、编码或压缩分支明确报错。
 - 普通别名、重排/重复投影、COUNT 空投影、GROUP/HAVING/ORDER/LIMIT、INNER/LEFT JOIN 使用原生计划；支持单行、批量和重扫路径。
 
