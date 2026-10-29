@@ -28,6 +28,84 @@ namespace oceanbase
 {
 namespace storage
 {
+class BuiltinIKDicts final
+{
+public:
+  BuiltinIKDicts()
+      : allocator_(lib::ObMemAttr("FtIKShared")),
+        main_cache_(allocator_), quan_cache_(allocator_), stop_cache_(allocator_),
+        main_desc_("main_dict", ObFTDictType::DICT_IK_MAIN, CHARSET_UTF8MB4, CS_TYPE_UTF8MB4_BIN),
+        quan_desc_("quan_dict", ObFTDictType::DICT_IK_QUAN, CHARSET_UTF8MB4, CS_TYPE_UTF8MB4_BIN),
+        stop_desc_("stopword", ObFTDictType::DICT_IK_STOP, CHARSET_UTF8MB4, CS_TYPE_UTF8MB4_BIN),
+        main_(allocator_, &main_cache_, main_desc_),
+        quan_(allocator_, &quan_cache_, quan_desc_),
+        stop_(allocator_, &stop_cache_, stop_desc_)
+  {}
+
+  int init(ObFTDictHub &hub)
+  {
+    int ret = OB_SUCCESS;
+    if (OB_FAIL(load(hub, main_desc_, main_cache_))) {
+    } else if (OB_FAIL(load(hub, quan_desc_, quan_cache_))) {
+    } else if (OB_FAIL(load(hub, stop_desc_, stop_cache_))) {
+    } else if (OB_FAIL(main_.init())) {
+    } else if (OB_FAIL(quan_.init())) {
+    } else if (OB_FAIL(stop_.init())) {
+    }
+    return ret;
+  }
+
+private:
+  static int load(ObFTDictHub &hub, const ObFTDictDesc &desc, ObFTCacheRangeContainer &cache)
+  {
+    int ret = hub.load_cache(desc, cache);
+    if (OB_ENTRY_NOT_EXIST == ret) {
+      ret = hub.build_cache(desc, cache);
+    }
+    return ret;
+  }
+
+  // Readers must be destroyed before the cache handles and their allocator.
+  ObArenaAllocator allocator_;
+  ObFTCacheRangeContainer main_cache_;
+  ObFTCacheRangeContainer quan_cache_;
+  ObFTCacheRangeContainer stop_cache_;
+  ObFTDictDesc main_desc_;
+  ObFTDictDesc quan_desc_;
+  ObFTDictDesc stop_desc_;
+public:
+  ObFTRangeDict main_;
+  ObFTRangeDict quan_;
+  ObFTRangeDict stop_;
+};
+
+int ObFTDictHub::get_builtin_ik_dicts(ObIFTDict *&main, ObIFTDict *&quan, ObIFTDict *&stop)
+{
+  int ret = OB_SUCCESS;
+  BuiltinIKDicts *dicts = builtin_ik_dicts_.load(std::memory_order_acquire);
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else if (nullptr == dicts) {
+    lib::ObMutexGuard guard(builtin_ik_lock_);
+    dicts = builtin_ik_dicts_.load(std::memory_order_acquire);
+    if (nullptr != dicts) {
+    } else if (OB_ISNULL(dicts = OB_NEW(BuiltinIKDicts, "FtIKShared"))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_FAIL(dicts->init(*this))) {
+      OB_DELETE(BuiltinIKDicts, "FtIKShared", dicts);
+      dicts = nullptr;
+    } else {
+      builtin_ik_dicts_.store(dicts, std::memory_order_release);
+    }
+  }
+  if (OB_SUCC(ret)) {
+    main = &dicts->main_;
+    quan = &dicts->quan_;
+    stop = &dicts->stop_;
+  }
+  return ret;
+}
+
 int ObFTDictHub::init()
 {
   static constexpr int K_MAX_DICT_BUCKET = 128; // for now, only built-in dicts.
@@ -44,6 +122,10 @@ int ObFTDictHub::destroy()
 {
   int ret = OB_SUCCESS;
   is_inited_ = false;
+  BuiltinIKDicts *dicts = builtin_ik_dicts_.exchange(nullptr, std::memory_order_acq_rel);
+  if (nullptr != dicts) {
+    OB_DELETE(BuiltinIKDicts, "FtIKShared", dicts);
+  }
   return ret;
 }
 int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container)

@@ -235,6 +235,11 @@ int ObIKFTParser::init_dict(const ObFTParserParam &param)
 
   if (OB_ISNULL(hub_)) {
     ret = OB_ERR_UNEXPECTED;
+    return ret;
+  } else if (!should_read_newest_table()) {
+    ret = hub_->get_builtin_ik_dicts(dict_main_, dict_quan_, dict_stop_);
+    shared_dicts_ = OB_SUCC(ret);
+    return ret;
   }
 
   ObFTRangeDict *dict = nullptr;
@@ -352,6 +357,7 @@ void ObIKFTParser::reset()
   if (!OB_ISNULL(ctx_)) {
     ctx_->~TokenizeContext();
     allocator_.free(ctx_);
+    ctx_ = nullptr;
   }
 
   for (ObIIKProcessor *segmenter : segmenters_) {
@@ -366,18 +372,23 @@ void ObIKFTParser::reset()
   cache_quan_.reset();
   cache_stop_.reset();
 
-  if (!OB_ISNULL(dict_main_)) {
+  if (!shared_dicts_ && !OB_ISNULL(dict_main_)) {
     dict_main_->~ObIFTDict();
     allocator_.free(dict_main_);
   }
-  if (!OB_ISNULL(dict_quan_)) {
+  if (!shared_dicts_ && !OB_ISNULL(dict_quan_)) {
     dict_quan_->~ObIFTDict();
     allocator_.free(dict_quan_);
   }
-  if (!OB_ISNULL(dict_stop_)) {
+  if (!shared_dicts_ && !OB_ISNULL(dict_stop_)) {
     dict_stop_->~ObIFTDict();
     allocator_.free(dict_stop_);
   }
+
+  dict_main_ = nullptr;
+  dict_quan_ = nullptr;
+  dict_stop_ = nullptr;
+  shared_dicts_ = false;
 
   is_inited_ = false;
 }

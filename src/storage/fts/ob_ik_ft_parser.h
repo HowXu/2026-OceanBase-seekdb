@@ -46,7 +46,8 @@ public:
         cache_stop_(allocator),
         dict_main_(nullptr),
         dict_quan_(nullptr),
-        dict_stop_(nullptr)
+        dict_stop_(nullptr),
+        shared_dicts_(false)
   {
   }
 
@@ -106,6 +107,7 @@ private:
   ObIFTDict *dict_main_;
   ObIFTDict *dict_quan_;
   ObIFTDict *dict_stop_;
+  bool shared_dicts_;
 
   DISABLE_COPY_ASSIGN(ObIKFTParser);
 };
