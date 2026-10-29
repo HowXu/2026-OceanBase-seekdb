@@ -282,7 +282,7 @@ void charge(size_t bytes)
 
 **Interfaces:** 保留协作者 `TableItem::FILE_TABLE`、`ObFileTableDef`、`ObLogFileTable`、`ObFileTableSpec/Op`。`SYS_VAR_ENABLE_FILE_SQL` 默认 false。文件表推断调用任务 1–4 的库。COPY 语法可先解析但执行必须明确拒绝，不能成功返回却不导出。
 
-- [ ] **1. 先迁移 Parser 测试正文，不带其 main 或新版 BUILD。** 在 `unittest/sql/CMakeLists.txt` 增加 `add_subdirectory(parser)`。Parser 目录 CMakeLists 为：
+- [x] **1. 先迁移 Parser 测试正文，不带其 main 或新版 BUILD。** 在 `unittest/sql/CMakeLists.txt` 增加 `add_subdirectory(parser)`。Parser 目录 CMakeLists 为：
 
 ```cmake
 add_executable(test_file_sql_parser test_file_sql_parser.cpp)
@@ -295,7 +295,7 @@ add_test(NAME file_sql_parser COMMAND test_file_sql_parser)
 ```
 
 此测试只从根工程配置，不单独复制服务端 include/链接依赖。增加 read_csv/read_json/read_ndjson/read_parquet/glob 作为普通标识符的测试，以及未知/重复命名参数测试；构建 Parser 测试记录尚无新节点/语法的红灯。
-- [ ] **2. 读取并提取固定功能 patch。** 执行下列只读命令查看完整差量，再用 edit/write 逐文件适配。禁止 patch 整个 `src` 后保留未审查修改。
+- [x] **2. 读取并提取固定功能 patch。** 执行下列只读命令查看完整差量，再用 edit/write 逐文件适配。禁止 patch 整个 `src` 后保留未审查修改。
 
 ```bash
 git diff a7c03b804 3381bcbfd -- src/query src/objit \
@@ -304,11 +304,13 @@ git diff a7c03b804 3381bcbfd -- src/query src/objit \
   src/sql/engine/ob_operator_factory.cpp
 ```
 
-- [ ] **3. 合入扫描算子和逻辑算子的新增正文，改新头为 pragma once。** 新增生产 `.cpp` 精确登记为 standalone 或既有适当模块，禁止双重编译；不要照搬协作者将全部扫描库合为一个 Unity group。同步更新系统变量全套数组、索引、类计数和工厂；不按新版 ID 覆盖比赛已有变量。
-- [ ] **4. 修复列绑定重复创建。** 单次绑定每个 `(table_id,column_id)`；SELECT * 从已存在 ColumnItem 收集而不是重新创建一套。元数据携带全 NULL 类型、nullable、小数秒 scale；`header/format/sample_size` 按 literal 类型检查；重复参数明确拒绝。
-- [ ] **5. 对权限及缓存建模。** Resolver 读取当前开关和根目录；open/rescan 再查会话权限，与任务 3 句柄检查配合。文件 Schema 改变时缓存计划明确失效/报错，不用旧定义继续执行。
-- [ ] **6. 构建并验证。** 运行 Parser 单测、扫描单测、服务端构建与归属检查。SQL smoke：默认关闭返回 1235，开启后 `SELECT *`/COUNT(*) 能查询；COPY 在任务 9 前明确返回不支持。记录普通 SQL 和 EXPLAIN smoke。
-- [ ] **7. 提交。** `feat(sql): integrate native file tables on the competition baseline`。
+- [x] **3. 合入扫描算子和逻辑算子的新增正文，改新头为 pragma once。** 新增生产 `.cpp` 精确登记为 standalone 或既有适当模块，禁止双重编译；不要照搬协作者将全部扫描库合为一个 Unity group。同步更新系统变量全套数组、索引、类计数和工厂；不按新版 ID 覆盖比赛已有变量。
+- [x] **4. 修复列绑定重复创建。** 单次绑定每个 `(table_id,column_id)`；SELECT * 从已存在 ColumnItem 收集而不是重新创建一套。元数据携带全 NULL 类型、nullable、小数秒 scale；`header/format/sample_size` 按 literal 类型检查；重复参数明确拒绝。
+- [x] **5. 对权限及缓存建模。** Resolver 读取当前开关和根目录；open/rescan 再查会话权限，与任务 3 句柄检查配合。文件 Schema 改变时缓存计划明确失效/报错，不用旧定义继续执行。
+- [x] **6. 构建并验证。** 运行 Parser 单测、扫描单测、服务端构建与归属检查。SQL smoke：默认关闭返回 1235，开启后 `SELECT *`/COUNT(*) 能查询；COPY 在任务 9 前明确返回不支持。记录普通 SQL 和 EXPLAIN smoke。
+- [x] **7. 提交。** `feat(sql): integrate native file tables on the competition baseline`。
+
+**执行记录（任务 5）：** 已提交 `91259149bc2e920433dcfb912ff417a8444e3e4b`。Parser 三项测试、扫描单测、主工程 seekdb 构建及源码/头归属检查通过。隔离实例确认默认关闭及重复参数拒绝，COPY 在任务 9 前明确拒绝。原生查询早期 smoke 暴露 VARCHAR coercibility、投影顺序与 DOUBLE 显示精度问题，后续分别在任务 6/7 修复，不将任务 5 的构建通过当作完整 SQL 验收。按用户要求已合回比赛分支并删除旧 worktree；用户 AI 交接文档未纳入提交。
 
 ## Task 6: 修复源列映射、批量输出、重扫和生命周期
 
@@ -316,7 +318,7 @@ git diff a7c03b804 3381bcbfd -- src/query src/objit \
 
 **Interfaces:** `ObFileTableSpec` 新增 `common::ObFixedArray<int64_t, common::ObIAllocator> column_ids_`，与 `column_exprs_` 一一对应并加入当前规格序列化。`ObFileTableOp::inner_get_next_batch(int64_t)` 覆盖批量入口；公共单行转换函数供行/批量复用。
 
-- [ ] **1. 写专项 SQL，先复现单列或重排列失败。** fixture 新建在隔离专项目录；至少包含三列和超过单个 batch 的行数，不能混入公开 glob 的原始目录。
+- [x] **1. 写专项 SQL，先复现单列或重排列失败。** fixture 新建在隔离专项目录；至少包含三列和超过单个 batch 的行数，不能混入公开 glob 的原始目录。
 
 ```sql
 SELECT name, id FROM read_csv('projection.csv') ORDER BY id;
@@ -329,7 +331,7 @@ LEFT JOIN read_csv('projection.csv') b ON b.id=a.id ORDER BY a.id;
 
 mysqltest 文件使用 `eval` 和独立目录的绝对路径替换示例路径，并为确定结果编写 `.result`，不要用 `--record` 掩盖原始差异。
 
-- [ ] **2. CG 同时生成源列序号和表达式。** 对每个实际访问列：
+- [x] **2. CG 同时生成源列序号和表达式。** 对每个实际访问列：
 
 ```cpp
 const int64_t source_index = col_item->column_id_ - OB_APP_MIN_COLUMN_ID;
@@ -339,10 +341,12 @@ OZ (spec.column_exprs_.push_back(rt_expr));
 
 检查 source_index 在 Schema 范围内；不得用遍历 ColumnItem 的位置作源列序号。Scan projection 来自 column_ids_；COUNT(*) 保持空 projection；输出循环仅遍历投影结果。
 
-- [ ] **3. 实现批量入口和共享转换。** `batch_count=min(max_row_cnt,MY_SPEC.max_batch_size_)`；使用 `ObEvalCtx::BatchInfoScopeGuard` 设置 batch_size/index，为每一行转换到相应 datum 槽；同一批次仅在开始清 evaluated flag，保留最后非空批与 end_ 语义。字符串分配在本批有效的表达式内存中，不让后续行覆盖先前行。
-- [ ] **4. 生命周期和错误。** inner_rescan 重置批次、EOF、glob 索引与扫描游标；close/destroy 幂等释放 scan 和 STL 持有的堆内存，避免 arena 对象未析构泄漏。Error、bad_alloc、I/O 和取消在 SQL 边界转为恰当 ret。每批和长推断循环周期性检查取消/超时，不只在返回首行后检查。
+- [x] **3. 实现批量入口和共享转换。** `batch_count=min(max_row_cnt,MY_SPEC.max_batch_size_)`；使用 `ObEvalCtx::BatchInfoScopeGuard` 设置 batch_size/index，为每一行转换到相应 datum 槽；同一批次仅在开始清 evaluated flag，保留最后非空批与 end_ 语义。字符串分配在本批有效的表达式内存中，不让后续行覆盖先前行。
+- [x] **4. 生命周期和错误。** inner_rescan 重置批次、EOF、glob 索引与扫描游标；close/destroy 幂等释放 scan 和 STL 持有的堆内存，避免 arena 对象未析构泄漏。Error、bad_alloc、I/O 和取消在 SQL 边界转为恰当 ret。每批和长推断循环周期性检查取消/超时，不只在返回首行后检查。
 - [ ] **5. 跑行/批量计划的等价专项回归、扫描单测、原版 SQL 前半段；核对 EXPLAIN 的文件扫描、聚合与 JOIN 均由原生算子执行。** 不假设某种 JOIN 算法必然被选择；显式算子单测验证 rescan，SQL 测试验证实际计划结果。
-- [ ] **6. 提交。** `fix(sql): map projected file columns and support batch rescans`。
+- [x] **6. 提交。** `fix(sql): map projected file columns and support batch rescans`。
+
+**执行记录（任务 6，功能与专项通过）：** 源列映射、空投影、row/batch、重扫与 arena 生命周期修复已纳入 e2de2f01f。2049 行、JOIN、聚合与行/批等价专项通过。长推断现在有 I/O/CPU 周期检查；共享查询预算计入原生查询内存检查，超时、KILL QUERY 与内存限额 SQL 专项通过。原版 SQL 流程仍受 SSH 阻塞，步骤 5 保留未完成。
 
 ## Task 7: 端到端类型、表达式和 JOIN 正确性
 
@@ -350,7 +354,7 @@ OZ (spec.column_exprs_.push_back(rt_expr));
 
 **Interfaces:** 沿用 Type、Column；动态列 `ObObjMeta`、`ObAccuracy`、可空性与文本转换保持一致，不只让 `type_name()` 正确。
 
-- [ ] **1. 增加红灯用例。** 全 NULL 列、BIGINT 两端及溢出、BIGINT/DOUBLE 宽化、BOOLEAN 聚合、DATE/DATETIME 混合、小数秒、非法闰日；CSV 与 JSONL 字段并集组合查询。
+- [x] **1. 增加红灯用例。** 全 NULL 列、BIGINT 两端及溢出、BIGINT/DOUBLE 宽化、BOOLEAN 聚合、DATE/DATETIME 混合、小数秒、非法闰日；CSV 与 JSONL 字段并集组合查询。
 
 ```sql
 SELECT id, COUNT(*), SUM(score), AVG(score), MIN(score), MAX(score)
@@ -363,9 +367,11 @@ LEFT JOIN read_parquet('right.parquet') p ON c.id=p.id ORDER BY c.id;
 
 各 fixture 在测试中声明确定值；LEFT JOIN 必须有不匹配行，NULL JOIN key 不匹配。加入同名列、别名限定和空输入测试。
 
-- [ ] **2. 跑用例，针对具体失败修复。** 验证数字转换消费完整文本，DATE/DATETIME 的 session 时区与 scale 正确；NULL 映射为 SQL NULL 元数据，不默认 VARCHAR 冒充。GROUP/HAVING/JOIN 保持原生路径，禁止在扫描器内硬编码查询逻辑。
-- [ ] **3. 复跑相关单测和专项 mysqltest、普通表等价 SQL。** 检查跨格式结果与手工确定结果一致，不能仅比较两个可能共享缺陷的文件读取路径。
-- [ ] **4. 提交。** `fix(sql): preserve inferred types through native file queries and joins`。
+- [x] **2. 跑用例，针对具体失败修复。** 验证数字转换消费完整文本，DATE/DATETIME 的 session 时区与 scale 正确；NULL 映射为 SQL NULL 元数据，不默认 VARCHAR 冒充。GROUP/HAVING/JOIN 保持原生路径，禁止在扫描器内硬编码查询逻辑。
+- [x] **3. 复跑相关单测和专项 mysqltest、普通表等价 SQL。** 检查跨格式结果与手工确定结果一致，不能仅比较两个可能共享缺陷的文件读取路径。
+- [x] **4. 提交。** `fix(sql): preserve inferred types through native file queries and joins`。
+
+**执行记录（任务 7，专项通过）：** DOUBLE scale、全 NULL 元数据与空 JSONL 修复已纳入 e2de2f01f。BIGINT、BOOLEAN、DATE/DATETIME6、JSON 字段并集、GROUP/HAVING/ORDER/LIMIT、CSV/JSONL/原版 Parquet JOIN，以及空 CSV/JSONL 的 SQL COUNT 均通过，不再保留空 JSONL SQL 待复跑状态。
 
 ## Task 8: DESCRIBE 输出实际 SELECT 元数据
 
@@ -373,7 +379,7 @@ LEFT JOIN read_parquet('right.parquet') p ON c.id=p.id ORDER BY c.id;
 
 **Interfaces:** DESCRIBE 文件查询返回 `column_name,column_type,null,key,default,extra`；普通 EXPLAIN 和普通表 DESCRIBE 沿用旧语义。描述来源为 SELECT 输出表达式，不扫描执行结果。
 
-- [ ] **1. 先写失败用例。** 基础星号、重排序/别名、表达式、双文件 JOIN、全 NULL 和带单引号/反斜杠的 CSV 列名。分别在默认 sql_mode 和 NO_BACKSLASH_ESCAPES 下验证。重点断言只描述输出列，不返回第一张文件的全部列。
+- [x] **1. 先写失败用例。** 基础星号、重排序/别名、表达式、双文件 JOIN、全 NULL 和带单引号/反斜杠的 CSV 列名。分别在默认 sql_mode 和 NO_BACKSLASH_ESCAPES 下验证。重点断言只描述输出列，不返回第一张文件的全部列。
 
 ```sql
 DESCRIBE SELECT name AS label, id FROM read_csv('projection.csv');
@@ -382,9 +388,11 @@ FROM read_csv('left.csv') c LEFT JOIN read_json('right.jsonl') j ON c.id=j.id;
 EXPLAIN SELECT id FROM read_csv('projection.csv');
 ```
 
-- [ ] **2. 替换协作者的拼接 UNION SQL 路径。** 使用 SELECT 已解析 select_items 的 alias、表达式类型、可空性，直接构造常量结果表达式/行及六列输出。基础 Type::Boolean 保留 BOOLEAN 显示，派生表达式按原生 SQL 结果类型显示。列名作为 datum，不拼入 SQL 重新解析。
+- [x] **2. 替换协作者的拼接 UNION SQL 路径。** 使用 SELECT 已解析 select_items 的 alias、表达式类型、可空性，直接构造常量结果表达式/行及六列输出。基础 Type::Boolean 保留 BOOLEAN 显示，派生表达式按原生 SQL 结果类型显示。列名作为 datum，不拼入 SQL 重新解析。
 - [ ] **3. 跑新用例和原版基础 DESCRIBE，核对六列逐字结果；复跑普通 `EXPLAIN SELECT 1` 和普通表 DESCRIBE。** 有无 DESCRIBE 不得改变读取路径权限检查。
-- [ ] **4. 提交。** `fix(sql): describe resolved file query output columns safely`。
+- [x] **4. 提交。** `fix(sql): describe resolved file query output columns safely`。
+
+**执行记录（任务 8，专项通过）：** 根据实际 SELECT 输出构造六列常量结果，不拼接用户列名；已纳入 e2de2f01f。投影、表达式、全 NULL、JOIN 可空性、两种 SQL mode、普通 EXPLAIN/表 DESCRIBE 专项通过。原版基础全流程未通过，步骤 3 保留未完成。
 
 ## Task 9: COPY 原生执行、CSV 选项与不覆盖发布
 
@@ -392,7 +400,7 @@ EXPLAIN SELECT id FROM read_csv('projection.csv');
 
 **Interfaces:** 新增明确的 COPY 模式标志和输出 options，从解析后的 SELECT 状态传到 LogSelectInto、SelectIntoSpec 和执行器；不靠猜测普通 OUTFILE 的孩子数识别 COPY。保持 CsvWriter 的构造/write/commit 公共调用，但改其内部安全协议。
 
-- [ ] **1. 写 SQL 执行红灯。** COPY 子查询、COPY 普通表均写入新路径后读回；自定义 delimiter/quote/escape/nullstr/header；空查询仍按 header 选项输出；输出目标已存在时失败；功能关闭时失败。预期 CSV NULL 和空串不同。
+- [x] **1. 写 SQL 执行红灯。** COPY 子查询、COPY 普通表均写入新路径后读回；自定义 delimiter/quote/escape/nullstr/header；空查询仍按 header 选项输出；输出目标已存在时失败；功能关闭时失败。预期 CSV NULL 和空串不同。
 
 ```sql
 COPY (SELECT id, name, score FROM read_csv('projection.csv') ORDER BY id)
@@ -400,12 +408,14 @@ TO 'copy.csv' (format csv, header, nullstr 'NULL');
 SELECT id, name, score FROM read_csv('copy.csv', null_string='NULL') ORDER BY id;
 ```
 
-- [ ] **2. 接通 COPY 分派。** 表名源构造原生 SELECT * 并正常做权限/列绑定；query 源复用其 SELECT；选项验证类型、重复参数及仅支持 CSV，支持省略选项时的明确默认值。禁止将顶层 T_INTO_OUTFILE 直接交给无此分派的旧 resolver。
-- [ ] **3. 输出算子消费原生 child 行/批次，使用现有 datum 转文本能力，保留 DATE/DATETIME 精度及 NULL 标志；CsvWriter 只做 CSV 编码，不执行查询。** 普通 OUTFILE 分支不改变。
-- [ ] **4. 改写 CsvWriter 临时文件与发布。** 授权父目录 fd 下 `openat` 排他创建临时文件；使用无数据竞争的随机唯一名；写入、flush/close 错误均传播。Linux 优先 `renameat2(RENAME_NOREPLACE)`；不支持时使用同目录 `linkat` 成功后 unlink 临时目录项，不回退到覆盖 rename。fd 和 unlink 作用域绑定，所有失败不触碰原目标。
-- [ ] **5. 加并发与清理测试。** 两个 writer 同目标并发 commit，恰好一个成功、内容完整；目标为悬空符号链接时失败；查询表达式中途报错无最终/临时文件；模拟写入错误和取消后清理；临时名碰撞不截断既有文件。记录原输入/目标哈希前后相同。
+- [x] **2. 接通 COPY 分派。** 表名源构造原生 SELECT * 并正常做权限/列绑定；query 源复用其 SELECT；选项验证类型、重复参数及仅支持 CSV，支持省略选项时的明确默认值。禁止将顶层 T_INTO_OUTFILE 直接交给无此分派的旧 resolver。
+- [x] **3. 输出算子消费原生 child 行/批次，使用现有 datum 转文本能力，保留 DATE/DATETIME 精度及 NULL 标志；CsvWriter 只做 CSV 编码，不执行查询。** 普通 OUTFILE 分支不改变。
+- [x] **4. 改写 CsvWriter 临时文件与发布。** 授权父目录 fd 下 `openat` 排他创建临时文件；使用无数据竞争的随机唯一名；写入、flush/close 错误均传播。Linux 优先 `renameat2(RENAME_NOREPLACE)`；不支持时使用同目录 `linkat` 成功后 unlink 临时目录项，不回退到覆盖 rename。fd 和 unlink 作用域绑定，所有失败不触碰原目标。
+- [x] **5. 加并发与清理测试。** 两个 writer 同目标并发 commit，恰好一个成功、内容完整；目标为悬空符号链接时失败；查询表达式中途报错无最终/临时文件；模拟写入错误和取消后清理；临时名碰撞不截断既有文件。记录原输入/目标哈希前后相同。
 - [ ] **6. 跑扫描 writer 单测、专项 SQL、原版 file_sql_basic 全流程以及原有 OUTFILE 测试。** 所有输出都放本次隔离测试目录，不写 run_temp/store。
-- [ ] **7. 提交。** `feat(sql): execute COPY with safe atomic CSV publication`。
+- [x] **7. 提交。** `feat(sql): execute COPY with safe atomic CSV publication`。
+
+**执行记录（任务 9，专项通过）：** 原生 COPY、CSV 选项、行/批、空结果表头、ROW_COUNT、读回、legacy OUTFILE、不覆盖及错误清理已纳入 e2de2f01f。held-inode linkat 排他发布、0600、目录项替换、写错误及 100 次双 writer 竞争通过。50 项扫描单测和独立 ASan/UBSan CTest 通过。f3ee378fc 修复全局授权被其他连接收紧时的旧会话快照问题，COPY 发布前撤权明确拒绝且清理临时 inode。原版 file_sql_basic 的 SSH 阻塞未消除，步骤 6 保留未完成；构建保持 -j3。
 
 ## Task 10: 原版公开测试、权限变化与回归证据
 
@@ -414,7 +424,7 @@ SELECT id, name, score FROM read_csv('copy.csv', null_string='NULL') ORDER BY id
 **Interfaces:** 使用现有 `.github/script/seekdb/mysqltest_for_seekdb.py` 的 `mysqltest_environment`、`prepare_instance`、`run_case`，不新增 tools runner。该 runner 的 prepare_instance 会清理其 base_dir，必须使用本次 mkdtemp 得到的专用目录。
 
 - [ ] **1. 验证环境。** 检查新编译二进制、GTest、obclient/mysqltest；端口选择空闲的独立端口；公开夹具 include 需要到实例 host_ip 的免交互 SSH/SCP。若无法连接，停在环境阻塞，不修改测试绕过，也不修改用户 SSH 配置。
-- [ ] **2. 建立单次隔离实例，保存 base_dir。** 用 `tempfile.mkdtemp(prefix='seekdb-task2-instance-')` 创建目录，另建日志目录；通过现有 sdb.py/runner 初始化。不要指向已有 `run_temp`。连接后配置 test admin 会话/实例允许本次测试根目录；核对原版 include 的 data_for_mysqltest_file_sql 位于授权范围内。
+- [x] **2. 建立单次隔离实例，保存 base_dir。** 用 `tempfile.mkdtemp(prefix='seekdb-task2-instance-')` 创建目录，另建日志目录；通过现有 sdb.py/runner 初始化。不要指向已有 `run_temp`。连接后配置 test admin 会话/实例允许本次测试根目录；核对原版 include 的 data_for_mysqltest_file_sql 位于授权范围内。
 - [ ] **3. 按名称筛选现有用例并运行，不执行整库。** 调用示例的 API 形状如下；参数值从本次隔离实例取，不硬编码已有运行目录：
 
 ```python
@@ -431,10 +441,12 @@ for case in selected:
 
 用 `importlib.util.spec_from_file_location` 在临时会话脚本加载现有 runner；不给仓库新增一次性 runner。结果日志完整保存到此次 work_dir，不发布凭据。
 
-- [ ] **4. 跑安全专项。** 准备后关闭开关、收紧 secure_file_priv、替换同长文件、重扫及扫描期间改写、glob 逃逸、预算超限、COPY 发布竞争；期望明确错误及资源回收。增加 prepared/repeated 执行验证，不能依赖首次推断做永久授权。
-- [ ] **5. 跑普通 SQL 回归与最终构建。** CMake Parser/GTest、独立扫描 CTest、服务端构建、源码清单一致性、git diff --check、原版夹具完整性。Bazel 不在当前实施与验收范围，不能报告为遗漏或阻塞。原有 AI 测试不修改，不新增其 CMake 适配；视现有运行入口可用性记录结果，不因其他赛题缺陷扩展本任务。
-- [ ] **6. 按 code-review 技能检查最终 diff。** 聚焦越界、生命周期、取消、异常传播、COPY 安全、列/批次一致性和证据；发现 Major/Blocker 先补失败测试并修复，不以文档代替修复。不分析持久化升级兼容性。
+- [x] **4. 跑安全专项。** 准备后关闭开关、收紧 secure_file_priv、替换同长文件、重扫及扫描期间改写、glob 逃逸、预算超限、COPY 发布竞争；期望明确错误及资源回收。增加 prepared/repeated 执行验证，不能依赖首次推断做永久授权。
+- [x] **5. 跑普通 SQL 回归与最终构建。** CMake Parser/GTest、独立扫描 CTest、服务端构建、源码清单一致性、git diff --check、原版夹具完整性。Bazel 不在当前实施与验收范围，不能报告为遗漏或阻塞。原有 AI 测试不修改，不新增其 CMake 适配；视现有运行入口可用性记录结果，不因其他赛题缺陷扩展本任务。
+- [x] **6. 按 code-review 技能检查最终 diff。** 聚焦越界、生命周期、取消、异常传播、COPY 安全、列/批次一致性和证据；发现 Major/Blocker 先补失败测试并修复，不以文档代替修复。不分析持久化升级兼容性。
 - [ ] **7. 更新说明与提交。** `docs/file-sql.md` 只写实际实现功能和工程上限；`docs/file-sql-progress.md` 记录每条实际命令、退出状态、测试筛选、原版夹具哈希、未运行范围和剩余阻塞。`docs(sql): record file SQL completion and verification evidence`。
+
+**执行记录（任务 10，官方流程仍受阻）：** 2026-10-29 已完成最新 seekdb/测试目标 -j3 构建、三个 CTest、50 GTest、六个 SQL 专项、扫描库 ASan/UBSan 和 100 次 COPY 竞争；原版八文件与比赛基线逐字节相同。审查通过失败 SQL 发现当前全局 secure_file_priv 与会话快照不一致，已以 schema guard 下读取/复制当前全局值修复，并提交 f3ee378fc。权限专项覆盖旧准备计划、已执行过的 DESCRIBE、准备/新 COPY、执行中撤权及临时 inode 清理；资源专项覆盖限额变化、推断超时和 KILL QUERY。官方原版流程实际在 fixture SSH 安装阶段失败；用户放开端口后复查仍无 22 监听，不修改 SSH 配置或脚本绕过。说明和命令证据写入 docs/file-sql.md 与 docs/file-sql-progress.md；不将官方尚未通过的步骤标为完成。
 
 ## 检查点与执行方式
 
