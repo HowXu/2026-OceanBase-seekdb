@@ -142,7 +142,7 @@ int ObSelectIntoOp::open_file_copy()
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } catch (const std::exception &error) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_USER_ERROR(OB_ERR_UNEXPECTED, "%s", error.what());
+    LOG_USER_ERROR(OB_ERR_UNEXPECTED, error.what());
   }
   if (OB_FAIL(ret)) {
     delete copy_writer_;
@@ -260,7 +260,7 @@ int ObSelectIntoOp::consume_file_copy(bool batch, int64_t max_row_cnt)
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } catch (const std::exception &error) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_USER_ERROR(OB_ERR_UNEXPECTED, "%s", error.what());
+    LOG_USER_ERROR(OB_ERR_UNEXPECTED, error.what());
   }
   delete copy_writer_;
   copy_writer_ = nullptr;

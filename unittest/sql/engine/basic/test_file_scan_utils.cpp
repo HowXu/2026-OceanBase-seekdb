@@ -203,6 +203,145 @@ TEST_F(FileScanTest, json_union_missing_and_conflicting_types)
   EXPECT_FALSE(scan.next(row));
 }
 
+TEST_F(FileScanTest, csv_rejects_characters_after_closing_quote)
+{
+  for (const auto *row : {"\"one\"garbage\n", "\"one\" \tgarbage\n"}) {
+    auto path = put("quote-tail.csv", std::string("v\n") + row);
+    EXPECT_THROW(infer(path, root, Options{}), Error);
+  }
+  auto path = put("valid-quote.csv", "v\r\n\"say \"\"hi\"\"\" \t\r\n\"two\nlines\"\n");
+  Scan scan(infer(path, root, Options{}), root, {0});
+  std::vector<Cell> row;
+  ASSERT_TRUE(scan.next(row)); EXPECT_EQ("say \"hi\"", row[0].text);
+  ASSERT_TRUE(scan.next(row)); EXPECT_EQ("two\nlines", row[0].text);
+  EXPECT_FALSE(scan.next(row));
+}
+
+TEST_F(FileScanTest, csv_quoted_fields_preserve_whitespace_delimiters)
+{
+  for (const char delimiter : {'\t', ' '}) {
+    SCOPED_TRACE(static_cast<int>(delimiter));
+    Options options; options.delimiter = delimiter;
+    auto path = put("whitespace-delimiter.csv",
+        std::string("a") + delimiter + "b\n\"one\"" + delimiter + "\"two\"\n");
+    Scan scan(infer(path, root, options), root, {0, 1});
+    std::vector<Cell> row;
+    ASSERT_TRUE(scan.next(row));
+    ASSERT_EQ(2U, row.size());
+    EXPECT_EQ("one", row[0].text); EXPECT_EQ("two", row[1].text);
+    EXPECT_FALSE(scan.next(row));
+  }
+}
+
+TEST_F(FileScanTest, csv_typed_whitespace_matches_inference_without_trimming_strings)
+{
+  auto path = put("spaces.csv",
+      "i,d,b,day,stamp,s,n\n"
+      " 12 , 1.5 , true , 2024-02-29 , 2024-02-29 12:34:56.123456 , padded ,NULL\n"
+      "\" -2 \",\" 2.5 \",\" false \",\" 2024-03-01 \",\" 2024-03-01 01:02:03.000001 \",\" keep \",\"NULL\"\n");
+  Options options; options.null_string = "NULL";
+  auto definition = infer(path, root, options);
+  ASSERT_EQ(7U, definition.columns.size());
+  EXPECT_EQ(Type::Bigint, definition.columns[0].type);
+  EXPECT_EQ(Type::Double, definition.columns[1].type);
+  EXPECT_EQ(Type::Boolean, definition.columns[2].type);
+  EXPECT_EQ(Type::Date, definition.columns[3].type);
+  EXPECT_EQ(Type::Datetime, definition.columns[4].type);
+  EXPECT_EQ(6, definition.columns[4].scale);
+  Scan scan(definition, root, {6, 5, 4, 3, 2, 1, 0});
+  std::vector<Cell> row;
+  for (int pass = 0; pass < 2; ++pass) {
+    ASSERT_TRUE(scan.next(row));
+    EXPECT_TRUE(row[0].is_null);
+    EXPECT_EQ(" padded ", row[1].text);
+    EXPECT_EQ("2024-02-29 12:34:56.123456", row[2].text);
+    EXPECT_EQ("2024-02-29", row[3].text);
+    EXPECT_EQ("true", row[4].text);
+    EXPECT_EQ("1.5", row[5].text);
+    EXPECT_EQ("12", row[6].text);
+    ASSERT_TRUE(scan.next(row));
+    EXPECT_FALSE(row[0].is_null); EXPECT_EQ("NULL", row[0].text);
+    EXPECT_EQ(" keep ", row[1].text);
+    EXPECT_EQ("2024-03-01 01:02:03.000001", row[2].text);
+    EXPECT_EQ("2024-03-01", row[3].text);
+    EXPECT_EQ("false", row[4].text);
+    EXPECT_EQ("2.5", row[5].text);
+    EXPECT_EQ("-2", row[6].text);
+    EXPECT_FALSE(scan.next(row));
+    scan.rescan();
+  }
+}
+
+TEST_F(FileScanTest, json_rejects_invalid_number_grammar_before_projection)
+{
+  Options options; options.format = Format::Json;
+  for (const auto *number : {"+1", "01", "-01", ".1", "1.", "1e", "1e+", "1e-",
+                             "1.e2", "--1", "1e.2", "1e2.3", "0x1"}) {
+    SCOPED_TRACE(number);
+    auto path = put("invalid-number.jsonl", std::string("{\"n\":") + number + "}\n");
+    EXPECT_THROW(infer(path, root, options), Error);
+  }
+}
+
+TEST_F(FileScanTest, json_accepts_valid_number_components)
+{
+  Options options; options.format = Format::Json;
+  for (const auto *number : {"0", "-0", "-12", "0.1", "-0.25", "1e2", "1E+2", "1e-2"}) {
+    SCOPED_TRACE(number);
+    auto path = put("valid-number.jsonl", std::string("{\"n\":") + number + "}\n");
+    auto definition = infer(path, root, options);
+    Scan scan(definition, root, {0});
+    std::vector<Cell> row;
+    ASSERT_TRUE(scan.next(row)); EXPECT_EQ(number, row[0].text);
+    EXPECT_FALSE(scan.next(row));
+  }
+}
+
+TEST_F(FileScanTest, syntax_errors_identify_file_record_and_byte_offset)
+{
+  const auto expect_error = [&](const std::string &path, const Options &options,
+                                const char *record, const char *reason) {
+    try {
+      infer(path, root, options);
+      FAIL() << "malformed input accepted";
+    } catch (const Error &error) {
+      const std::string message(error.what());
+      EXPECT_NE(std::string::npos, message.find(path)) << message;
+      EXPECT_NE(std::string::npos, message.find(record)) << message;
+      EXPECT_NE(std::string::npos, message.find("byte")) << message;
+      EXPECT_NE(std::string::npos, message.find(reason)) << message;
+      EXPECT_LE(message.size(), 1024U);
+    }
+  };
+  expect_error(put("columns.csv", "id,name\r\n1,ok\r\n2,broken,extra\r\n"),
+               Options{}, "record 3", "3 values");
+  expect_error(put("multiline.csv", "id,name\r\n1,ok\r\n2,\"line\r\nstill open"),
+               Options{}, "record 3", "unterminated");
+  Options json; json.format = Format::Json;
+  expect_error(put("broken.jsonl", "{\"n\":1}\r\n\r\n{\"n\":}\r\n"),
+               json, "record 3", "invalid");
+}
+
+TEST_F(FileScanTest, csv_scan_error_positions_reset_on_rescan)
+{
+  auto path = put("scan-error.csv", "a,b\n1,2\n");
+  auto definition = infer(path, root, Options{});
+  definition.columns.pop_back();
+  Scan scan(definition, root, {0});
+  for (int pass = 0; pass < 2; ++pass) {
+    std::vector<Cell> row;
+    try {
+      scan.next(row);
+      FAIL() << "incompatible schema accepted";
+    } catch (const Error &error) {
+      const std::string message(error.what());
+      EXPECT_NE(std::string::npos, message.find("record 2, byte 4")) << message;
+      EXPECT_NE(std::string::npos, message.find(path)) << message;
+    }
+    scan.rescan();
+  }
+}
+
 TEST_F(FileScanTest, malformed_input_fails_with_no_partial_schema)
 {
   Options options;

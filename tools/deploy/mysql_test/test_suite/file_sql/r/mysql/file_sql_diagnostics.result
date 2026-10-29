@@ -1,0 +1,36 @@
+# CSV errors preserve their reason, file and record position
+ERROR HY000: file SQL record 3, byte 6: the CSV row has 2 values but the file has 1 columns (file [DIR]/bad-columns.csv)
+ERROR HY000: file SQL record 2, byte 2: unexpected characters after a closing CSV quote (file [DIR]/quote-tail.csv)
+# JSON syntax diagnostics count blank lines and reject invalid numbers for every projection
+ERROR HY000: file SQL record 3, byte 9: the JSON object has an invalid number (file [DIR]/broken.jsonl)
+ERROR HY000: file SQL record 1, byte 0: the JSON object has an invalid number (file [DIR]/plus.jsonl)
+ERROR HY000: file SQL record 1, byte 0: the JSON object has an invalid number (file [DIR]/plus.jsonl)
+ERROR HY000: file SQL record 1, byte 0: the JSON object has an invalid number (file [DIR]/zero.jsonl)
+ERROR HY000: file SQL record 1, byte 0: the JSON object has an invalid number (file [DIR]/fraction.jsonl)
+ERROR HY000: file SQL record 1, byte 0: the JSON object has an invalid number (file [DIR]/exponent.jsonl)
+# valid JSON fractions and exponents still execute natively
+n	total
+5	89.51
+# padded typed CSV values match inferred metadata without changing strings or NULL markers
+column_name	column_type	null	key	default	extra
+i	BIGINT	NO	NULL	NULL	NULL
+d	DOUBLE	NO	NULL	NULL	NULL
+b	BOOLEAN	NO	NULL	NULL	NULL
+day	DATE	NO	NULL	NULL	NULL
+stamp	DATETIME	NO	NULL	NULL	NULL
+s	VARCHAR	NO	NULL	NULL	NULL
+n	VARCHAR	YES	NULL	NULL	NULL
+i	d	b	day	stamp	text	is_null
+12	1.5	1	2024-02-29	2024-02-29 12:34:56.123456	[ padded ]	1
+-2	2.5	0	2024-03-01	2024-03-01 01:02:03.000001	[ keep ]	0
+n	total	amount	truths
+2	10	4	1
+# quoted fields retain tab and space delimiters
+a	b
+one	two
+a	b
+one	two
+# row execution follows the same typed normalization
+i	d	b	text	is_null
+12	1.5	1	[ padded ]	1
+-2	2.5	0	[ keep ]	0

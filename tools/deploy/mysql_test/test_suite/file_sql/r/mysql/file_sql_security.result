@@ -2,7 +2,7 @@
 name
 one
 # replacement with the same size and mtime invalidates the old definition
-ERROR HY000: %s
+ERROR HY000: file SQL input has changed: [SECURITY_DIR]/input.csv
 # a fresh SQL plan observes the new file
 current_name
 two

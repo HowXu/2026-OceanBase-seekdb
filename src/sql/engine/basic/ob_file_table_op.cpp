@@ -126,6 +126,7 @@ int ObFileTableOp::inner_rescan()
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } catch (const std::exception &error) {
         ret = OB_ERR_UNEXPECTED;
+        LOG_USER_ERROR(OB_ERR_UNEXPECTED, error.what());
         LOG_WARN("file rescan failed", K(ret), "error", error.what());
       }
     }
@@ -175,7 +176,7 @@ int ObFileTableOp::open_file_scan()
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } catch (const std::exception &exception) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_USER_ERROR(OB_ERR_UNEXPECTED, "%s", exception.what());
+    LOG_USER_ERROR(OB_ERR_UNEXPECTED, exception.what());
   }
   return ret;
 }
@@ -194,7 +195,7 @@ int ObFileTableOp::open_glob()
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } catch (const std::exception &exception) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_USER_ERROR(OB_ERR_UNEXPECTED, "%s", exception.what());
+    LOG_USER_ERROR(OB_ERR_UNEXPECTED, exception.what());
   }
   glob_index_ = 0;
   return ret;
@@ -271,6 +272,7 @@ int ObFileTableOp::read_next_row()
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } catch (const std::exception &error) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_USER_ERROR(OB_ERR_UNEXPECTED, error.what());
       LOG_WARN("file scan failed", K(ret), "error", error.what());
     }
   }
@@ -312,7 +314,7 @@ int ObFileTableOp::set_text_datum(ObExpr *expr, const char *text, const int64_t 
       value = text[0] - '0';
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_USER_ERROR(OB_ERR_UNEXPECTED, "the value '%.*s' is not a boolean", length, text);
+      LOG_USER_ERROR(OB_ERR_UNEXPECTED, "the file SQL value is not a boolean");
     }
     if (OB_SUCC(ret)) {
       datum.set_int(value);
@@ -324,7 +326,7 @@ int ObFileTableOp::set_text_datum(ObExpr *expr, const char *text, const int64_t 
     const long long value = ::strtoll(text, &end, 10);
     if (OB_UNLIKELY(0 != errno || end != text + length)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_USER_ERROR(OB_ERR_UNEXPECTED, "the value '%.*s' is not an integer", length, text);
+      LOG_USER_ERROR(OB_ERR_UNEXPECTED, "the file SQL value is not an integer");
     } else {
       datum.set_int(value);
     }
@@ -334,7 +336,7 @@ int ObFileTableOp::set_text_datum(ObExpr *expr, const char *text, const int64_t 
     const double value = ::strtod(text, &end);
     if (OB_UNLIKELY(0 != errno || end != text + length)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_USER_ERROR(OB_ERR_UNEXPECTED, "the value '%.*s' is not a number", length, text);
+      LOG_USER_ERROR(OB_ERR_UNEXPECTED, "the file SQL value is not a number");
     } else {
       datum.set_double(value);
     }
@@ -342,7 +344,7 @@ int ObFileTableOp::set_text_datum(ObExpr *expr, const char *text, const int64_t 
     int32_t value = 0;
     if (OB_FAIL(ObTimeConverter::str_to_date(ObString(length, text), value))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_USER_ERROR(OB_ERR_UNEXPECTED, "the value '%.*s' is not a date", length, text);
+      LOG_USER_ERROR(OB_ERR_UNEXPECTED, "the file SQL value is not a date");
     } else {
       datum.set_date(value);
     }
@@ -351,7 +353,7 @@ int ObFileTableOp::set_text_datum(ObExpr *expr, const char *text, const int64_t 
     ObTimeConvertCtx cvrt_ctx(TZ_INFO(GET_MY_SESSION(ctx_)), false);
     if (OB_FAIL(ObTimeConverter::str_to_datetime(ObString(length, text), cvrt_ctx, value))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_USER_ERROR(OB_ERR_UNEXPECTED, "the value '%.*s' is not a datetime", length, text);
+      LOG_USER_ERROR(OB_ERR_UNEXPECTED, "the file SQL value is not a datetime");
     } else {
       datum.set_datetime(value);
     }

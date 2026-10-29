@@ -1,0 +1,106 @@
+# owner: database-competition
+# description: Strict CSV/JSON syntax, typed whitespace and useful SQL diagnostics.
+--disable_query_log
+let $DIAG_TOKEN = query_get_value("select connection_id() as token",token,1);
+let $DIAG_DIR = $OBSERVER_DIR/file_sql_diagnostics_$DIAG_TOKEN;
+exec mkdir -p "$DIAG_DIR";
+--write_file $DIAG_DIR/bad-columns.csv
+v
+one
+x,y
+EOF
+--write_file $DIAG_DIR/quote-tail.csv
+v
+"one"garbage
+EOF
+--write_file $DIAG_DIR/broken.jsonl
+{"n":1}
+
+{"n":}
+EOF
+--write_file $DIAG_DIR/plus.jsonl
+{"n":+1}
+EOF
+--write_file $DIAG_DIR/zero.jsonl
+{"n":01}
+EOF
+--write_file $DIAG_DIR/fraction.jsonl
+{"n":1.}
+EOF
+--write_file $DIAG_DIR/exponent.jsonl
+{"n":1e}
+EOF
+--write_file $DIAG_DIR/valid.jsonl
+{"n":0}
+{"n":-12}
+{"n":1.5}
+{"n":1e2}
+{"n":1E-2}
+EOF
+--write_file $DIAG_DIR/spaces.csv
+i,d,b,day,stamp,s,n
+ 12 , 1.5 , true , 2024-02-29 , 2024-02-29 12:34:56.123456 , padded ,NULL
+" -2 "," 2.5 "," false "," 2024-03-01 "," 2024-03-01 01:02:03.000001 "," keep ","NULL"
+EOF
+--write_file $DIAG_DIR/tab.csv
+a	b
+"one"	"two"
+EOF
+--write_file $DIAG_DIR/space.csv
+a b
+"one" "two"
+EOF
+set session enable_file_sql=ON;
+--echo # CSV errors preserve their reason, file and record position
+--replace_result $DIAG_DIR [DIR]
+--error 4016
+eval select * from read_csv('$DIAG_DIR/bad-columns.csv');
+--replace_result $DIAG_DIR [DIR]
+--error 4016
+eval select count(*) from read_csv('$DIAG_DIR/quote-tail.csv');
+--echo # JSON syntax diagnostics count blank lines and reject invalid numbers for every projection
+--replace_result $DIAG_DIR [DIR]
+--error 4016
+eval select * from read_json('$DIAG_DIR/broken.jsonl');
+--replace_result $DIAG_DIR [DIR]
+--error 4016
+eval select n from read_json('$DIAG_DIR/plus.jsonl');
+--replace_result $DIAG_DIR [DIR]
+--error 4016
+eval select count(*) from read_json('$DIAG_DIR/plus.jsonl');
+--replace_result $DIAG_DIR [DIR]
+--error 4016
+eval select count(*) from read_ndjson('$DIAG_DIR/zero.jsonl');
+--replace_result $DIAG_DIR [DIR]
+--error 4016
+eval select n from read_json('$DIAG_DIR/fraction.jsonl');
+--replace_result $DIAG_DIR [DIR]
+--error 4016
+eval select count(*) from read_json('$DIAG_DIR/exponent.jsonl');
+--echo # valid JSON fractions and exponents still execute natively
+ eval select count(*) as n,cast(sum(n) as decimal(10,2)) as total from read_json('$DIAG_DIR/valid.jsonl');
+--echo # padded typed CSV values match inferred metadata without changing strings or NULL markers
+ eval describe select * from read_csv('$DIAG_DIR/spaces.csv',nullstr='NULL');
+ eval select i,d,b,day,stamp,concat('[',s,']') as text,n is null as is_null from read_csv('$DIAG_DIR/spaces.csv',nullstr='NULL') order by i desc;
+ eval select count(*) as n,sum(i) as total,sum(d) as amount,sum(b) as truths from read_csv('$DIAG_DIR/spaces.csv',nullstr='NULL');
+--echo # quoted fields retain tab and space delimiters
+ eval select a,b from read_csv('$DIAG_DIR/tab.csv',delim='\t');
+ eval select a,b from read_csv('$DIAG_DIR/space.csv',delim=' ');
+--echo # row execution follows the same typed normalization
+alter system set _rowsets_max_rows=0;
+ eval select /*+ use_plan_cache(none) */ i,d,b,concat('[',s,']') as text,n is null as is_null from read_csv('$DIAG_DIR/spaces.csv',nullstr='NULL') order by i desc;
+alter system set _rowsets_max_rows=256;
+set session enable_file_sql=OFF;
+remove_file $DIAG_DIR/bad-columns.csv;
+remove_file $DIAG_DIR/quote-tail.csv;
+remove_file $DIAG_DIR/broken.jsonl;
+remove_file $DIAG_DIR/plus.jsonl;
+remove_file $DIAG_DIR/zero.jsonl;
+remove_file $DIAG_DIR/fraction.jsonl;
+remove_file $DIAG_DIR/exponent.jsonl;
+remove_file $DIAG_DIR/valid.jsonl;
+remove_file $DIAG_DIR/spaces.csv;
+remove_file $DIAG_DIR/tab.csv;
+remove_file $DIAG_DIR/space.csv;
+exec rmdir "$DIAG_DIR";
+--enable_query_log

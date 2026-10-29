@@ -14,6 +14,7 @@ eval prepare file_sql_identity from "select name from read_csv('$SECURITY_DIR/in
 execute file_sql_identity;
 --echo # replacement with the same size and mtime invalidates the old definition
 exec python3 -c "import os; from pathlib import Path; p=Path('$SECURITY_DIR/input.csv'); s=p.stat(); q=p.with_suffix('.new'); q.write_text('id,name'+chr(10)+'1,two'+chr(10)); os.utime(q,ns=(s.st_atime_ns,s.st_mtime_ns)); os.replace(q,p)";
+--replace_result $SECURITY_DIR [SECURITY_DIR]
 --error 4016
 execute file_sql_identity;
 deallocate prepare file_sql_identity;

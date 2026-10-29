@@ -2,7 +2,7 @@
 
 文件 SQL 将本机 CSV、JSONL 和受支持的 Parquet 文件暴露为原生关系。扫描器只负责读取和转换，过滤、表达式、聚合、排序与 JOIN 使用 seekdb 的优化器和执行器，不会先导入普通表。
 
-实际验收状态见 [验证记录](file-sql-progress.md)。构建和专项通过不代表官方原版流程已经通过。
+实际验收状态见 [验证记录](file-sql-progress.md)。官方原版 `file_sql_basic` 与七个专项已通过（8/8）；构建、单测和 SQL 验收分别记录，不把这些结果扩大为全库回归通过。
 
 ## 开启与授权
 
@@ -36,13 +36,16 @@ FROM read_parquet('/absolute/file_sql_data/input.parquet');
 SELECT file FROM glob('/absolute/file_sql_data/*.csv') ORDER BY file;
 ```
 
-- `read_json` / `read_ndjson` 读取 JSONL，即逐行对象；按字段并集推断，缺失值为 SQL NULL。
-- CSV 支持表头、重复列名去重、带引号的分隔符、引号转义和跨行记录。
+- `read_json` / `read_ndjson` 读取 JSONL，即逐行对象；按字段并集推断，缺失值为 SQL NULL。数字遵循 JSON 语法，拒绝 `+1`、`01`、`1.`、`1e` 等非法形式，不因 COUNT 空投影而放行。
+- CSV 支持表头、重复列名去重、带引号的分隔符、引号转义和跨行记录。闭引号后仅允许非分隔符的空格/制表符填充、配置的分隔符、换行或 EOF，不把非法尾部拆成额外行。
+- CSV 推断为数值、布尔或日期时间的字段在读取时沿用推断的首尾空白裁剪；VARCHAR 原始空白、带引号的 NULL 文本与未加引号的 NULL marker 保持可区分。
 - CSV/JSONL 采用全量推断，仅接受 `sample_size = -1`，不缓存整个输入文件。
 - 推断类型包括 BIGINT、DOUBLE、BOOLEAN、DATE、DATETIME、VARCHAR 和全 NULL 类型；DATETIME 保留支持的小数秒精度。数值计算使用对应的原生 SQL 类型。
 - 空 CSV/JSONL 可计数为零，不虚构数据列。
 - Parquet 支持平面 schema、多个 Row Group、列裁剪、可空字典及已覆盖的 DataPage V1/V2 路径。不是完整的 Parquet/Arrow 实现；不支持的 schema、编码或压缩分支明确报错。
 - 普通别名、重排/重复投影、COUNT 空投影、GROUP/HAVING/ORDER/LIMIT、INNER/LEFT JOIN 使用原生计划；支持单行、批量和重扫路径。
+
+CSV 语法/列数错误及 JSONL 解析错误携带文件、记录号和记录起始字节偏移。字节偏移从 0 计数；CSV 记录号包括表头与跳过的空记录，但不被引号内换行打断；JSONL 记录号对应含空行的物理行号。错误文本上限仍为 1024 字节。超时、取消和查询内存错误继续返回原生错误码。
 
 ## DESCRIBE
 

@@ -343,10 +343,10 @@ OZ (spec.column_exprs_.push_back(rt_expr));
 
 - [x] **3. 实现批量入口和共享转换。** `batch_count=min(max_row_cnt,MY_SPEC.max_batch_size_)`；使用 `ObEvalCtx::BatchInfoScopeGuard` 设置 batch_size/index，为每一行转换到相应 datum 槽；同一批次仅在开始清 evaluated flag，保留最后非空批与 end_ 语义。字符串分配在本批有效的表达式内存中，不让后续行覆盖先前行。
 - [x] **4. 生命周期和错误。** inner_rescan 重置批次、EOF、glob 索引与扫描游标；close/destroy 幂等释放 scan 和 STL 持有的堆内存，避免 arena 对象未析构泄漏。Error、bad_alloc、I/O 和取消在 SQL 边界转为恰当 ret。每批和长推断循环周期性检查取消/超时，不只在返回首行后检查。
-- [ ] **5. 跑行/批量计划的等价专项回归、扫描单测、原版 SQL 前半段；核对 EXPLAIN 的文件扫描、聚合与 JOIN 均由原生算子执行。** 不假设某种 JOIN 算法必然被选择；显式算子单测验证 rescan，SQL 测试验证实际计划结果。
+- [x] **5. 跑行/批量计划的等价专项回归、扫描单测、原版 SQL 前半段；核对 EXPLAIN 的文件扫描、聚合与 JOIN 均由原生算子执行。** 不假设某种 JOIN 算法必然被选择；显式算子单测验证 rescan，SQL 测试验证实际计划结果。
 - [x] **6. 提交。** `fix(sql): map projected file columns and support batch rescans`。
 
-**执行记录（任务 6，功能与专项通过）：** 源列映射、空投影、row/batch、重扫与 arena 生命周期修复已纳入 e2de2f01f。2049 行、JOIN、聚合与行/批等价专项通过。长推断现在有 I/O/CPU 周期检查；共享查询预算计入原生查询内存检查，超时、KILL QUERY 与内存限额 SQL 专项通过。原版 SQL 流程仍受 SSH 阻塞，步骤 5 保留未完成。
+**执行记录（任务 6，功能与专项通过）：** 源列映射、空投影、row/batch、重扫与 arena 生命周期修复已纳入 e2de2f01f。2049 行、JOIN、聚合与行/批等价专项通过。长推断现在有 I/O/CPU 周期检查；共享查询预算计入原生查询内存检查，超时、KILL QUERY 与内存限额 SQL 专项通过。2026-10-29 环境就绪后，原版 SQL 整流程通过，步骤 5 已完成。
 
 ## Task 7: 端到端类型、表达式和 JOIN 正确性
 
@@ -389,10 +389,10 @@ EXPLAIN SELECT id FROM read_csv('projection.csv');
 ```
 
 - [x] **2. 替换协作者的拼接 UNION SQL 路径。** 使用 SELECT 已解析 select_items 的 alias、表达式类型、可空性，直接构造常量结果表达式/行及六列输出。基础 Type::Boolean 保留 BOOLEAN 显示，派生表达式按原生 SQL 结果类型显示。列名作为 datum，不拼入 SQL 重新解析。
-- [ ] **3. 跑新用例和原版基础 DESCRIBE，核对六列逐字结果；复跑普通 `EXPLAIN SELECT 1` 和普通表 DESCRIBE。** 有无 DESCRIBE 不得改变读取路径权限检查。
+- [x] **3. 跑新用例和原版基础 DESCRIBE，核对六列逐字结果；复跑普通 `EXPLAIN SELECT 1` 和普通表 DESCRIBE。** 有无 DESCRIBE 不得改变读取路径权限检查。
 - [x] **4. 提交。** `fix(sql): describe resolved file query output columns safely`。
 
-**执行记录（任务 8，专项通过）：** 根据实际 SELECT 输出构造六列常量结果，不拼接用户列名；已纳入 e2de2f01f。投影、表达式、全 NULL、JOIN 可空性、两种 SQL mode、普通 EXPLAIN/表 DESCRIBE 专项通过。原版基础全流程未通过，步骤 3 保留未完成。
+**执行记录（任务 8，专项通过）：** 根据实际 SELECT 输出构造六列常量结果，不拼接用户列名；已纳入 e2de2f01f。投影、表达式、全 NULL、JOIN 可空性、两种 SQL mode、普通 EXPLAIN/表 DESCRIBE 专项通过。2026-10-29 原版基础 DESCRIBE 随官方全流程通过，步骤 3 已完成。
 
 ## Task 9: COPY 原生执行、CSV 选项与不覆盖发布
 
@@ -412,10 +412,10 @@ SELECT id, name, score FROM read_csv('copy.csv', null_string='NULL') ORDER BY id
 - [x] **3. 输出算子消费原生 child 行/批次，使用现有 datum 转文本能力，保留 DATE/DATETIME 精度及 NULL 标志；CsvWriter 只做 CSV 编码，不执行查询。** 普通 OUTFILE 分支不改变。
 - [x] **4. 改写 CsvWriter 临时文件与发布。** 授权父目录 fd 下 `openat` 排他创建临时文件；使用无数据竞争的随机唯一名；写入、flush/close 错误均传播。Linux 优先 `renameat2(RENAME_NOREPLACE)`；不支持时使用同目录 `linkat` 成功后 unlink 临时目录项，不回退到覆盖 rename。fd 和 unlink 作用域绑定，所有失败不触碰原目标。
 - [x] **5. 加并发与清理测试。** 两个 writer 同目标并发 commit，恰好一个成功、内容完整；目标为悬空符号链接时失败；查询表达式中途报错无最终/临时文件；模拟写入错误和取消后清理；临时名碰撞不截断既有文件。记录原输入/目标哈希前后相同。
-- [ ] **6. 跑扫描 writer 单测、专项 SQL、原版 file_sql_basic 全流程以及原有 OUTFILE 测试。** 所有输出都放本次隔离测试目录，不写 run_temp/store。
+- [x] **6. 跑扫描 writer 单测、专项 SQL、原版 file_sql_basic 全流程以及原有 OUTFILE 测试。** 所有输出都放本次隔离测试目录，不写 run_temp/store。
 - [x] **7. 提交。** `feat(sql): execute COPY with safe atomic CSV publication`。
 
-**执行记录（任务 9，专项通过）：** 原生 COPY、CSV 选项、行/批、空结果表头、ROW_COUNT、读回、legacy OUTFILE、不覆盖及错误清理已纳入 e2de2f01f。held-inode linkat 排他发布、0600、目录项替换、写错误及 100 次双 writer 竞争通过。50 项扫描单测和独立 ASan/UBSan CTest 通过。f3ee378fc 修复全局授权被其他连接收紧时的旧会话快照问题，COPY 发布前撤权明确拒绝且清理临时 inode。原版 file_sql_basic 的 SSH 阻塞未消除，步骤 6 保留未完成；构建保持 -j3。
+**执行记录（任务 9，专项通过）：** 原生 COPY、CSV 选项、行/批、空结果表头、ROW_COUNT、读回、legacy OUTFILE、不覆盖及错误清理已纳入 e2de2f01f。held-inode linkat 排他发布、0600、目录项替换、写错误及 100 次双 writer 竞争通过。50 项扫描单测和独立 ASan/UBSan CTest 通过。f3ee378fc 修复全局授权被其他连接收紧时的旧会话快照问题，COPY 发布前撤权明确拒绝且清理临时 inode。2026-10-29 官方 file_sql_basic 整流程通过，步骤 6 已完成；构建保持 -j3。
 
 ## Task 10: 原版公开测试、权限变化与回归证据
 
@@ -423,9 +423,9 @@ SELECT id, name, score FROM read_csv('copy.csv', null_string='NULL') ORDER BY id
 
 **Interfaces:** 使用现有 `.github/script/seekdb/mysqltest_for_seekdb.py` 的 `mysqltest_environment`、`prepare_instance`、`run_case`，不新增 tools runner。该 runner 的 prepare_instance 会清理其 base_dir，必须使用本次 mkdtemp 得到的专用目录。
 
-- [ ] **1. 验证环境。** 检查新编译二进制、GTest、obclient/mysqltest；端口选择空闲的独立端口；公开夹具 include 需要到实例 host_ip 的免交互 SSH/SCP。若无法连接，停在环境阻塞，不修改测试绕过，也不修改用户 SSH 配置。
+- [x] **1. 验证环境。** 检查新编译二进制、GTest、obclient/mysqltest；端口选择空闲的独立端口；公开夹具 include 需要到实例 host_ip 的免交互 SSH/SCP。若无法连接，停在环境阻塞，不修改测试绕过，也不修改用户 SSH 配置。
 - [x] **2. 建立单次隔离实例，保存 base_dir。** 用 `tempfile.mkdtemp(prefix='seekdb-task2-instance-')` 创建目录，另建日志目录；通过现有 sdb.py/runner 初始化。不要指向已有 `run_temp`。连接后配置 test admin 会话/实例允许本次测试根目录；核对原版 include 的 data_for_mysqltest_file_sql 位于授权范围内。
-- [ ] **3. 按名称筛选现有用例并运行，不执行整库。** 调用示例的 API 形状如下；参数值从本次隔离实例取，不硬编码已有运行目录：
+- [x] **3. 按名称筛选现有用例并运行，不执行整库。** 调用示例的 API 形状如下；参数值从本次隔离实例取，不硬编码已有运行目录：
 
 ```python
 cases = runner.discover_cases(repo_root)
@@ -444,9 +444,9 @@ for case in selected:
 - [x] **4. 跑安全专项。** 准备后关闭开关、收紧 secure_file_priv、替换同长文件、重扫及扫描期间改写、glob 逃逸、预算超限、COPY 发布竞争；期望明确错误及资源回收。增加 prepared/repeated 执行验证，不能依赖首次推断做永久授权。
 - [x] **5. 跑普通 SQL 回归与最终构建。** CMake Parser/GTest、独立扫描 CTest、服务端构建、源码清单一致性、git diff --check、原版夹具完整性。Bazel 不在当前实施与验收范围，不能报告为遗漏或阻塞。原有 AI 测试不修改，不新增其 CMake 适配；视现有运行入口可用性记录结果，不因其他赛题缺陷扩展本任务。
 - [x] **6. 按 code-review 技能检查最终 diff。** 聚焦越界、生命周期、取消、异常传播、COPY 安全、列/批次一致性和证据；发现 Major/Blocker 先补失败测试并修复，不以文档代替修复。不分析持久化升级兼容性。
-- [ ] **7. 更新说明与提交。** `docs/file-sql.md` 只写实际实现功能和工程上限；`docs/file-sql-progress.md` 记录每条实际命令、退出状态、测试筛选、原版夹具哈希、未运行范围和剩余阻塞。`docs(sql): record file SQL completion and verification evidence`。
+- [x] **7. 更新说明与提交。** `docs/file-sql.md` 只写实际实现功能和工程上限；`docs/file-sql-progress.md` 记录每条实际命令、退出状态、测试筛选、原版夹具哈希、未运行范围和剩余阻塞。`docs(sql): record file SQL completion and verification evidence`。
 
-**执行记录（任务 10，官方流程仍受阻）：** 2026-10-29 已完成最新 seekdb/测试目标 -j3 构建、三个 CTest、50 GTest、六个 SQL 专项、扫描库 ASan/UBSan 和 100 次 COPY 竞争；原版八文件与比赛基线逐字节相同。审查通过失败 SQL 发现当前全局 secure_file_priv 与会话快照不一致，已以 schema guard 下读取/复制当前全局值修复，并提交 f3ee378fc。权限专项覆盖旧准备计划、已执行过的 DESCRIBE、准备/新 COPY、执行中撤权及临时 inode 清理；资源专项覆盖限额变化、推断超时和 KILL QUERY。官方原版流程实际在 fixture SSH 安装阶段失败；用户放开端口后复查仍无 22 监听，不修改 SSH 配置或脚本绕过。说明和命令证据写入 docs/file-sql.md 与 docs/file-sql-progress.md；不将官方尚未通过的步骤标为完成。
+**执行记录（任务 10，计划内验收通过）：** 2026-10-29 已完成 seekdb/测试目标 -j3 构建、三个 CTest、57 GTest、扫描库 ASan/UBSan 和 100 次 COPY 竞争。f3ee378fc 修复当前全局授权与旧会话副本不一致的问题，准备计划、DESCRIBE、COPY 执行中撤权和清理、查询限额变化、超时与 KILL QUERY 专项通过。用户完成 SSH 服务、主机信任和公钥认证后，BatchMode SSH 退出 0；最新未修改的官方 file_sql_basic 整流程约 0.577 s 通过，紧接着七个专项全部通过（8/8），含原版 SSH/SCP 安装和清理。提测前四项审查缺陷已按 TDD 修复，补充严格 CSV/JSON、类型空白与错误定位；详见 `2026-10-28-file-sql-review-fixes.md`。原版八文件运行后仍与比赛基线逐字节相同。用户追加的 AI COLUMN 五项原版测试实际为 0/5，均在 AI COLUMN 建表语法处报 1064，未实现该模块，不将此记为通过；与文件 SQL 的验收独立记录。说明与实际命令/范围见 docs/file-sql.md、docs/file-sql-progress.md；用户 AI 文档未触碰，没有推送、运行全库 mysqltest 或声称完整 AI 回归通过。
 
 ## 检查点与执行方式
 
@@ -472,4 +472,4 @@ for case in selected:
 | 记录/列/页/glob 上限与扫描总工作区 | 4、6、10 |
 | 测试位置、红绿过程、构建/回归证据与最终审查 | 每任务及10 |
 
-以上命令和期望是实施步骤，不表示已经执行或通过；写计划阶段只检查路径、现有工具接口和文档一致性。
+任务中的示例命令与 SQL 是最初的实施步骤；实际执行命令、结果和未覆盖范围以各任务执行记录及 docs/file-sql-progress.md 为准，不据示例文字推断额外验证已运行。

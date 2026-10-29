@@ -325,7 +325,7 @@ int ObSelectResolver::resolve_file_copy(const ParseNode &node, ObSelectIntoItem 
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } catch (const std::exception &error) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_USER_ERROR(OB_ERR_UNEXPECTED, "%s", error.what());
+    LOG_USER_ERROR(OB_ERR_UNEXPECTED, error.what());
   }
   return ret;
 } catch (const FileSqlQueryError &error) {
@@ -333,7 +333,7 @@ int ObSelectResolver::resolve_file_copy(const ParseNode &node, ObSelectIntoItem 
 } catch (const std::bad_alloc &) {
   return OB_ALLOCATE_MEMORY_FAILED;
 } catch (const std::exception &error) {
-  LOG_USER_ERROR(OB_ERR_UNEXPECTED, "%s", error.what());
+  LOG_USER_ERROR(OB_ERR_UNEXPECTED, error.what());
   return OB_ERR_UNEXPECTED;
 }
 
@@ -428,10 +428,10 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
         ret = error.code();
       } catch (const file_sql::Error &error) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_USER_ERROR(OB_ERR_UNEXPECTED, "%s", error.what());
+        LOG_USER_ERROR(OB_ERR_UNEXPECTED, error.what());
       } catch (const std::exception &exception) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_USER_ERROR(OB_ERR_UNEXPECTED, "%s", exception.what());
+        LOG_USER_ERROR(OB_ERR_UNEXPECTED, exception.what());
       }
     }
     if (OB_SUCC(ret) && OB_ISNULL(item = stmt->create_table_item(*allocator_))) {
@@ -499,7 +499,7 @@ int ObDMLResolver::resolve_file_table_item(const ParseNode &parse_tree,
 } catch (const std::bad_alloc &) {
   return OB_ALLOCATE_MEMORY_FAILED;
 } catch (const std::exception &error) {
-  LOG_USER_ERROR(OB_ERR_UNEXPECTED, "%s", error.what());
+  LOG_USER_ERROR(OB_ERR_UNEXPECTED, error.what());
   return OB_ERR_UNEXPECTED;
 }
 

@@ -518,7 +518,20 @@ public:
     return item;
   }
 
-  void begin_record() { record_bytes_ = 0; }
+  void begin_record()
+  {
+    record_bytes_ = 0;
+    record_start_ = offset_ - buffer_.size() + position_;
+    ++record_number_;
+  }
+
+  Error error(std::string_view message) const
+  {
+    return Error("file SQL record " + budget_to_string(record_number_)
+                 + ", byte " + budget_to_string(record_start_) + ": "
+                 + BudgetString(message.substr(0, 1024)) + " (file "
+                 + BudgetString(file_->path().data(), file_->path().size()) + ")");
+  }
   void finish_record(size_t terminator_bytes)
   {
     check_count(record_bytes_ - terminator_bytes, MAX_RECORD_BYTES, "record");
@@ -545,6 +558,8 @@ public:
     offset_ = 0;
     position_ = 0;
     record_bytes_ = 0;
+    record_start_ = 0;
+    record_number_ = 0;
     buffer_.clear();
   }
 
@@ -564,6 +579,8 @@ private:
   BudgetVector<char> buffer_;
   size_t position_ = 0;
   size_t record_bytes_ = 0;
+  uint64_t record_start_ = 0;
+  uint64_t record_number_ = 0;
 };
 
 /**
@@ -624,6 +641,9 @@ public:
           terminator_bytes = 1;
           break;
         }
+        if (separator >= 0) {
+          throw error("unexpected characters after a closing CSV quote");
+        }
         break;
       }
       source_.finish_record(terminator_bytes);
@@ -640,6 +660,8 @@ public:
     source_.rewind();
     skip_bom();
   }
+
+  Error error(std::string_view message) const { return source_.error(message); }
 
 private:
   void skip_bom()
@@ -660,12 +682,12 @@ private:
     while (true) {
       const int item = source_.get();
       if (item < 0) {
-        throw Error("the CSV file has an unterminated quoted value");
+        throw error("the CSV file has an unterminated quoted value");
       }
       if (options_.escape != options_.quote && item == options_.escape) {
         const int escaped = source_.get();
         if (escaped < 0) {
-          throw Error("the CSV file has an unterminated quoted value");
+          throw error("the CSV file has an unterminated quoted value");
         }
         value.push_back(static_cast<char>(escaped));
         continue;
@@ -687,8 +709,8 @@ private:
       }
       value.push_back(static_cast<char>(item));
     }
-    // the characters between the closing quote and the separator are ignored
-    while (source_.peek() == ' ' || source_.peek() == '\t') {
+    // Ignore padding after a closing quote, but never consume the delimiter.
+    while ((source_.peek() == ' ' || source_.peek() == '\t') && source_.peek() != options_.delimiter) {
       source_.get();
     }
   }
@@ -970,37 +992,50 @@ private:
       return true;
     }
     const size_t start = position_;
-    if (position_ < text_.size() && (text_[position_] == '-' || text_[position_] == '+')) {
+    const auto invalid_number = [&]() {
+      error = "the JSON object has an invalid number";
+      return false;
+    };
+    const auto consume_digits = [&]() {
+      const size_t begin = position_;
+      while (position_ < text_.size() && text_[position_] >= '0' && text_[position_] <= '9') {
+        ++position_;
+      }
+      return position_ > begin;
+    };
+    if (text_[position_] == '-') {
       ++position_;
     }
-    bool has_digit = false;
+    if (position_ < text_.size() && text_[position_] == '0') {
+      ++position_;
+    } else if (position_ < text_.size() && text_[position_] >= '1' && text_[position_] <= '9') {
+      consume_digits();
+    } else {
+      return invalid_number();
+    }
     bool has_fraction = false;
     bool has_exponent = false;
-    while (position_ < text_.size()) {
-      const char current = text_[position_];
-      if (current >= '0' && current <= '9') {
-        has_digit = true;
-        ++position_;
-        continue;
+    if (position_ < text_.size() && text_[position_] == '.') {
+      has_fraction = true;
+      ++position_;
+      if (!consume_digits()) {
+        return invalid_number();
       }
-      if (current == '.' && !has_fraction && !has_exponent) {
-        has_fraction = true;
-        ++position_;
-        continue;
-      }
-      if ((current == 'e' || current == 'E') && has_digit && !has_exponent) {
-        has_exponent = true;
-        ++position_;
-        if (position_ < text_.size() && (text_[position_] == '-' || text_[position_] == '+')) {
-          ++position_;
-        }
-        continue;
-      }
-      break;
     }
-    if (!has_digit) {
-      error = "the JSON object has an invalid value";
-      return false;
+    if (position_ < text_.size() && (text_[position_] == 'e' || text_[position_] == 'E')) {
+      has_exponent = true;
+      ++position_;
+      if (position_ < text_.size() && (text_[position_] == '-' || text_[position_] == '+')) {
+        ++position_;
+      }
+      if (!consume_digits()) {
+        return invalid_number();
+      }
+    }
+    if (position_ < text_.size() && text_[position_] != ',' && text_[position_] != '}'
+        && text_[position_] != ' ' && text_[position_] != '\t'
+        && text_[position_] != '\r' && text_[position_] != '\n') {
+      return invalid_number();
     }
     member.value = text_.substr(start, position_ - start);
     if (!has_fraction && !has_exponent) {
@@ -1051,16 +1086,18 @@ public:
       return false;
     }
     if (values.size() != definition_.columns.size()) {
-      throw Error("the CSV row has " + budget_to_string(values.size()) + " values but the file has "
-                  + budget_to_string(definition_.columns.size()) + " columns");
+      throw reader_.error("the CSV row has " + budget_to_string(values.size()) + " values but the file has "
+                          + budget_to_string(definition_.columns.size()) + " columns");
     }
     cells.clear();
     cells.reserve(projection_.size());
     for (size_t index = 0; index < projection_.size(); ++index) {
       const size_t column = static_cast<size_t>(projection_[index]);
       WorkingCell cell;
-      cell.text = values[column];
       cell.is_null = !quoted[column] && values[column] == definition_.options.null_string;
+      const Type type = definition_.columns[column].type;
+      cell.text = cell.is_null || type == Type::Varchar || type == Type::Null
+          ? values[column] : trim(values[column]);
       cells.push_back(cell);
     }
     return true;
@@ -1113,7 +1150,7 @@ public:
       BudgetString error;
       JsonLineParser parser(line);
       if (!parser.parse(members, error)) {
-        throw Error(error);
+        throw source_.error(error);
       }
       cells.clear();
       cells.reserve(projection_.size());
@@ -1189,11 +1226,12 @@ void consume_csv_row(const BudgetVector<BudgetString> &values,
                      const WorkingOptions &options,
                      BudgetVector<Type> &types,
                      BudgetVector<int> &scales,
-                     BudgetVector<bool> &nullable)
+                     BudgetVector<bool> &nullable,
+                     const CsvRecordReader &reader)
 {
   for (size_t index = 0; index < values.size(); ++index) {
     if (!is_valid_utf8(values[index].data(), values[index].size())) {
-      throw Error("the CSV file contains a value that is not valid UTF-8");
+      throw reader.error("the CSV file contains a value that is not valid UTF-8");
     }
     const bool is_null = !quoted[index] && values[index] == options.null_string;
     if (is_null) {
@@ -1239,14 +1277,14 @@ void infer_csv(const std::shared_ptr<LocalFile> &file, WorkingDefinition &defini
   BudgetVector<int> scales(column_count, 0);
   BudgetVector<bool> nullable(column_count, false);
   if (!options.header) {
-    consume_csv_row(values, quoted, options, types, scales, nullable);
+    consume_csv_row(values, quoted, options, types, scales, nullable, reader);
   }
   while (reader.next_record(values, quoted)) {
     if (values.size() != column_count) {
-      throw Error("the CSV row has " + budget_to_string(values.size()) + " values but the file has "
-                  + budget_to_string(column_count) + " columns");
+      throw reader.error("the CSV row has " + budget_to_string(values.size()) + " values but the file has "
+                         + budget_to_string(column_count) + " columns");
     }
-    consume_csv_row(values, quoted, options, types, scales, nullable);
+    consume_csv_row(values, quoted, options, types, scales, nullable, reader);
   }
   definition.columns.clear();
   for (size_t index = 0; index < column_count; ++index) {
@@ -1281,13 +1319,13 @@ void infer_json(const std::shared_ptr<LocalFile> &file, WorkingDefinition &defin
     BudgetString error;
     JsonLineParser parser(line);
     if (!parser.parse(members, error)) {
-      throw Error(error);
+      throw source.error(error);
     }
     BudgetMap<BudgetString, bool> seen;
     for (size_t index = 0; index < members.size(); ++index) {
       const BudgetString key = lowercase(members[index].key);
       if (seen.count(key) > 0) {
-        throw Error("the JSON object has the duplicated key " + members[index].key);
+        throw source.error("the JSON object has the duplicated key " + members[index].key);
       }
       seen[key] = true;
       BudgetMap<BudgetString, size_t>::iterator found = lookup.find(key);

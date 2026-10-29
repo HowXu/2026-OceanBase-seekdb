@@ -6,7 +6,7 @@ id	name	missing	score
 2		0	NULL
 3	NULL	0	20
 # publishing cannot replace an existing output
-ERROR HY000: %s
+ERROR HY000: file SQL output already exists or is inaccessible
 n	total
 3	6
 # synonymous options cannot silently override one another
