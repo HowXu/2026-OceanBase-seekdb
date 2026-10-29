@@ -122,7 +122,13 @@ int ObStaticEngineCG::generate(const ObLogPlan &log_plan, ObPhysicalPlan &phy_pl
   int ret = OB_SUCCESS;
   phy_plan_ = &phy_plan;
   opt_ctx_ = &log_plan.get_optimizer_context();
-  if (OB_NOT_NULL(log_plan.get_stmt()) && OB_NOT_NULL(opt_ctx_->get_schema_guard())
+  bool ai_strict_read = false;
+  if (OB_NOT_NULL(opt_ctx_->get_session_info())
+      && OB_FAIL(opt_ctx_->get_session_info()->get_sys_variable(
+          share::SYS_VAR_AI_COLUMN_STRICT_READ, ai_strict_read))) {
+    return ret;
+  }
+  if (ai_strict_read && OB_NOT_NULL(log_plan.get_stmt()) && OB_NOT_NULL(opt_ctx_->get_schema_guard())
       && OB_FAIL(AIColumnStrictRead::collect_referenced(*log_plan.get_stmt(),
           *opt_ctx_->get_schema_guard(), phy_plan.get_ai_column_refs()))) {
     return ret;

@@ -335,7 +335,7 @@ int AIColumnDmlService::build_retry_statements(const ObTableSchema &table,
           "SELECT %lu,%lu,", OB_SYS_DATABASE_NAME, OB_ALL_AI_COLUMN_TASK_TNAME,
           table.get_table_id(), column_id))
           || OB_FAIL(ai_append_identifier(sql, request->get_column_name_str()))
-          || OB_FAIL(sql.append_fmt(",%ld,'','','1=1',0,0,NOW(6),JSON_OBJECT('input',(%.*s)),"
+          || OB_FAIL(sql.append_fmt(",%ld,'','','1=1',0,0,DATE_ADD(NOW(6),INTERVAL 2 SECOND),JSON_OBJECT('input',(%.*s)),"
               "JSON_SET(CAST(", definition->get_schema_version(), input.length(), input.ptr()))
           || OB_FAIL(ai_append_literal(sql, definition->get_normalized_expr(), allocator))
           || OB_FAIL(sql.append_fmt(" AS JSON),'$.config',CAST((%.*s) AS JSON)) FROM %s WHERE %s AND ",

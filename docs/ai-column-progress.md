@@ -12,11 +12,11 @@
 
 Parser 和 Strict Read 系统变量注册已验证并提交为 `86aa5207e`。Schema/DDL、事务 DML 维护及后台 Worker 已提交为 `4f41681b9`。条件 RETRY 与 strict read 执行检查已完成首轮实现并成功构建，但最后一项官方测试尚未通过，不能把编译成功当作功能验收。
 
-**当前官方验证为 4/5（分别运行，不冒充一次完整五套串行验收）：** `ai_column_ddl` 已在先前重建实例完整通过；最新 Worker 二进制上 `ai_column_t1_dml`、`ai_column_worker`、`ai_column_vector_index` 均原样完整通过。最新证据目录为 `/var/tmp/seekdb-task3-evidence/rebuilt-official-20261029-171151` 和 `rebuilt-official-20261029-171216`。`ai_column_retry_strict` 仍待实现，因此不能声称五套验收完成。
+**当前官方验证为 5/5：** 2026-10-29 使用同一最终功能二进制按 `ai_column_ddl`、`ai_column_t1_dml`、`ai_column_worker`、`ai_column_retry_strict`、`ai_column_vector_index` 顺序原样串行运行，五套全部通过。证据目录为 `/var/tmp/seekdb-task3-evidence/rebuilt-official-20261029-190623`，日志为 `official-five-serial-second.log`。官方 test/result/Mock 未修改。
 
 本阶段已实现业务事务内任务创建/失效/删除、独立 AI 嵌套 SQL 标记、受控隐藏列访问、提交后的持久化 Worker、HTTP 外事务调用、按 request 组发布、失败重试、JSON/整数/向量转换及旧 request 防覆盖。官方 Worker 的 HTTP 400 后成功、慢旧请求不覆盖新结果、最终失败和向量索引链路均通过原版断言。转换器独立测试 6/6 通过；`git diff --check` 通过，官方夹具未修改。
 
-后续 RETRY 阶段补充了集合 SQL 构造测试，DML 辅助测试为 **12/12**。官方 RETRY/strict 已推进到首个预期 11120 检查点；物理计划现在保存实际引用的 AI 列，执行前按当前隐藏状态检查并返回新生成的 11120 错误。该阶段仍有初始结果发布完整性及 strict 端到端行为待验证，最后一套不标记 GREEN。
+后续 RETRY 阶段补充了集合 SQL 构造测试，DML 辅助测试为 **12/12**。物理计划保存实际引用的 AI 列，执行前按当前隐藏状态检查并返回 11120；伪 STATUS 通过占位列解析后映射为隐藏状态 CASE，反引号业务 `status` 保持原义。修复了 RETRY 非 NUL 结尾谓词被 `%s` 误读的问题，Worker 发布统一按长度拼接。最终五套串行结果已 GREEN。
 
 ## 已实现并验证：Parser
 

@@ -183,7 +183,9 @@ int AIColumnWorker::claim_and_load(ObIAllocator &allocator, AIColumnWorkerGroup 
     LOG_WARN("failed to end AI column claim transaction", K(tmp_ret));
     if (OB_SUCC(ret)) { ret = tmp_ret; }
   }
-  if (OB_FAIL(ret)) { claimed = false; }
+  if (OB_FAIL(ret)) {
+    claimed = false;
+  }
   return ret;
 }
 
@@ -222,6 +224,8 @@ int AIColumnWorker::load_tasks(ObISQLClient &client, ObIAllocator &allocator,
       }
       if (OB_ITER_END == ret) { ret = OB_SUCCESS; }
     }
+  }
+  if (OB_FAIL(ret)) {
   }
   return ret;
 }
@@ -407,8 +411,8 @@ int AIColumnWorker::publish_group(ObIAllocator &allocator, AIColumnWorkerGroup &
       } else if (OB_FAIL(sql.append(","))) {
       } else if (OB_FAIL(AIColumnResultConverter::append_identifier(sql,
           table->get_column_schema(definition->get_state_column_id())->get_column_name_str()))) {
-      } else if (OB_FAIL(sql.append_fmt("=%d WHERE %s AND ", OB_SUCCESS == task.call_ret_ ? 0 : 2,
-          task.rowkey_predicate_.ptr()))) {
+      } else if (OB_FAIL(sql.append_fmt("=%d WHERE %.*s AND ", OB_SUCCESS == task.call_ret_ ? 0 : 2,
+          static_cast<int>(task.rowkey_predicate_.length()), task.rowkey_predicate_.ptr()))) {
       } else if (OB_FAIL(AIColumnResultConverter::append_identifier(sql,
           table->get_column_schema(definition->get_request_column_id())->get_column_name_str()))) {
       } else if (OB_FAIL(sql.append("="))) {
@@ -455,6 +459,7 @@ int AIColumnWorker::process_one()
     bool claimed = false;
     if (OB_FAIL(pick_group(allocator, group))) {
       if (OB_ITER_END == ret) { ret = OB_SUCCESS; }
+
     } else if (OB_FAIL(claim_and_load(allocator, group, claimed))) {
     } else if (!claimed) {
     } else {

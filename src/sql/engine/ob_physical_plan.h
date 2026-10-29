@@ -57,7 +57,7 @@ class ObSqlSchemaGuard;
 typedef common::ObFixedArray<common::ObFixedArray<int64_t, common::ObIAllocator>, common::ObIAllocator> PhyRowParamMap;
 typedef common::ObFixedArray<ObTableLocation, common::ObIAllocator> TableLocationFixedArray;
 typedef common::ObFixedArray<ObPlanPwjConstraint, common::ObIAllocator> PlanPwjConstraintArray;
-typedef common::ObFixedArray<AIColumnRef, common::ObIAllocator> AIColumnRefFixedArray;
+typedef common::ObSEArray<AIColumnRef, 4, common::ModulePageAllocator, true> AIColumnRefFixedArray;
 
 class ObPhysicalPlan : public ObPlanCacheObject
 {

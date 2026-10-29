@@ -40,30 +40,31 @@ namespace sql
 {
 namespace
 {
-void map_retry_status_column(ParseNode *node, const ObColumnSchemaV2 &state_column)
+void map_retry_status_column(ParseNode *node, const ObColumnSchemaV2 &placeholder_column)
 {
   if (nullptr == node) { return; }
-  if (T_COLUMN_REF == node->type_ && node->num_child_ > 0 && nullptr != node->children_
-      && nullptr != node->children_[0] && 0 == node->children_[0]->is_input_quoted_
-      && nullptr != node->children_[0]->str_value_) {
-    ParseNode &name = *node->children_[0];
+  if (T_COLUMN_REF == node->type_ && node->num_child_ > 2 && nullptr != node->children_
+      && nullptr != node->children_[2] && 0 == node->children_[2]->is_input_quoted_
+      && nullptr != node->children_[2]->str_value_) {
+    ParseNode &name = *node->children_[2];
     const ObString column_name(name.str_len_, name.str_value_);
     if (0 == column_name.case_compare("status")) {
-      const ObString &hidden = state_column.get_column_name_str();
-      name.str_value_ = hidden.ptr();
-      name.str_len_ = hidden.length();
+      const ObString &placeholder = placeholder_column.get_column_name_str();
+      name.str_value_ = placeholder.ptr();
+      name.str_len_ = placeholder.length();
       name.raw_text_ = nullptr;
       name.text_len_ = 0;
     }
   }
   if (nullptr != node->children_) {
     for (int64_t i = 0; i < node->num_child_; ++i) {
-      map_retry_status_column(node->children_[i], state_column);
+      map_retry_status_column(node->children_[i], placeholder_column);
     }
   }
 }
 
 int print_retry_predicate(ObRawExpr &expr, const ObColumnSchemaV2 &state_column,
+    const ObColumnSchemaV2 &placeholder_column,
     ObSchemaGetterGuard &schema_guard, ObObjPrintParams print_params,
     ObIAllocator &allocator, ObString &predicate)
 {
@@ -75,9 +76,11 @@ int print_retry_predicate(ObRawExpr &expr, const ObColumnSchemaV2 &state_column,
     if (OB_FAIL(printer.do_print(&expr, T_NONE_SCOPE, true))) {
     } else {
       printed.assign_ptr(buffer, pos);
-      const ObString &hidden = state_column.get_column_name_str();
-      const std::string token = "`" + std::string(hidden.ptr(), hidden.length()) + "`";
-      const std::string replacement = "(CASE " + token + " WHEN 0 THEN 'READY' "
+      const ObString &state_name = state_column.get_column_name_str();
+      const ObString &placeholder_name = placeholder_column.get_column_name_str();
+      const std::string state_token = "`" + std::string(state_name.ptr(), state_name.length()) + "`";
+      const std::string token = "`" + std::string(placeholder_name.ptr(), placeholder_name.length()) + "`";
+      const std::string replacement = "(CASE " + state_token + " WHEN 0 THEN 'READY' "
           "WHEN 2 THEN 'FAILED' ELSE 'PENDING' END)";
       std::string text(printed.ptr(), printed.length());
       for (std::string::size_type at = text.find(token); at != std::string::npos;
@@ -482,14 +485,20 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
         case T_RETRY_AI_COLUMN: {
           ObAlterTableArg &arg = alter_table_stmt->get_alter_table_arg();
           const ObColumnSchemaV2 *column = nullptr;
-          if (node.num_child_ != 1 || action_node->num_child_ != 2
+          if (node.num_child_ != 1) {
+            ret = OB_NOT_SUPPORTED;
+            LOG_USER_ERROR(OB_NOT_SUPPORTED, "combining AI COLUMN RETRY with another ALTER action");
+          } else if (action_node->num_child_ != 2
               || OB_ISNULL(action_node->children_) || OB_ISNULL(action_node->children_[0])) {
             ret = OB_NOT_SUPPORTED;
           } else {
             const ParseNode &name = *action_node->children_[0];
             const ObString column_name(name.str_len_, name.str_value_);
             column = table_schema_->get_column_schema(column_name);
-            if (OB_ISNULL(column) || !column->is_ai_column()) { ret = OB_NOT_SUPPORTED; }
+            if (OB_ISNULL(column) || !column->is_ai_column()) {
+              ret = OB_NOT_SUPPORTED;
+              LOG_USER_ERROR(OB_NOT_SUPPORTED, "retrying a column that is not an AI column");
+            }
           }
           if (OB_FAIL(ret)) {
           } else if (OB_ISNULL(column->get_ai_column_schema())) {
@@ -505,7 +514,7 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
             if (OB_ISNULL(state)) {
               ret = OB_SCHEMA_ERROR;
             } else {
-              map_retry_status_column(action_node->children_[1], *state);
+              map_retry_status_column(action_node->children_[1], *column);
               session_info_->set_ai_column_internal_access(true);
               ret = action_node->children_[1]->num_child_ > 0
                   ? resolve_check_constraint_expr(params_, action_node->children_[1]->children_[0],
@@ -516,7 +525,7 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
             } else if (OB_ISNULL(where) || OB_ISNULL(schema_checker_->get_schema_guard())) {
               ret = OB_ERR_UNEXPECTED;
             } else {
-              ret = print_retry_predicate(*where, *state, *schema_checker_->get_schema_guard(),
+              ret = print_retry_predicate(*where, *state, *column, *schema_checker_->get_schema_guard(),
                   ObObjPrintParams(), arg.allocator_, arg.ai_retry_where_);
             }
           }

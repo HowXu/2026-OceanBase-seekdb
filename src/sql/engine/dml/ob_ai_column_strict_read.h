@@ -14,6 +14,8 @@ class ObPhysicalPlan;
 
 struct AIColumnRef
 {
+  OB_UNIS_VERSION(1);
+public:
   AIColumnRef() : table_id_(0), column_id_(0) {}
   AIColumnRef(uint64_t table_id, uint64_t column_id) : table_id_(table_id), column_id_(column_id) {}
   bool operator==(const AIColumnRef &other) const

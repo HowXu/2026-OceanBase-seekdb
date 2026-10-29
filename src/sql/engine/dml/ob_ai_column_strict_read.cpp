@@ -52,9 +52,13 @@ int AIColumnStrictRead::collect_referenced(const ObDMLStmt &stmt, ObSchemaGetter
     const ObColumnRefRawExpr *expr = columns.at(i);
     const ObTableSchema *table = nullptr;
     const ObColumnSchemaV2 *column = nullptr;
+    const TableItem *item = nullptr;
     if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(guard.get_table_schema(expr->get_table_id(), table))) {
+    } else if (OB_FALSE_IT(item = stmt.get_table_item_by_id(expr->get_table_id()))
+        || (TableItem::BASE_TABLE != item->type_ && TableItem::ALIAS_TABLE != item->type_)
+        || OB_INVALID_ID == item->ref_id_) {
+    } else if (OB_FAIL(guard.get_table_schema(item->ref_id_, table))) {
     } else if (OB_NOT_NULL(table)
         && OB_NOT_NULL(column = table->get_column_schema(expr->get_column_id()))
         && column->is_ai_column()) {
@@ -74,20 +78,23 @@ int AIColumnStrictRead::check(ObExecContext &exec_ctx, const ObPhysicalPlan &pla
   int ret = OB_SUCCESS;
   bool strict = false;
   ObSQLSessionInfo *session = exec_ctx.get_my_session();
-  ObSqlCtx *sql_ctx = exec_ctx.get_sql_ctx();
-  if (OB_ISNULL(session) || OB_ISNULL(sql_ctx) || OB_ISNULL(sql_ctx->schema_guard_)) {
+  ObSchemaGetterGuard schema_guard;
+  if (OB_ISNULL(session)) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(session->get_sys_variable(share::SYS_VAR_AI_COLUMN_STRICT_READ, strict))
-      || !strict || OB_ISNULL(GCTX.sql_proxy_)) {
+      || !strict || plan.get_ai_column_refs().empty()) {
+  } else if (OB_ISNULL(GCTX.sql_proxy_) || OB_ISNULL(GCTX.schema_service_)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(GCTX.schema_service_->get_full_runtime_schema_guard(schema_guard))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < plan.get_ai_column_refs().count(); ++i) {
       const AIColumnRef &ref = plan.get_ai_column_refs().at(i);
       const ObTableSchema *table = nullptr;
       const ObDatabaseSchema *database = nullptr;
       const ObColumnSchemaV2 *column = nullptr;
-      if (OB_FAIL(sql_ctx->schema_guard_->get_table_schema(ref.table_id_, table)) || nullptr == table) {
+      if (OB_FAIL(schema_guard.get_table_schema(ref.table_id_, table)) || nullptr == table) {
         ret = OB_SCHEMA_ERROR;
-      } else if (OB_FAIL(sql_ctx->schema_guard_->get_database_schema(table->get_database_id(), database))
+      } else if (OB_FAIL(schema_guard.get_database_schema(table->get_database_id(), database))
           || nullptr == database) {
         ret = OB_SCHEMA_ERROR;
       } else if (OB_ISNULL(column = table->get_column_schema(ref.column_id_))
