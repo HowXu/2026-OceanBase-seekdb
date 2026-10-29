@@ -14,7 +14,7 @@ select tokenize('中华人民共和国人民大会堂 ＡＢＣ１２３ 😀', 
 select tokenize('中华人民共和国人民大会堂 ＡＢＣ１２３ 😀', 'ik', '[{"additional_args": [{"ik_mode": "max_word"}]}]') as tokens;
 select tokenize(cast(repeat('中文 OceanBase１２３ 😀，', 100) as char character set utf8mb4), 'ik', '[{"output": "all"}]') as tokens;
 
-# Preserve counts, the first equivalent spelling, and stop words when grouping.
+# Preserve counts, the representative equivalent spelling, and stop words when grouping.
 select tokenize('Database DATABASE database audit AUDIT the THE and and', 'beng', '[{"output": "all"}]') as grouped;
 select tokenize(_utf8mb4'CAFÉ café cafe CAFE résumé resume' collate utf8mb4_general_ci, 'beng', '[{"output": "all"}]') as grouped;
 select tokenize('数据库 数据库 全文索引 ABC abc ＡＢＣ 123 123', 'ik', '[{"output": "all"}]') as grouped;

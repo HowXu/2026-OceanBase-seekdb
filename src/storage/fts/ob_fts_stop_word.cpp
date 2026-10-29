@@ -204,9 +204,12 @@ int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq)
     if (OB_FAIL(word_map_.set_refactored(word, 1/*word count*/))) {
     }
   } else {
-    // Keep the first spelling and the existing first-occurrence count, while
-    // hashing, finding, and locking the bucket only once per token.
-    auto add_frequency = [word_freq](auto &entry) { entry.second += word_freq; };
+    // Preserve set_refactored's replacement of the representative spelling as
+    // well as its first-occurrence count, with one bucket lookup per token.
+    auto add_frequency = [&word, word_freq](auto &entry) {
+      entry.first = word;
+      entry.second += word_freq;
+    };
     if (OB_FAIL(word_map_.set_or_update(word, 1, add_frequency))) {
     }
   }
