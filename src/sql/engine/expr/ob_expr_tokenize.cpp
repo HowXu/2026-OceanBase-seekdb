@@ -49,6 +49,7 @@ struct TokenizeMemoKey
   ObCollationType collation_;
   ObCharsetType charset_;
   int64_t output_mode_;
+  bool implicit_defaults_;
   bool result_has_lob_header_;
 };
 
@@ -63,6 +64,7 @@ public:
         && key_.parser_name_ == key.parser_name_ && key_.properties_ == key.properties_
         && key_.collation_ == key.collation_ && key_.charset_ == key.charset_
         && key_.output_mode_ == key.output_mode_
+        && key_.implicit_defaults_ == key.implicit_defaults_
         && key_.result_has_lob_header_ == key.result_has_lob_header_;
   }
 
@@ -150,9 +152,14 @@ int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
     const ObCollationType collation = param.meta_.get_collation_type();
     const TokenizeMemoKey key{param.fulltext_, param.parser_name_, param.properties_,
                              collation, ObCharset::charset_type_by_coll(collation),
-                             param.output_mode_, expr.obj_meta_.has_lob_header()};
+                             param.output_mode_, expr.arg_cnt_ < 3, expr.obj_meta_.has_lob_header()};
+    // Implicit defaults use the raw name and empty properties key. Only a
+    // successful miss validates/canonicalizes the name and initializes defaults.
     if (tokenize_result_memo.matches(key)) {
       ret = tokenize_result_memo.copy_result(expr, ctx, expr_datum);
+    } else if (expr.arg_cnt_ < 3 && OB_FAIL(construct_ft_parser_inner_name(param.parser_name_, param))) {
+    } else if (expr.arg_cnt_ < 3 && OB_FAIL(param.reform_parser_properties(param.properties_))) {
+    } else if (expr.arg_cnt_ < 3 && OB_FAIL(param.try_load_dictionary_for_ik())) {
     } else if (OB_FAIL(tokenize_fulltext(param, param.output_mode_, temp_allocator, json_result))) {
     } else if (OB_FAIL(ObJsonExprHelper::pack_json_res(expr,
                                                        ctx,
@@ -304,8 +311,8 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
   } else if (OB_FAIL(parse_fulltext(expr, ctx, param))) {
   } else if (OB_FAIL(parse_parser_name(expr, ctx, param))) {
   } else if (OB_FAIL(parse_parser_properties(expr, ctx, temp_allocator, param))) {
-  } else if (OB_FAIL(param.reform_parser_properties(param.properties_))) {
-  } else if (OB_FAIL(param.try_load_dictionary_for_ik())) {
+  } else if (expr.arg_cnt_ >= 3 && OB_FAIL(param.reform_parser_properties(param.properties_))) {
+  } else if (expr.arg_cnt_ >= 3 && OB_FAIL(param.try_load_dictionary_for_ik())) {
   }
   return ret;
 }
@@ -425,6 +432,8 @@ int ObExprTokenize::parse_parser_name(const ObExpr &expr, ObEvalCtx &ctx, Tokeni
 
   if (OB_FAIL(ret)) {
     // already logged
+  } else if (expr.arg_cnt_ < 3) {
+    param.parser_name_ = raw_parser_name;
   } else if (OB_FAIL(construct_ft_parser_inner_name(raw_parser_name, param))) {
   }
 
