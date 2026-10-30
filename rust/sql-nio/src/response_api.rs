@@ -852,6 +852,24 @@ pub unsafe extern "C" fn nio_response_append_packed_row_blob(
     }
 }
 
+/// # Safety
+/// The handle is live for this call and generation identifies its active request.
+#[no_mangle]
+pub unsafe extern "C" fn nio_enable_tokenize_replay(
+    connection_handle: *mut NioConnectionHandle,
+    generation: u64,
+) {
+    if let Some(handle) = unsafe { connection_handle.as_ref() } {
+        let mut g = handle.conn.mu.lock().unwrap();
+        if valid_request_generation(&handle.conn, generation)
+            && g.response.is_active(generation)
+            && !g.response.published
+        {
+            g.response.tokenize_replay_armed = true;
+        }
+    }
+}
+
 pub(crate) fn publish_response_batch(conn: &Arc<Conn>, generation: u64, is_final: bool) -> bool {
     let mut g = conn.mu.lock().unwrap();
     debug_assert!(
@@ -865,6 +883,15 @@ pub(crate) fn publish_response_batch(conn: &Arc<Conn>, generation: u64, is_final
     {
         return false;
     }
+    if is_final && g.response.tokenize_replay_armed && !g.response.published {
+        g.tokenize_replay = g.active_request_body.as_ref().and_then(|active| {
+            crate::tokenize_replay::TokenizeReplay::learn(
+                &active.body.bytes[..active.body.logical_len],
+                &g.response.batch,
+            )
+        });
+    }
+    g.response.published = true;
     let mut batch = std::mem::take(&mut g.response.batch);
     let append_result: Result<(), TryReserveError> = if batch.is_empty() {
         Ok(())

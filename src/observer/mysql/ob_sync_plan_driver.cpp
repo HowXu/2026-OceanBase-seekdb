@@ -21,6 +21,7 @@
 #include "rpc/obmysql/packet/ompk_eof.h"
 #include "observer/mysql/obmp_query.h"
 #include "sql/ob_query_retry_ctrl.h"
+#include "sql/engine/basic/ob_expr_values_op.h"
 
 namespace oceanbase
 {
@@ -29,6 +30,31 @@ using namespace sql;
 using namespace obmysql;
 namespace observer
 {
+namespace
+{
+bool is_constant_tokenize_plan(const ObPhysicalPlan *plan)
+{
+  const ObOpSpec *root = plan == nullptr ? nullptr : plan->get_root_op_spec();
+  if (root == nullptr || root->get_type() != PHY_EXPR_VALUES
+      || root->get_child_cnt() != 0 || root->output_.count() != 1
+      || !root->filters_.empty() || !root->startup_filters_.empty()) {
+    return false;
+  }
+  const ObExprValuesSpec *values = static_cast<const ObExprValuesSpec *>(root);
+  const ObExpr *expr = root->output_.at(0);
+  if (values->values_.count() != 1 || expr == nullptr || expr->type_ != T_FUN_TOKENIZE
+      || expr->arg_cnt_ < 1 || expr->arg_cnt_ > 2) {
+    return false;
+  }
+  for (int64_t i = 0; i < expr->arg_cnt_; ++i) {
+    const ObExpr *arg = expr->args_[i];
+    if (arg == nullptr || !(arg->is_static_const_ || arg->type_ == T_QUESTIONMARK)) {
+      return false;
+    }
+  }
+  return true;
+}
+}
 
 ObSyncPlanDriver::ObSyncPlanDriver(const share::ObGlobalContext &gctx,
                                    const ObSqlCtx &ctx,
@@ -133,6 +159,11 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
 
       if (OB_SUCC(ret) && !result.get_is_com_filed_list()) {
         need_send_eof = true;
+        if (ac && !session_.get_in_transaction() && !result.is_ps_protocol()
+            && !result.has_more_result() && !ctx_.multi_stmt_item_.is_part_of_multi_stmt()
+            && warning_count == 0 && is_constant_tokenize_plan(result.get_physical_plan())) {
+          sender_.enable_tokenize_replay();
+        }
       }
 
       if (OB_FAIL(ret)) {

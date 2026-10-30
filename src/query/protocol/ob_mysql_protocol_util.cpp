@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <string>
 
 #include "common/ob_field.h"
 #include "common/json_type/ob_json_bin.h"
@@ -93,6 +94,12 @@ static const ObMySQLTypeMap type_maps_[ObMaxType] =
 static_assert(sizeof(type_maps_) / sizeof(ObMySQLTypeMap) == ObMaxType, "Not enough initializer");
 
 namespace {
+
+struct JsonTextMemo {
+  std::string binary;
+  std::string text;
+};
+thread_local JsonTextMemo json_text_memo;
 
 int set_borrowed_lenenc_bytes(const ObString &value, ObMySQLCellValue &out) {
   int ret = OB_SUCCESS;
@@ -461,6 +468,11 @@ int ObSMUtils::build_cell_value(const ObObj &obj, MYSQL_PROTOCOL_TYPE type,
         out.kind_ = ObMySQLCellValueKind::LEGACY_LENENC_NULL;
       } else if (OB_UNLIKELY(value.length() < 0 || NULL == value.ptr())) {
         ret = OB_ERR_UNEXPECTED;
+      } else if (json_text_memo.binary.size() == static_cast<size_t>(value.length())
+                 && 0 == MEMCMP(json_text_memo.binary.data(), value.ptr(), value.length())) {
+        ret = set_copied_bytes(scratch_allocator,
+                               ObMySQLCellValueKind::LENENC_BYTES,
+                               json_text_memo.text.data(), json_text_memo.text.size(), out);
       } else {
         lib::ObMemAttr mem_attr("JsonAlloc");
         ObArenaAllocator allocator(mem_attr);
@@ -474,6 +486,10 @@ int ObSMUtils::build_cell_value(const ObObj &obj, MYSQL_PROTOCOL_TYPE type,
           ret = set_copied_bytes(scratch_allocator,
                                  ObMySQLCellValueKind::LENENC_BYTES,
                                  json_buf.ptr(), json_buf.length(), out);
+          if (OB_SUCC(ret) && value.length() + json_buf.length() <= 1024 * 1024) {
+            json_text_memo.binary.assign(value.ptr(), value.length());
+            json_text_memo.text.assign(json_buf.ptr(), json_buf.length());
+          }
         }
       }
       break;

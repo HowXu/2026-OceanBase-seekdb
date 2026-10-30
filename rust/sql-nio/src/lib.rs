@@ -54,6 +54,7 @@ mod row_encode;
 mod session_storage;
 mod stmt_execute;
 mod tls;
+mod tokenize_replay;
 mod transport;
 
 use crate::capability::{CLIENT_COMPRESS, CLIENT_SSL};

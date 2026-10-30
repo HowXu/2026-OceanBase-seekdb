@@ -139,6 +139,7 @@ public:
            NULL != nio_connection_handle_;
   }
   int finish_sql_request();
+  void enable_tokenize_replay();
   // Packet retry keeps the Rust request generation active and transfers the
   // same ObRequest to a later processor. Make that exceptional non-finish
   // transition explicit so ordinary reset/destruction can fail closed.

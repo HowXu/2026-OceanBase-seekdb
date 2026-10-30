@@ -208,6 +208,50 @@ pub(crate) fn deliver_decoded_packet(
                 return true;
             }
         };
+    let replayed = {
+        let mut g = conn.mu.lock().unwrap();
+        let ConnInner {
+            tokenize_replay,
+            response,
+            active_request_body,
+            ..
+        } = &mut *g;
+        let command = active_request_body
+            .as_ref()
+            .map(|active| &active.body.bytes[..active.body.logical_len]);
+        if packet_kind == NIO_PACKET_COMMAND
+            && !current_peer_eof
+            && tokenize_replay
+                .as_ref()
+                .zip(command)
+                .is_some_and(|(memo, cmd)| memo.matches(cmd))
+        {
+            let memo = tokenize_replay.as_ref().unwrap();
+            response.next_mysql_seq = memo.write_response(&mut response.batch, next_mysql_seq);
+            true
+        } else {
+            *tokenize_replay = None;
+            false
+        }
+    };
+    if replayed {
+        finish_active_request_callback(conn, generation, true);
+        if !publish_response_batch(conn, generation, true) {
+            mark_connection_error(conn);
+            return true;
+        }
+        let mut handle = NioConnectionHandle {
+            conn: Arc::clone(conn),
+        };
+        unsafe {
+            if nio_prepare_commit(&mut handle, generation, NIO_AUTH_NO_CHANGE) != 0 {
+                mark_connection_error(conn);
+            } else {
+                nio_commit_request(&mut handle, generation);
+            }
+        }
+        return true;
+    }
     let delivered = deliver_to_cpp(
         handler,
         conn.sess(),

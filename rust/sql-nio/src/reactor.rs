@@ -347,6 +347,7 @@ impl EventLoop {
                 write_waiters: 0,
                 final_response: FinalResponseState::Idle,
                 response: ResponseWriter::new(),
+                tokenize_replay: None,
                 read_state: ReadState::Login,
                 inner_buf: Vec::new(),
                 inner_rpos: 0,

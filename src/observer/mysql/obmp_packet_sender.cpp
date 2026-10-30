@@ -1036,6 +1036,12 @@ int ObMPPacketSender::append_response(ObMySQLPacket &pkt, int64_t &seri_size) {
   return ret;
 }
 
+void ObMPPacketSender::enable_tokenize_replay() {
+  if (is_conn_valid()) {
+    nio_enable_tokenize_replay(nio_connection_handle_, request_generation_);
+  }
+}
+
 int ObMPPacketSender::flush_buffer(const bool is_last) {
   int ret = OB_SUCCESS;
   NioConnectionHandle *connection_handle = nio_connection_handle_;

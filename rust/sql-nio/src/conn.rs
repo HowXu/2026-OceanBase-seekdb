@@ -47,6 +47,8 @@ pub(crate) struct ResponseWriter {
     pub(crate) active_generation: u64,
     pub(crate) next_mysql_seq: u8,
     pub(crate) batch: Vec<u8>,
+    pub(crate) tokenize_replay_armed: bool,
+    pub(crate) published: bool,
 }
 
 impl ResponseWriter {
@@ -55,6 +57,8 @@ impl ResponseWriter {
             active_generation: 0,
             next_mysql_seq: 0,
             batch: Vec::new(),
+            tokenize_replay_armed: false,
+            published: false,
         }
     }
 
@@ -64,6 +68,8 @@ impl ResponseWriter {
         }
         self.active_generation = generation;
         self.next_mysql_seq = next_mysql_seq;
+        self.tokenize_replay_armed = false;
+        self.published = false;
         true
     }
 
@@ -176,6 +182,7 @@ pub(crate) struct ConnInner {
     pub(crate) write_waiters: usize,
     pub(crate) final_response: FinalResponseState,
     pub(crate) response: ResponseWriter,
+    pub(crate) tokenize_replay: Option<crate::tokenize_replay::TokenizeReplay>,
     pub(crate) read_state: ReadState,
     pub(crate) inner_buf: Vec<u8>,
     pub(crate) inner_rpos: usize,

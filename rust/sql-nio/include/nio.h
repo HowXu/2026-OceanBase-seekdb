@@ -507,6 +507,8 @@ int nio_response_append_packed_row_blob(struct NioConnectionHandle *connection_h
                                         int64_t blob_len,
                                         int64_t *framed_len);
 
+void nio_enable_tokenize_replay(struct NioConnectionHandle *connection_handle, uint64_t generation);
+
 int nio_response_flush(struct NioConnectionHandle *connection_handle,
                        uint64_t generation,
                        int is_final);
