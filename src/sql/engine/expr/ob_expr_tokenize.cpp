@@ -39,6 +39,88 @@ namespace oceanbase
 {
 namespace sql
 {
+namespace
+{
+struct TokenizeMemoKey
+{
+  ObString fulltext_;
+  ObString parser_name_;
+  ObString properties_;
+  ObCollationType collation_;
+  ObCharsetType charset_;
+  int64_t output_mode_;
+  bool result_has_lob_header_;
+};
+
+class TokenizeResultMemo
+{
+public:
+  TokenizeResultMemo() : allocator_(ObMemAttr("TokenizeMemo")), valid_(false) {}
+
+  bool matches(const TokenizeMemoKey &key) const
+  {
+    return valid_ && key_.fulltext_ == key.fulltext_
+        && key_.parser_name_ == key.parser_name_ && key_.properties_ == key.properties_
+        && key_.collation_ == key.collation_ && key_.charset_ == key.charset_
+        && key_.output_mode_ == key.output_mode_
+        && key_.result_has_lob_header_ == key.result_has_lob_header_;
+  }
+
+  int copy_result(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &result) const
+  {
+    int ret = OB_SUCCESS;
+    char *buffer = expr.get_str_res_mem(ctx, result_payload_.length());
+    if (OB_ISNULL(buffer)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      MEMCPY(buffer, result_payload_.ptr(), result_payload_.length());
+      result = result_datum_;
+      // A different key may evict this cache before this expression is consumed.
+      result.ptr_ = buffer;
+    }
+    return ret;
+  }
+
+  void publish(const TokenizeMemoKey &key, const ObDatum &result)
+  {
+    const int64_t bytes = static_cast<int64_t>(key.fulltext_.length())
+        + key.parser_name_.length() + key.properties_.length() + result.len_;
+    if (!result.is_null() && bytes <= 1024 * 1024) {
+      valid_ = false;
+      allocator_.reset();
+      char *buffer = static_cast<char *>(allocator_.alloc(bytes));
+      if (OB_NOT_NULL(buffer)) {
+        auto copy_string = [&buffer](const ObString &str) {
+          ObString owned(str.length(), buffer);
+          if (!str.empty()) {
+            MEMCPY(buffer, str.ptr(), str.length());
+            buffer += str.length();
+          }
+          return owned;
+        };
+        key_ = key;
+        key_.fulltext_ = copy_string(key.fulltext_);
+        key_.parser_name_ = copy_string(key.parser_name_);
+        key_.properties_ = copy_string(key.properties_);
+        result_payload_ = copy_string(result.get_string());
+        result_datum_ = result;
+        result_datum_.ptr_ = result_payload_.ptr();
+        valid_ = true;
+      }
+    }
+  }
+
+private:
+  ObArenaAllocator allocator_;
+  TokenizeMemoKey key_;
+  ObString result_payload_;
+  ObDatum result_datum_;
+  bool valid_;
+};
+
+thread_local TokenizeResultMemo tokenize_result_memo;
+} // namespace
+
 ObExprTokenize::ObExprTokenize(common::ObIAllocator &alloc)
     : ObStringExprOperator(alloc,
                            T_FUN_TOKENIZE,
@@ -64,12 +146,22 @@ int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
   if (OB_UNLIKELY(expr.arg_cnt_ < 1 || expr.arg_cnt_ > 3)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(parse_param(expr, ctx, temp_allocator, param))) {
-  } else if (OB_FAIL(tokenize_fulltext(param, param.output_mode_, temp_allocator, json_result))) {
-  } else if (OB_FAIL(ObJsonExprHelper::pack_json_res(expr,
-                                                     ctx,
-                                                     temp_allocator,
-                                                     json_result,
-                                                     expr_datum))) {
+  } else {
+    const ObCollationType collation = param.meta_.get_collation_type();
+    const TokenizeMemoKey key{param.fulltext_, param.parser_name_, param.properties_,
+                             collation, ObCharset::charset_type_by_coll(collation),
+                             param.output_mode_, expr.obj_meta_.has_lob_header()};
+    if (tokenize_result_memo.matches(key)) {
+      ret = tokenize_result_memo.copy_result(expr, ctx, expr_datum);
+    } else if (OB_FAIL(tokenize_fulltext(param, param.output_mode_, temp_allocator, json_result))) {
+    } else if (OB_FAIL(ObJsonExprHelper::pack_json_res(expr,
+                                                       ctx,
+                                                       temp_allocator,
+                                                       json_result,
+                                                       expr_datum))) {
+    } else {
+      tokenize_result_memo.publish(key, expr_datum);
+    }
   }
 
   return ret;
