@@ -197,14 +197,26 @@ vectors and **9.34x** for 100K x 128 vectors, with both backends above 95% Recal
 CPU parameters were `m=16` and `m=32` respectively; both used
 `ef_construction=200` and session `ob_hnsw_ef_search=16000`.
 
-For 100K x 384 vectors, the wider GPU search frontier raised Recall@10 from
-94.8% to 99.5–99.6% across three runs on the same reloaded graph, with 300 GPU
-serves and no rebuild. The CPU `m=32` baseline reached only 86.5%, so this case
-has **no accepted matched-quality build speedup**. The original strict
-three-dataset matrix therefore retains its failed CPU quality gate; it must not
-be described as entirely passing. The 128-D build measurements precede the
-query-only change above, which leaves their construction implementation and
-search configuration unchanged. Full results are in
+For 100K x 384 vectors, CPU calibration selected `m=64,ef_construction=200`
+with session `ob_hnsw_ef_search=16000`. Recall@10 reached
+97.6% on the original 100 queries and 97.7% on 100 additional
+queries (seed 20261031). Parameters were frozen before three fresh, alternating
+CPU/GPU build pairs. Median DDL time was **323.468s CPU / 4.646s GPU**, or
+**69.63x**; every CPU trial reached at least 97.6% and every
+GPU trial at least 96.7% Recall@10. The high-dimensional GPU path uses 4096
+retained candidates with `MULTI_CTA`. All three dataset groups now pass the
+95% quality gate. The earlier `m=32` CPU result (86.5%) remains excluded.
+
+No separate compiler was observed in the process samples.
+Resource samples, CPU quota throttling deltas, every formal trial and component
+hashes are recorded in
+[`validation/results-384-20261030.json`](validation/results-384-20261030.json).
+The 128-D speedups above are historical measurements of the earlier dense build
+profile (128/256 edges, 100 iterations); the 384-D run uses the new 32/64-edge,
+six-iteration profile. Native GPU parameter calibration and additional query
+validation are in
+[`validation/gpu-tuning-20261030.json`](validation/gpu-tuning-20261030.json).
+The combined record is
 [`validation/results-20261030.json`](validation/results-20261030.json).
 
 ## Offline checks
@@ -238,5 +250,6 @@ before subsequent inserts, so their GPU buffers cannot omit historical rows.
 - GPU validation is manual because upstream CI has no compatible GPU runner.
 - Multi-GPU and long-duration validation remain future work. Snapshot-reload
   smoke coverage is provided by `validation/run_ddl_persistence_smoke.sh`.
-- Full GPU correctness, DDL/restart smoke and end-to-end speedup still require
-  execution on compatible hardware; passing offline tests does not satisfy them.
+- New hardware or configuration changes still require GPU correctness,
+  DDL/restart smoke and end-to-end measurements on compatible hardware;
+  offline tests alone do not validate performance.

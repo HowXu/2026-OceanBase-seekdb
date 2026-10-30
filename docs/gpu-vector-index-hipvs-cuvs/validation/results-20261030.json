@@ -3,7 +3,7 @@
   "repository": "HowXu/2026-OceanBase-seekdb",
   "branch": "hipvs-hnsw-build-fixes",
   "server_cpp_and_index_construction_revision": "817335fbb37bc45054e15ca71220587e11cecfbb",
-  "result": "GPU functional validation and two matched-quality build benchmarks passed; 384-D CPU baseline quality remains below the acceptance threshold.",
+  "result": "GPU functional validation and all three matched-quality build benchmarks passed after calibrating the 384-D CPU graph.",
   "hardware": {
     "gpu": "AMD gfx1100",
     "gpu_vram_bytes": 51522830336,
@@ -116,6 +116,50 @@
       "gpu_recall_min": 1.0,
       "gpu_build_evidence_count": 3,
       "gpu_serve_evidence_count": 300
+    },
+    {
+      "rows": 100000,
+      "dim": 384,
+      "status": "VALID_ACCELERATION",
+      "cpu_configuration": {
+        "m": 64,
+        "ef_construction": 200,
+        "ef_search": 16000
+      },
+      "gpu_configuration": {
+        "graph_degree": 32,
+        "intermediate_graph_degree": 64,
+        "nn_descent_niter": 6,
+        "itopk_minimum": 4096,
+        "search_mode": "MULTI_CTA"
+      },
+      "effective_hnsw_ef_search": 16000,
+      "seed": 20261030,
+      "queries": 100,
+      "repeats": 3,
+      "base_sha256": "f7c3d2f44ea54f4cf966222a153c5bc642f8e45ae554f45274ceccf3d0e435df",
+      "queries_sha256": "087475ae4917da7961760fcb7629e6d46f4509a5244b8ee80a1a0bcbbe595a8c",
+      "ddl_speedup": 69.62775272498628,
+      "ready_speedup": 69.4565817429516,
+      "medians": {
+        "vsag": {
+          "create_seconds": 323.4682396170683,
+          "first_query_seconds": 0.13942966901231557,
+          "ready_seconds": 323.60566668305546,
+          "recall_at_k": 0.976
+        },
+        "cuvs": {
+          "create_seconds": 4.645679731969722,
+          "first_query_seconds": 0.013924458995461464,
+          "ready_seconds": 4.659107294981368,
+          "recall_at_k": 0.971
+        }
+      },
+      "cpu_recall_min": 0.976,
+      "gpu_recall_min": 0.967,
+      "gpu_build_evidence_count": 3,
+      "gpu_serve_evidence_count": 300,
+      "details": "results-384-20261030.json"
     }
   ],
   "high_dimensional_query_fix": {
@@ -133,7 +177,8 @@
     "search_mode": "MULTI_CTA",
     "same_saved_graph_reloaded": true,
     "gpu_serves": 300,
-    "graph_rebuilds": 0
+    "graph_rebuilds": 0,
+    "note": "Historical dense-graph query-frontier regression; recall for the current sparse build profile is reported in the accepted 384-D benchmark."
   },
   "excluded_benchmark": {
     "rows": 100000,
@@ -144,7 +189,7 @@
     "cpu_recall_at_10": 0.865,
     "required_minimum_recall": 0.95,
     "accepted_speedup": null,
-    "reason": "CPU baseline failed the quality gate. Do not present this case as a matched-quality acceleration result."
+    "reason": "Historical m=32 CPU profile failed the quality gate and remains excluded. A separately calibrated 384-D profile now passes the formal three-trial comparison."
   },
   "validation_method": {
     "metric": "squared L2; float32 normalized random vectors",
@@ -156,9 +201,10 @@
     "first_ready": "DDL plus first SQL ANN query, reported separately",
     "algorithm_note": "VSAG HNSW versus hipVS CAGRA in seekdb HNSW SQL route; graph parameters differ",
     "initial_trials": "Default-session and insufficient-quality CPU calibration trials are retained but excluded from accepted speedups.",
-    "bridge_fix_scope": "Only query-frontier selection changed: dimensions >256 retain 1024 candidates and use MULTI_CTA. Index construction and the 128-D configuration are unchanged."
+    "historical_query_fix_scope": "Only query-frontier selection changed: dimensions >256 retain 1024 candidates and use MULTI_CTA. Index construction and the 128-D configuration are unchanged.",
+    "current_build_profile": "32 final / 64 intermediate graph edges, 6 NN-Descent iterations, 2048/4096 retained query candidates; formal 384-D timings were rerun with this profile."
   },
-  "measurement_provenance": "The accepted 128-D construction measurements use the original bridge. The later change affects only query-frontier/mode selection for wider frontiers; the construction implementation and tested 128-D search settings are unchanged.",
+  "measurement_provenance": "The accepted 128-D timings are historical measurements of the original dense graph profile (128/256 edges, 100 iterations). The 384-D timings use six fresh index builds with the new sparse competition profile (32/64 edges, 6 iterations, 4096 retained candidates). The three groups meet the same 95% quality gate but use explicitly recorded profiles. See results-384-20261030.json for the frozen CPU profile, trials, hashes and resource samples.",
   "unit_checks": {
     "bridge_contract_and_fault_injection_cases": 36,
     "benchmark_offline_tests": 11
@@ -166,7 +212,15 @@
   "limitations": [
     "Single gfx1100 GPU and synthetic normalized float32 L2 data.",
     "VSAG HNSW is compared with CAGRA in the seekdb HNSW SQL route; this is not conversion to a VSAG HNSW graph.",
-    "The strict original three-dataset matrix is not entirely passing: the 384-D CPU quality gate remains failed.",
-    "No multi-GPU, long-duration or heavy-concurrency validation was performed."
-  ]
+    "No multi-GPU, long-duration or heavy-concurrency validation was performed.",
+    "No separate compiler was observed in the process samples.",
+    "The 128-D speedups describe the previous dense build profile; they are not timing claims for the current sparse profile."
+  ],
+  "current_gpu_build_profile": {
+    "graph_degree": 32,
+    "intermediate_graph_degree": 64,
+    "nn_descent_niter": 6,
+    "itopk_minimum": 4096,
+    "search_mode": "MULTI_CTA"
+  }
 }

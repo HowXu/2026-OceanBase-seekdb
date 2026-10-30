@@ -1,0 +1,326 @@
+{
+  "test_date": "2026-10-30",
+  "rows": 100000,
+  "dim": 384,
+  "status": "VALID_ACCELERATION",
+  "cpu_configuration": {
+    "m": 64,
+    "ef_construction": 200,
+    "ef_search": 16000
+  },
+  "gpu_configuration": {
+    "graph_degree": 32,
+    "intermediate_graph_degree": 64,
+    "nn_descent_niter": 6,
+    "itopk_minimum": 4096,
+    "search_mode": "MULTI_CTA"
+  },
+  "effective_hnsw_ef_search": 16000,
+  "seed": 20261030,
+  "queries": 100,
+  "repeats": 3,
+  "minimum_recall": 0.95,
+  "top_k": 10,
+  "base_sha256": "f7c3d2f44ea54f4cf966222a153c5bc642f8e45ae554f45274ceccf3d0e435df",
+  "queries_sha256": "087475ae4917da7961760fcb7629e6d46f4509a5244b8ee80a1a0bcbbe595a8c",
+  "ddl_speedup": 69.62775272498628,
+  "ready_speedup": 69.4565817429516,
+  "medians": {
+    "vsag": {
+      "create_seconds": 323.4682396170683,
+      "first_query_seconds": 0.13942966901231557,
+      "ready_seconds": 323.60566668305546,
+      "recall_at_k": 0.976
+    },
+    "cuvs": {
+      "create_seconds": 4.645679731969722,
+      "first_query_seconds": 0.013924458995461464,
+      "ready_seconds": 4.659107294981368,
+      "recall_at_k": 0.971
+    }
+  },
+  "cpu_recall_min": 0.976,
+  "gpu_recall_min": 0.967,
+  "gpu_build_evidence_count": 3,
+  "gpu_serve_evidence_count": 300,
+  "trials": [
+    {
+      "backend": "vsag",
+      "repeat": 0,
+      "create_seconds": 333.35467900696676,
+      "first_query_seconds": 0.14741812704596668,
+      "ready_seconds": 333.50209713401273,
+      "recall_at_k": 0.976,
+      "gpu_serves": 0,
+      "gpu_snapshot_builds": 0
+    },
+    {
+      "backend": "cuvs",
+      "repeat": 0,
+      "create_seconds": 5.1386587920133024,
+      "first_query_seconds": 0.020488218986429274,
+      "ready_seconds": 5.159147010999732,
+      "recall_at_k": 0.971,
+      "gpu_serves": 100,
+      "gpu_snapshot_builds": 1
+    },
+    {
+      "backend": "cuvs",
+      "repeat": 1,
+      "create_seconds": 4.636269512935542,
+      "first_query_seconds": 0.013924458995461464,
+      "ready_seconds": 4.650193971931003,
+      "recall_at_k": 0.971,
+      "gpu_serves": 100,
+      "gpu_snapshot_builds": 1
+    },
+    {
+      "backend": "vsag",
+      "repeat": 1,
+      "create_seconds": 320.72853998397477,
+      "first_query_seconds": 0.13942966901231557,
+      "ready_seconds": 320.8679696529871,
+      "recall_at_k": 0.976,
+      "gpu_serves": 0,
+      "gpu_snapshot_builds": 0
+    },
+    {
+      "backend": "vsag",
+      "repeat": 2,
+      "create_seconds": 323.4682396170683,
+      "first_query_seconds": 0.13742706598713994,
+      "ready_seconds": 323.60566668305546,
+      "recall_at_k": 0.976,
+      "gpu_serves": 0,
+      "gpu_snapshot_builds": 0
+    },
+    {
+      "backend": "cuvs",
+      "repeat": 2,
+      "create_seconds": 4.645679731969722,
+      "first_query_seconds": 0.01342756301164627,
+      "ready_seconds": 4.659107294981368,
+      "recall_at_k": 0.967,
+      "gpu_serves": 100,
+      "gpu_snapshot_builds": 1
+    }
+  ],
+  "calibration": {
+    "kind": "CPU_GRAPH_QUALITY_CALIBRATION_NOT_FORMAL_TIMING",
+    "minimum_recall": 0.95,
+    "selected_configuration": {
+      "m": 64,
+      "ef_construction": 200,
+      "ef_search": 16000
+    },
+    "holdout_query_seed": 20261031,
+    "holdout_queries_sha256": "560d57d6072e1041239c6f410f3d596c5df7a2f71af7f859c962b1b875a9594a",
+    "attempts": [
+      {
+        "m": 48,
+        "ef_construction": 200,
+        "ef_search": 16000,
+        "diagnostic_ddl_seconds": 337.82058122497983,
+        "reference_recall_at_10": 0.9420000000000001,
+        "holdout_recall_at_10": 0.9440000000000001,
+        "gpu_serves": 0
+      },
+      {
+        "m": 64,
+        "ef_construction": 200,
+        "ef_search": 16000,
+        "diagnostic_ddl_seconds": 324.4749681339599,
+        "reference_recall_at_10": 0.976,
+        "holdout_recall_at_10": 0.977,
+        "gpu_serves": 0
+      }
+    ],
+    "timing_note": "All calibration timings are diagnostic and excluded from formal medians."
+  },
+  "gpu_calibration": {
+    "selected_graph_degree": 32,
+    "selected_intermediate_graph_degree": 64,
+    "selected_nn_descent_niter": 6,
+    "itopk_minimum_128": 2048,
+    "itopk_minimum_384": 4096,
+    "minimum_top10_and_top100_recall": 0.966,
+    "details": "gpu-tuning-20261030.json",
+    "third_query_set_validation": [
+      {
+        "rows": 100000,
+        "dim": 384,
+        "k": 10,
+        "recall": 0.985,
+        "max_squared_l2_error": 2.384185791015625e-07,
+        "query_seed": 20261032
+      },
+      {
+        "rows": 100000,
+        "dim": 384,
+        "k": 100,
+        "recall": 0.9683999999999999,
+        "max_squared_l2_error": 2.384185791015625e-07,
+        "query_seed": 20261032
+      },
+      {
+        "rows": 100000,
+        "dim": 384,
+        "kind": "snapshot_reload",
+        "k": 100,
+        "recall": 0.9686
+      }
+    ]
+  },
+  "functional_validation": {
+    "gpu_sql_smoke": "PASS",
+    "gpu_sql_smoke_cases": 12,
+    "production_bridge_regression": {
+      "status": "PASS",
+      "cases": [
+        {
+          "rows": 256,
+          "dim": 32,
+          "k": 10,
+          "recall": 1.0,
+          "max_squared_l2_error": 2.384185791015625e-07,
+          "query_seed": 20261030
+        },
+        {
+          "rows": 256,
+          "dim": 32,
+          "k": 100,
+          "recall": 1.0,
+          "max_squared_l2_error": 3.5762786865234375e-07,
+          "query_seed": 20261030
+        },
+        {
+          "rows": 256,
+          "dim": 32,
+          "kind": "snapshot_reload",
+          "k": 100,
+          "recall": 1.0
+        },
+        {
+          "rows": 256,
+          "dim": 384,
+          "k": 10,
+          "recall": 1.0,
+          "max_squared_l2_error": 2.384185791015625e-07,
+          "query_seed": 20261030
+        },
+        {
+          "rows": 256,
+          "dim": 384,
+          "k": 100,
+          "recall": 1.0,
+          "max_squared_l2_error": 3.5762786865234375e-07,
+          "query_seed": 20261030
+        },
+        {
+          "rows": 256,
+          "dim": 384,
+          "kind": "snapshot_reload",
+          "k": 100,
+          "recall": 1.0
+        },
+        {
+          "rows": 10000,
+          "dim": 128,
+          "k": 10,
+          "recall": 1.0,
+          "max_squared_l2_error": 2.384185791015625e-07,
+          "query_seed": 20261030
+        },
+        {
+          "rows": 10000,
+          "dim": 128,
+          "k": 100,
+          "recall": 1.0,
+          "max_squared_l2_error": 2.384185791015625e-07,
+          "query_seed": 20261030
+        },
+        {
+          "rows": 10000,
+          "dim": 128,
+          "kind": "snapshot_reload",
+          "k": 100,
+          "recall": 1.0
+        },
+        {
+          "rows": 100000,
+          "dim": 384,
+          "k": 10,
+          "recall": 0.985,
+          "max_squared_l2_error": 2.384185791015625e-07,
+          "query_seed": 20261032
+        },
+        {
+          "rows": 100000,
+          "dim": 384,
+          "k": 100,
+          "recall": 0.9683999999999999,
+          "max_squared_l2_error": 2.384185791015625e-07,
+          "query_seed": 20261032
+        },
+        {
+          "rows": 100000,
+          "dim": 384,
+          "kind": "snapshot_reload",
+          "k": 100,
+          "recall": 0.9686
+        }
+      ],
+      "kind": "COMPILED_PRODUCTION_BRIDGE_GPU_REGRESSION"
+    }
+  },
+  "resource_observations": {
+    "sample_interval_seconds": 5,
+    "samples": 218,
+    "samples_with_foreign_compiler": 0,
+    "samples_with_foreign_seekdb": 0,
+    "cgroup_throttled_periods_delta": 0,
+    "cgroup_throttled_usec_delta": 0,
+    "cgroup_memory_peak_sampled_bytes": 15602995200,
+    "background_note": "No separate compiler was observed in the process samples."
+  },
+  "provenance": {
+    "source_revision": "aa902de11993eb3bf23c8657419faf22df5dc73c",
+    "server_cpp_revision": "817335fbb37bc45054e15ca71220587e11cecfbb",
+    "server_binary_sha256": "fec1662e72b30148f26f47d027268a491c46d977c4d4fccab733020827a98fbd",
+    "bridge_sha256": "39a3a017ce9c84859b83567aa4077d2485d1c4048fddbaa04ffea022bbdff0db",
+    "benchmark_sha256": "29c6bb8d67b3ad9762c0d9e28103130907dd88d6695d9d4a7f88fc58e6243f62",
+    "calibration_sha256": "252fdf0420bfb3520342e2596ccf84ddaead7430a0921afd8818aa19f9c7f380",
+    "start_utc": "2026-10-30T14:36:17Z",
+    "end_utc": "2026-10-30T14:54:28Z",
+    "cpu_max": "1600000 100000",
+    "memory_max": "59055800320",
+    "observer_cpu_count": 16,
+    "observer_memory_budget_gib": 8,
+    "omp_num_threads": 8,
+    "syslog_level": "ALL.*:WARN,LIB.*:INFO"
+  },
+  "method": {
+    "speedup": "median VSAG DDL seconds / median hipVS CAGRA DDL seconds",
+    "data_loading": "excluded; every table contains 100000 rows before CREATE VECTOR INDEX",
+    "first_ready": "DDL plus first SQL ANN query; reported separately",
+    "ground_truth": "exact squared L2 over normalized float32 vectors, NumPy stable argsort",
+    "order": "VSAG/cuvs, cuvs/VSAG, VSAG/cuvs",
+    "quality_gate": "each CPU and GPU trial must have Recall@10 >= 0.95",
+    "algorithm_note": "VSAG HNSW vs hipVS CAGRA in the seekdb HNSW SQL route; graph parameters differ",
+    "profile_freezing": "CPU parameters selected before all six fresh formal index builds; no calibration timing reused."
+  },
+  "historical_failed_profile": {
+    "m": 32,
+    "ef_construction": 200,
+    "ef_search": 16000,
+    "recall_at_10": 0.865,
+    "included_in_speedup": false
+  },
+  "limitations": [
+    "Single gfx1100 GPU; synthetic normalized random float32 L2 vectors.",
+    "Algorithms and graph parameters differ: VSAG HNSW versus CAGRA in the seekdb HNSW SQL route.",
+    "No separate compiler was observed in the process samples.",
+    "A 95% recall gate does not equalize every query latency or memory tradeoff; this report measures index construction.",
+    "No official test harness or scoring script was supplied; these results do not certify unseen official tests."
+  ]
+}
