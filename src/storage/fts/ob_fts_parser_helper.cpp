@@ -98,7 +98,7 @@ int ObFTParser::parse_from_str(const char *parser_name, const int64_t buf_len)
 
 // The fulltext parser name consists of two parts: name and version, e.g. default_parser.1,
 // separated by dot. This function is designed to serialize them into cstring.
-int ObFTParser::serialize_to_str(char *buf, const int64_t buf_len)
+int ObFTParser::serialize_to_str(char *buf, const int64_t buf_len) const
 {
   int ret = OB_SUCCESS;
   int64_t pos = 0;

@@ -22,6 +22,9 @@
 #include "object/ob_object.h"
 #include "data_plane/fts/ob_fts_struct.h"
 
+#include <array>
+#include <algorithm>
+
 namespace oceanbase
 {
 namespace storage
@@ -85,6 +88,7 @@ private:
   typedef common::hash::ObHashSet<storage::ObFTWord> StopWordSet;
 
   StopWordSet stopword_set_;
+  std::array<common::ObString, sizeof(ob_stop_word_list) / sizeof(ob_stop_word_list[0])> sorted_stopwords_;
   ObObjMeta stopword_type_;
 
   bool inited_ = false;

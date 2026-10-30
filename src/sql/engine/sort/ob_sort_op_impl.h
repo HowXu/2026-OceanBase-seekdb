@@ -795,7 +795,10 @@ protected:
                           const int64_t batch_size,
                           const uint16_t selector[],
                           const int64_t size);
-  bool use_compact_store() { return use_compact_format_ || compress_type_ != NONE_COMPRESSOR; }
+  bool use_compact_store()
+  {
+    return compress_type_ != NONE_COMPRESSOR || (use_compact_format_ && !enable_encode_sortkey_);
+  }
   template<typename ArrayType>
   int prepare_bucket_array(ArrayType *&buckets, uint64_t bucket_num);
   DISALLOW_COPY_AND_ASSIGN(ObSortOpImpl);

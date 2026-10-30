@@ -64,7 +64,7 @@ public:
   ~ObFTParser() = default;
   int init(const common::ObString &parser_name);
   int parse_from_str(const char *parser_name, const int64_t buf_len);
-  int serialize_to_str(char *buf, const int64_t buf_len);
+  int serialize_to_str(char *buf, const int64_t buf_len) const;
   int get_desc(const ObIFTParserDesc *&parser_desc) const;
 
 #define FT_PARSER_TYPE(fts_type, parser_name)                          \
@@ -203,6 +203,9 @@ public:
       common::ObIJsonBase *&json_root);
 
   void reset();
+
+  const ObFTParser &get_parser() const { return parser_name_; }
+  const ObFTParserProperty &get_parser_property() const { return parser_property_; }
 
   TO_STRING_KV(KP_(allocator), K_(parser_name), KP_(parser_desc), K_(is_inited));
 

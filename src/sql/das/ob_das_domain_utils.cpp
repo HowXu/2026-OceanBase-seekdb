@@ -28,6 +28,13 @@
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "share/geo/ob_srs_provider.h"
 
+#include <list>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
 using namespace oceanbase::common;
 
 namespace oceanbase
@@ -36,6 +43,123 @@ namespace sql
 {
 using storage::ObFTWordMap;
 
+namespace
+{
+
+struct CachedFTWord
+{
+  std::string text_;
+  int64_t count_;
+};
+
+struct CachedFTDocument
+{
+  int64_t doc_length_ = 0;
+  std::vector<CachedFTWord> words_;
+  std::list<std::string>::iterator lru_position_;
+};
+
+class FTDocumentCache final
+{
+public:
+  std::shared_ptr<const CachedFTDocument> get(const std::string &key)
+  {
+    std::lock_guard<std::mutex> guard(mutex_);
+    auto it = entries_.find(key);
+    if (it == entries_.end()) {
+      return nullptr;
+    }
+    lru_.splice(lru_.begin(), lru_, it->second->lru_position_);
+    return it->second;
+  }
+
+  void clear()
+  {
+    std::lock_guard<std::mutex> guard(mutex_);
+    entries_.clear();
+    lru_.clear();
+    total_words_ = 0;
+  }
+
+  void put(const std::string &key, const std::shared_ptr<CachedFTDocument> &document)
+  {
+    std::lock_guard<std::mutex> guard(mutex_);
+    if (entries_.find(key) != entries_.end()) {
+      return;
+    }
+    document->lru_position_ = lru_.insert(lru_.begin(), key);
+    entries_.emplace(key, document);
+    total_words_ += document->words_.size();
+    while (entries_.size() > MAX_ENTRIES || total_words_ > MAX_WORDS) {
+      auto victim = entries_.find(lru_.back());
+      total_words_ -= victim->second->words_.size();
+      entries_.erase(victim);
+      lru_.pop_back();
+    }
+  }
+
+private:
+  static constexpr int64_t MAX_ENTRIES = 65536;
+  static constexpr int64_t MAX_WORDS = 4 * 1024 * 1024;
+  std::mutex mutex_;
+  std::list<std::string> lru_;
+  std::unordered_map<std::string, std::shared_ptr<CachedFTDocument>> entries_;
+  int64_t total_words_ = 0;
+};
+
+FTDocumentCache &get_ft_document_cache()
+{
+  static FTDocumentCache cache;
+  return cache;
+}
+
+bool make_ik_document_cache_key(
+    const storage::ObFTParseHelper &helper,
+    const ObObjMeta &meta,
+    const ObString &fulltext,
+    std::string &key)
+{
+  const storage::ObFTParser &parser = helper.get_parser();
+  const storage::ObFTParserProperty &property = helper.get_parser_property();
+  bool cacheable = parser.is_ik()
+      && property.dict_table_ == ObString(storage::ObFTSLiteral::CONFIG_NAME_DICT_TABLE)
+      && property.stopword_table_ == ObString(storage::ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE)
+      && property.quantifier_table_ == ObString(storage::ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE);
+  char parser_name[128];
+  if (cacheable && OB_SUCCESS != parser.serialize_to_str(parser_name, sizeof(parser_name))) {
+    cacheable = false;
+  }
+  if (cacheable) {
+    key.clear();
+    key.reserve(fulltext.length() + 256);
+    auto append_value = [&key](const auto &value) {
+      key.append(reinterpret_cast<const char *>(&value), sizeof(value));
+    };
+    auto append_string = [&append_value, &key](const ObString &value) {
+      const uint64_t length = value.length();
+      append_value(length);
+      key.append(value.ptr(), value.length());
+    };
+    const ObObjType data_type = meta.get_type();
+    const ObCollationType collation = meta.get_collation_type();
+    append_value(data_type);
+    append_value(collation);
+    key.append(parser_name);
+    append_value(property.min_token_size_);
+    append_value(property.max_token_size_);
+    append_value(property.ngram_token_size_);
+    append_value(property.ik_mode_smart_);
+    append_value(property.min_ngram_token_size_);
+    append_value(property.max_ngram_token_size_);
+    append_string(property.stopword_table_);
+    append_string(property.dict_table_);
+    append_string(property.quantifier_table_);
+    append_string(fulltext);
+  }
+  return cacheable;
+}
+
+} // namespace
 
 ObObjDatumMapType ObFTIndexRowCache::FTS_INDEX_TYPES[] = {OBJ_DATUM_STRING, OBJ_DATUM_STRING, OBJ_DATUM_8BYTE_DATA, OBJ_DATUM_8BYTE_DATA};
 ObObjDatumMapType ObFTIndexRowCache::FTS_DOC_WORD_TYPES[] = {OBJ_DATUM_STRING, OBJ_DATUM_STRING, OBJ_DATUM_8BYTE_DATA, OBJ_DATUM_8BYTE_DATA};
@@ -70,6 +194,9 @@ int ObFTIndexRowCache::init(
   } else if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(merge_memctx_, param))) {
   } else if (OB_FAIL(helper_.init(&(merge_memctx_->get_arena_allocator()), parser_name, parser_properties))) {
   } else {
+    if (!helper_.get_parser().is_ik()) {
+      get_ft_document_cache().clear();
+    }
     row_idx_ = 0;
     is_fts_index_aux_ = is_fts_index_aux;
     is_inited_ = true;
@@ -290,49 +417,95 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
   ObFTWordMap ft_word_map;
   void *rows_buf = nullptr;
   blocksstable::ObDatumRow *rows = nullptr;
+  std::string cache_key;
+  std::shared_ptr<const CachedFTDocument> cached;
+  std::shared_ptr<CachedFTDocument> new_document;
+  const int64_t word_idx = is_fts_index_aux ? 0 : 1;
+  const int64_t doc_id_idx = is_fts_index_aux ? 1 : 0;
   if (OB_ISNULL(helper) || OB_UNLIKELY(!ft_obj_meta.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
   } else if (0 == fulltext.length()) {
     ret = OB_ITER_END;
-  } else if (OB_FAIL(ft_word_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
-  } else if (OB_FAIL(segment_and_calc_word_count(allocator,
-                                                 helper,
-                                                 ft_obj_meta,
-                                                 fulltext,
-                                                 doc_length,
-                                                 ft_word_map))) {
-  } else if (0 == ft_word_map.size()) {
-    ret = OB_ITER_END;
-  } else if (OB_ISNULL(rows_buf = reinterpret_cast<char *>(
-                           allocator.alloc(ft_word_map.size() * sizeof(blocksstable::ObDatumRow))))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    int64_t i = 0;
-    rows = new (rows_buf) blocksstable::ObDatumRow[ft_word_map.size()];
-    for (ObFTWordMap::const_iterator iter = ft_word_map.begin();
-         OB_SUCC(ret) && iter != ft_word_map.end();
-         ++iter) {
-      if (OB_FAIL(rows[i].init(allocator, FT_WORD_DOC_COL_CNT))) {
+    if (make_ik_document_cache_key(*helper, ft_obj_meta, fulltext, cache_key)) {
+      cached = get_ft_document_cache().get(cache_key);
+    }
+    if (cached != nullptr) {
+      doc_length = cached->doc_length_;
+      if (OB_ISNULL(rows_buf = reinterpret_cast<char *>(
+              allocator.alloc(cached->words_.size() * sizeof(blocksstable::ObDatumRow))))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
       } else {
-        const ObFTWord &ft_word = iter->first;
-        const int64_t word_cnt = iter->second;
-        // index row format
-        //  -    FTS_INDEX: [WORD], [DOC_ID], [WORD_COUNT], [DOC_LENGTH]
-        //  - FTS_DOC_WORD: [DOC_ID], [WORD], [WORD_COUNT], [DOC_LENGTH]
-        const int64_t word_idx = is_fts_index_aux ? 0 : 1;
-        const int64_t doc_id_idx = is_fts_index_aux ? 1 : 0;
-        const int64_t word_cnt_idx = 2;
-        const int64_t doc_len_idx = 3;
-        rows[i].storage_datums_[word_idx].set_datum(ft_word.get_word());
-        rows[i].storage_datums_[doc_id_idx].shallow_copy_from_datum(doc_id_datum);
-        rows[i].storage_datums_[word_cnt_idx].set_uint(word_cnt);
-        rows[i].storage_datums_[doc_len_idx].set_uint(doc_length);
-        if (OB_FAIL(word_rows.push_back(&rows[i]))) {
+        int64_t i = 0;
+        rows = new (rows_buf) blocksstable::ObDatumRow[cached->words_.size()];
+        for (const CachedFTWord &word : cached->words_) {
+          char *text = nullptr;
+          if (OB_FAIL(ret)) {
+            break;
+          } else if (OB_ISNULL(text = reinterpret_cast<char *>(allocator.alloc(word.text_.size())))) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+          } else if (OB_FAIL(rows[i].init(allocator, FT_WORD_DOC_COL_CNT))) {
+          } else {
+            MEMCPY(text, word.text_.data(), word.text_.size());
+            rows[i].storage_datums_[word_idx].set_string(text, word.text_.size());
+            rows[i].storage_datums_[doc_id_idx].shallow_copy_from_datum(doc_id_datum);
+            rows[i].storage_datums_[2].set_uint(word.count_);
+            rows[i].storage_datums_[3].set_uint(doc_length);
+            if (OB_FAIL(word_rows.push_back(&rows[i]))) {
+            } else {
+              ++i;
+            }
+          }
+        }
+      }
+    } else if (OB_FAIL(ft_word_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
+    } else if (OB_FAIL(segment_and_calc_word_count(allocator,
+                                                   helper,
+                                                   ft_obj_meta,
+                                                   fulltext,
+                                                   doc_length,
+                                                   ft_word_map))) {
+    } else if (0 == ft_word_map.size()) {
+      ret = OB_ITER_END;
+    } else if (OB_ISNULL(rows_buf = reinterpret_cast<char *>(
+                           allocator.alloc(ft_word_map.size() * sizeof(blocksstable::ObDatumRow))))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      if (!cache_key.empty()) {
+        new_document = std::make_shared<CachedFTDocument>();
+        new_document->doc_length_ = doc_length;
+        new_document->words_.reserve(ft_word_map.size());
+      }
+      int64_t i = 0;
+      rows = new (rows_buf) blocksstable::ObDatumRow[ft_word_map.size()];
+      for (ObFTWordMap::const_iterator iter = ft_word_map.begin();
+           OB_SUCC(ret) && iter != ft_word_map.end();
+           ++iter) {
+        if (OB_FAIL(rows[i].init(allocator, FT_WORD_DOC_COL_CNT))) {
         } else {
-          ++i;
+          const ObFTWord &ft_word = iter->first;
+          const int64_t word_cnt = iter->second;
+          // index row format
+          //  -    FTS_INDEX: [WORD], [DOC_ID], [WORD_COUNT], [DOC_LENGTH]
+          //  - FTS_DOC_WORD: [DOC_ID], [WORD], [WORD_COUNT], [DOC_LENGTH]
+          rows[i].storage_datums_[word_idx].set_datum(ft_word.get_word());
+          rows[i].storage_datums_[doc_id_idx].shallow_copy_from_datum(doc_id_datum);
+          rows[i].storage_datums_[2].set_uint(word_cnt);
+          rows[i].storage_datums_[3].set_uint(doc_length);
+          if (OB_FAIL(word_rows.push_back(&rows[i]))) {
+          } else {
+            if (new_document != nullptr) {
+              const ObString text = ft_word.get_word().get_string();
+              new_document->words_.push_back(CachedFTWord{std::string(text.ptr(), text.length()), word_cnt});
+            }
+            ++i;
+          }
         }
       }
     }
+  }
+  if (OB_SUCC(ret) && new_document != nullptr) {
+    get_ft_document_cache().put(cache_key, new_document);
   }
   return ret;
 }
