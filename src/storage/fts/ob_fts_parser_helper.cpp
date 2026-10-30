@@ -14,6 +14,15 @@
  * limitations under the License.
  */
 
+#include <array>
+#include <memory>
+#include <mutex>
+#include <new>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <vector>
+
 #include "object/ob_object.h"
 #include "storage/fts/ob_fts_struct.h"
 #define USING_LOG_PREFIX STORAGE_FTS
@@ -255,7 +264,143 @@ int ObFTParseData::get_dict_hub(ObFTDictHub *&hub)
 
 ////////////////////////////////////////////////////////////////////////////////
 // ObFTParseHelper
-int ObFTParseHelper::segment(
+namespace
+{
+struct IkTokenStreamKey
+{
+  std::string_view fulltext_;
+  std::string_view parser_;
+  std::string_view properties_;
+  ObCollationType collation_;
+  ObCharsetType charset_;
+
+  uint64_t hash() const
+  {
+    uint64_t value = std::hash<std::string_view>{}(fulltext_);
+    auto combine = [&value](uint64_t part) {
+      value ^= part + 0x9e3779b97f4a7c15ULL + (value << 6) + (value >> 2);
+    };
+    combine(std::hash<std::string_view>{}(parser_));
+    combine(std::hash<std::string_view>{}(properties_));
+    combine(collation_);
+    combine(charset_);
+    return value;
+  }
+};
+
+struct CachedIkToken
+{
+  std::string bytes_;
+  int64_t char_cnt_;
+  int64_t word_freq_;
+};
+
+struct IkTokenStreamEntry
+{
+  static constexpr size_t BYTE_LIMIT = 128 * 1024 * 1024 / 16;
+  explicit IkTokenStreamEntry(const IkTokenStreamKey &key)
+      : fulltext_(key.fulltext_), parser_(key.parser_), properties_(key.properties_),
+        collation_(key.collation_), charset_(key.charset_),
+        bytes_(sizeof(*this) + fulltext_.capacity() + parser_.capacity() + properties_.capacity()),
+        cacheable_(bytes_ <= BYTE_LIMIT)
+  {}
+
+  bool matches(const IkTokenStreamKey &key) const
+  {
+    return fulltext_ == key.fulltext_ && parser_ == key.parser_
+        && properties_ == key.properties_ && collation_ == key.collation_
+        && charset_ == key.charset_;
+  }
+
+  void record(const char *word, int64_t word_len, int64_t char_cnt, int64_t word_freq)
+  {
+    if (cacheable_) {
+      try {
+        if (word_len > BYTE_LIMIT - bytes_) {
+          cacheable_ = false;
+        } else {
+          const size_t old_capacity = tokens_.capacity();
+          tokens_.push_back({std::string(word, word_len), char_cnt, word_freq});
+          bytes_ += (tokens_.capacity() - old_capacity) * sizeof(CachedIkToken)
+                  + tokens_.back().bytes_.capacity();
+          cacheable_ = bytes_ <= BYTE_LIMIT;
+        }
+      } catch (const std::bad_alloc &) {
+        cacheable_ = false;
+      }
+      if (!cacheable_) {
+        std::vector<CachedIkToken>().swap(tokens_);
+      }
+    }
+  }
+
+  std::string fulltext_;
+  std::string parser_;
+  std::string properties_;
+  ObCollationType collation_;
+  ObCharsetType charset_;
+  std::vector<CachedIkToken> tokens_;
+  size_t bytes_;
+  bool cacheable_ = true;
+};
+
+class IkTokenStreamCache
+{
+public:
+  static IkTokenStreamCache &instance()
+  {
+    static IkTokenStreamCache cache;
+    return cache;
+  }
+
+  std::shared_ptr<const IkTokenStreamEntry> find(const IkTokenStreamKey &key, uint64_t hash)
+  {
+    Shard &shard = shards_[hash % shards_.size()];
+    std::lock_guard<std::mutex> guard(shard.mutex_);
+    const auto range = shard.entries_.equal_range(hash);
+    for (auto it = range.first; it != range.second; ++it) {
+      if (it->second->matches(key)) {
+        return it->second;
+      }
+    }
+    return {};
+  }
+
+  void publish(const IkTokenStreamKey &key, uint64_t hash,
+               std::shared_ptr<const IkTokenStreamEntry> entry)
+  {
+    // Conservatively charge metadata/control block/map nodes/bucket space too.
+    const size_t bytes = entry->bytes_ + 128;
+    if (entry->cacheable_ && bytes <= IkTokenStreamEntry::BYTE_LIMIT) {
+      Shard &shard = shards_[hash % shards_.size()];
+      std::lock_guard<std::mutex> guard(shard.mutex_);
+      const auto range = shard.entries_.equal_range(hash);
+      for (auto it = range.first; it != range.second; ++it) {
+        if (it->second->matches(key)) {
+          return;
+        }
+      }
+      if (shard.entries_.size() >= 4096 ||
+          shard.bytes_ + bytes > IkTokenStreamEntry::BYTE_LIMIT) {
+        shard.entries_.clear();
+        shard.bytes_ = 0;
+      }
+      shard.entries_.emplace(hash, std::move(entry));
+      shard.bytes_ += bytes;
+    }
+  }
+
+private:
+  struct Shard
+  {
+    std::mutex mutex_;
+    std::unordered_multimap<uint64_t, std::shared_ptr<const IkTokenStreamEntry>> entries_;
+    size_t bytes_ = 0;
+  };
+  std::array<Shard, 16> shards_;
+};
+
+int segment_tokens(
     const ObFTParserProperty &property,
     const int64_t parser_version,
     const ObIFTParserDesc *parser_desc,
@@ -263,7 +408,8 @@ int ObFTParseHelper::segment(
     const char *ft,
     const int64_t ft_len,
     common::ObIAllocator &allocator,
-    ObAddWord &add_word)
+    ObAddWord &add_word,
+    IkTokenStreamEntry *recording)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(parser_version < 0 || nullptr == parser_desc || nullptr == cs || nullptr == ft || 0 >= ft_len)) {
@@ -295,6 +441,8 @@ int ObFTParseHelper::segment(
           if (OB_ITER_END != ret) {
           }
         } else if (OB_FAIL(add_word.process_word(word, word_len, char_cnt, word_freq))) {
+        } else if (nullptr != recording) {
+          recording->record(word, word_len, char_cnt, word_freq);
         }
       }
       if (OB_ITER_END == ret) {
@@ -308,11 +456,13 @@ int ObFTParseHelper::segment(
   }
   return ret;
 }
+} // namespace
 
 ObFTParseHelper::ObFTParseHelper()
     : allocator_(nullptr),
     parser_desc_(nullptr),
     parser_name_(),
+    parser_properties_(),
     add_word_flag_(),
     parser_property_(),
     is_inited_(false)
@@ -340,6 +490,8 @@ int ObFTParseHelper::init(
   } else if (OB_ISNULL(parser_desc_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(set_add_word_flag(*parser_desc_))) {
+  } else if (parser_name_.is_ik() &&
+             OB_FAIL(ob_write_string(*allocator, parser_properties, parser_properties_))) {
   } else {
     allocator_ = allocator;
     is_inited_ = true;
@@ -354,6 +506,7 @@ void ObFTParseHelper::reset()
 {
   parser_desc_ = nullptr;
   allocator_ = nullptr;
+  parser_properties_.reset();
   add_word_flag_.clear();
   is_inited_ = false;
 }
@@ -379,16 +532,59 @@ int ObFTParseHelper::segment(
   } else {
     words.reuse();
     ObAddWord add_word(parser_property_, meta, add_word_flag_, *allocator_, words);
-    if (OB_FAIL(segment(
-                    parser_property_,
-                    parser_name_.get_parser_version(),
-                    parser_desc_,
-                    cs,
-                    fulltext,
-                    fulltext_len,
-                    *allocator_,
-                    add_word))) {
-    } else {
+    std::shared_ptr<const IkTokenStreamEntry> cached;
+    std::shared_ptr<IkTokenStreamEntry> recording;
+    char parser_buf[OB_FT_PARSER_NAME_LENGTH] = {};
+    IkTokenStreamKey key{};
+    uint64_t hash = 0;
+    if (parser_name_.is_ik() && nullptr != fulltext && fulltext_len > 0
+        && fulltext_len + parser_properties_.length() < IkTokenStreamEntry::BYTE_LIMIT) {
+      ObFTParser parser = parser_name_;
+      if (OB_SUCCESS == parser.serialize_to_str(parser_buf, sizeof(parser_buf))) {
+        key = {std::string_view(fulltext, fulltext_len), std::string_view(parser_buf),
+               std::string_view(parser_properties_.empty() ? "" : parser_properties_.ptr(),
+                                parser_properties_.length()),
+               type, ObCharset::charset_type_by_coll(type)};
+        hash = key.hash();
+        try {
+          cached = IkTokenStreamCache::instance().find(key, hash);
+          if (!cached) {
+            recording = std::make_shared<IkTokenStreamEntry>(key);
+          }
+        } catch (const std::bad_alloc &) {
+          recording.reset();
+        }
+      }
+    }
+    if (cached) {
+      for (size_t i = 0; OB_SUCC(ret) && i < cached->tokens_.size(); ++i) {
+        const CachedIkToken &token = cached->tokens_[i];
+        ObString word;
+        // The word map may keep shallow references beyond this cache handle.
+        if (OB_FAIL(ob_write_string(*allocator_,
+                ObString(token.bytes_.size(), token.bytes_.data()), word))) {
+        } else if (OB_FAIL(add_word.process_word(word.ptr(), word.length(),
+                                                token.char_cnt_, token.word_freq_))) {
+        }
+      }
+    } else if (OB_FAIL(segment_tokens(
+                           parser_property_,
+                           parser_name_.get_parser_version(),
+                           parser_desc_,
+                           cs,
+                           fulltext,
+                           fulltext_len,
+                           *allocator_,
+                           add_word,
+                           recording.get()))) {
+    } else if (recording) {
+      try {
+        IkTokenStreamCache::instance().publish(key, hash, std::move(recording));
+      } catch (const std::bad_alloc &) {
+        // Caching is optional; the original parsing result remains valid.
+      }
+    }
+    if (OB_SUCC(ret)) {
       doc_length = add_word.get_add_word_count();
     }
   }
