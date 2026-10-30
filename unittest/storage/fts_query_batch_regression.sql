@@ -47,6 +47,41 @@ execute fts_query_filter_reuse using @query_words;
 set @query_words='no_such_word_zzzz';
 execute fts_query_filter_reuse using @query_words;
 deallocate prepare fts_query_filter_reuse;
+drop table if exists fts_query_seek;
+create table fts_query_seek(id int primary key, en text) default charset=utf8mb4;
+insert into fts_query_seek
+select id, concat('denseword ',
+  if(id % 2 = 0, 'evenword ', ''),
+  if(id % 31 = 0, 'sparseword ', ''),
+  if(id % 257 = 0, 'rareword rareword ', ''),
+  if(id % 7 = 0, 'rankword rankword rankword', 'rankword'))
+from fts_query_batch;
+alter table fts_query_seek add fulltext index ft_seek(en) with parser beng;
+select id, round(match(en) against('denseword sparseword rareword rankword'), 8) as score
+from fts_query_seek where match(en) against('denseword sparseword rareword rankword')
+order by score desc, id limit 1;
+select id, round(match(en) against('denseword sparseword rareword rankword'), 8) as score
+from fts_query_seek where match(en) against('denseword sparseword rareword rankword')
+order by score desc, id limit 20;
+select id, round(match(en) against('denseword evenword sparseword rareword'), 8) as score
+from fts_query_seek where match(en) against('denseword evenword sparseword rareword') > 0
+order by score desc, id limit 7 offset 31;
+select group_concat(concat(id, ':', score) order by score desc, id)
+from (select id, round(match(en) against('denseword sparseword rareword rankword'), 8) as score
+from fts_query_seek where match(en) against('denseword sparseword rareword rankword')
+order by score desc, id limit 1027) r;
+prepare fts_seek_reuse from 'select id, round(match(en) against(?), 8) as score from fts_query_seek where match(en) against(?) order by score desc, id limit 5';
+set @seek_words='denseword sparseword';
+execute fts_seek_reuse using @seek_words, @seek_words;
+set @seek_words='no_such_seek_word';
+execute fts_seek_reuse using @seek_words, @seek_words;
+deallocate prepare fts_seek_reuse;
+delete from fts_query_seek where id in (0, 31, 1024, 2048);
+update fts_query_seek set en='denseword rareword rareword rankword' where id=1025;
+select id, round(match(en) against('denseword sparseword rareword rankword'), 8) as score
+from fts_query_seek where match(en) against('denseword sparseword rareword rankword')
+order by score desc, id limit 20;
+drop table fts_query_seek;
 update fts_query_batch set title='数据库 数据库', body='全文索引', en='gamma gamma alpha' where id=0;
 delete from fts_query_batch where id in (1, 1024, 2048);
 insert into fts_query_batch values(2051, '全文索引', '数据库', 'beta alpha');
