@@ -87,6 +87,10 @@ class DatasetTest(unittest.TestCase):
         np.testing.assert_array_equal(first.base, second.base)
         np.testing.assert_array_equal(first.truth, second.truth)
         self.assertEqual(first.manifest["base_sha256"], second.manifest["base_sha256"])
+        manifest = self.cache_dir / "tiny/manifest.json"
+        manifest.write_text(manifest.read_text().replace('"rows": 256', '"rows": 255'))
+        with self.assertRaisesRegex(RuntimeError, "manifest"):
+            contest_eval.load_or_create_dataset(spec, self.cache_dir)
 
 
 class RunnerContractTest(unittest.TestCase):

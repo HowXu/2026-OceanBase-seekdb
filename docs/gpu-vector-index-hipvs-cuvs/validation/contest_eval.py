@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """Offline paired evaluation for frozen V5 and a candidate hipVS build."""
 
+import dataclasses
+import hashlib
 import json
 import math
 import statistics
 from pathlib import Path
+
+import numpy as np
 
 GIB = 1024 ** 3
 
@@ -77,6 +81,127 @@ def evaluate_gates(comparison, resources, dataset_kind):
     add("host_memory_limit", resources["candidate_rss_bytes"] <= 96 * GIB,
         resources["candidate_rss_bytes"], 96 * GIB)
     return gates
+
+
+@dataclasses.dataclass(frozen=True)
+class DatasetSpec:
+    name: str
+    rows: int
+    dim: int
+    nq: int
+    distribution: str
+    seed: int
+
+
+@dataclasses.dataclass
+class Dataset:
+    base: np.ndarray
+    queries: np.ndarray
+    truth: np.ndarray
+    manifest: dict
+
+
+def dataset_specs(mode):
+    if mode == "quick":
+        return [DatasetSpec("quick10k-d128", 10_000, 128, 4096, "gaussian", 20261031)]
+    if mode != "full":
+        raise ValueError(f"unknown dataset mode: {mode}")
+    return [
+        DatasetSpec("gaussian250k-d128", 250_000, 128, 4096, "gaussian", 20261101),
+        DatasetSpec("clustered250k-d128", 250_000, 128, 4096, "clustered", 20261102),
+        DatasetSpec("gaussian250k-d256", 250_000, 256, 4096, "gaussian", 20261103),
+        DatasetSpec("clustered250k-d256", 250_000, 256, 4096, "clustered", 20261104),
+        DatasetSpec("gaussian250k-d384", 250_000, 384, 4096, "gaussian", 20261105),
+        DatasetSpec("gaussian250k-d768", 250_000, 768, 4096, "gaussian", 20261106),
+        DatasetSpec("clustered1m-d128", 1_000_000, 128, 4096, "clustered", 20261107),
+        DatasetSpec("clustered1m-d256", 1_000_000, 256, 4096, "clustered", 20261108),
+    ]
+
+
+def normalize(rows):
+    rows /= np.linalg.norm(rows, axis=1, keepdims=True)
+    return rows
+
+
+def generate_arrays(spec):
+    rng = np.random.default_rng(spec.seed)
+    if spec.distribution == "gaussian":
+        base = normalize(rng.standard_normal((spec.rows, spec.dim), dtype=np.float32))
+        queries = rng.standard_normal((spec.nq, spec.dim), dtype=np.float32)
+        near_count = spec.nq // 5
+        queries[:near_count] = base[rng.integers(0, spec.rows, near_count)]
+        queries[:near_count] += rng.normal(0, 0.01, (near_count, spec.dim))
+        queries[near_count:near_count * 2] += 0.25
+    elif spec.distribution == "clustered":
+        centers = normalize(rng.standard_normal((64, spec.dim), dtype=np.float32))
+        labels = rng.integers(0, len(centers), spec.rows)
+        scales = np.geomspace(0.25, 2.0, spec.dim, dtype=np.float32)
+        base = centers[labels] + rng.normal(0, 0.04, (spec.rows, spec.dim)) * scales
+        normalize(base)
+        queries = np.empty((spec.nq, spec.dim), dtype=np.float32)
+        ordinary = spec.nq * 7 // 10
+        boundary = spec.nq * 9 // 10
+        queries[:ordinary] = centers[rng.integers(0, len(centers), ordinary)]
+        queries[:ordinary] += rng.normal(0, 0.04, (ordinary, spec.dim)) * scales
+        left = centers[rng.integers(0, len(centers), boundary - ordinary)]
+        right = centers[rng.integers(0, len(centers), boundary - ordinary)]
+        queries[ordinary:boundary] = (left + right) * 0.5
+        queries[ordinary:boundary] += rng.normal(0, 0.02, (boundary - ordinary, spec.dim))
+        queries[boundary:] = rng.normal(0, 1, (spec.nq - boundary, spec.dim)) + 0.35
+    else:
+        raise ValueError(f"unknown distribution: {spec.distribution}")
+    return base.astype(np.float32), normalize(queries).astype(np.float32)
+
+
+def exact_topk(base, queries, k, chunk=8):
+    if not 1 <= k <= len(base):
+        raise ValueError("invalid ground-truth k")
+    base_squared = np.einsum("ij,ij->i", base, base)
+    output = []
+    for start in range(0, len(queries), chunk):
+        block = queries[start:start + chunk]
+        query_squared = np.einsum("ij,ij->i", block, block)
+        distances = query_squared[:, None] + base_squared[None, :] - 2 * (block @ base.T)
+        nearest = np.argpartition(distances, k - 1, axis=1)[:, :k]
+        for row, ids in enumerate(nearest):
+            ordered = sorted(ids.tolist(), key=lambda i: (float(distances[row, i]), i))
+            output.append(ordered)
+    return np.asarray(output, dtype=np.int32)
+
+
+def array_sha256(array):
+    contiguous = np.ascontiguousarray(array)
+    digest = hashlib.sha256()
+    digest.update(memoryview(contiguous))
+    return digest.hexdigest()
+
+
+def load_or_create_dataset(spec, cache_dir):
+    directory = Path(cache_dir) / spec.name
+    paths = {name: directory / f"{name}.npy" for name in ("base", "queries", "truth")}
+    manifest_path = directory / "manifest.json"
+    if manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if manifest.get("spec") != dataclasses.asdict(spec):
+            raise RuntimeError(f"dataset manifest mismatch: {spec.name}")
+        arrays = {name: np.load(path, allow_pickle=False, mmap_mode="r")
+                  for name, path in paths.items()}
+        for name, array in arrays.items():
+            if array_sha256(array) != manifest.get(f"{name}_sha256"):
+                raise RuntimeError(f"dataset hash mismatch: {spec.name}/{name}")
+        return Dataset(manifest=manifest, **arrays)
+    if directory.exists() and any(directory.iterdir()):
+        raise RuntimeError(f"incomplete dataset cache: {directory}")
+    directory.mkdir(parents=True, exist_ok=True)
+    base, queries = generate_arrays(spec)
+    truth = exact_topk(base, queries, 100)
+    manifest = {"version": 1, "spec": dataclasses.asdict(spec)}
+    arrays = {"base": base, "queries": queries, "truth": truth}
+    for name, array in arrays.items():
+        np.save(paths[name], array, allow_pickle=False)
+        manifest[f"{name}_sha256"] = array_sha256(array)
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    return Dataset(manifest=manifest, **arrays)
 
 
 def write_reports(result, output_dir):
