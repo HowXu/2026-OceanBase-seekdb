@@ -157,6 +157,98 @@ public:
   roaring::api::roaring64_bitmap_t* bitmap_;
 };
 
+#ifndef OB_BUILD_CUVS
+TEST_F(TestVsagAdaptor, gpu_snapshot_recovers_on_cpu)
+{
+  // A complete OBCUVS02 snapshot must remain readable without a GPU runtime.
+  // The graph payload is opaque; CPU recovery uses persisted vectors and IDs.
+  constexpr int32_t dim = 4;
+  constexpr int64_t count = 256;
+  std::vector<int64_t> vids(count);
+  std::vector<float> vectors(count * dim);
+  for (int64_t row = 0; row < count; ++row) {
+    vids[row] = 1000 + row * 7;
+    for (int col = 0; col < dim; ++col) { vectors[row * dim + col] = row + col * 0.01f; }
+  }
+  const uint64_t graph_bytes = 16;
+  const int32_t reserved = 0;
+  std::stringstream snapshot(std::ios::in | std::ios::out | std::ios::binary);
+  snapshot.write("OBCUVS02", 8);
+  snapshot.write(reinterpret_cast<const char *>(&graph_bytes), sizeof(graph_bytes));
+  snapshot.write(reinterpret_cast<const char *>(&dim), sizeof(dim));
+  snapshot.write(reinterpret_cast<const char *>(&reserved), sizeof(reserved));
+  snapshot.write(reinterpret_cast<const char *>(&count), sizeof(count));
+  snapshot.write(reinterpret_cast<const char *>(vids.data()), vids.size() * sizeof(int64_t));
+  snapshot.write(reinterpret_cast<const char *>(vectors.data()), vectors.size() * sizeof(float));
+  snapshot.write("opaque-graph-1234", graph_bytes);
+  DefaultVsagAllocator allocator;
+  obvsag::VectorIndexPtr handler = nullptr;
+  ASSERT_EQ(0, obvsag::create_index(handler, obvsag::HNSW_TYPE, "float32", "l2", dim, 16, 100, 100, &allocator));
+  ASSERT_EQ(0, obvsag::fdeserialize(handler, snapshot));
+  int64_t restored_count = 0;
+  ASSERT_EQ(0, obvsag::get_index_number(handler, restored_count));
+  ASSERT_EQ(count, restored_count);
+  const float *distances = nullptr;
+  const int64_t *ids = nullptr;
+  const char *extra = nullptr;
+  int64_t found = 0;
+  ASSERT_EQ(0, obvsag::knn_search(handler, vectors.data(), dim, 10, distances, ids, found, 100, false, extra));
+  ASSERT_EQ(10, found);
+  EXPECT_EQ(vids[0], ids[0]);
+  EXPECT_NEAR(0.0f, distances[0], 0.0001f);
+  allocator.Deallocate(const_cast<float *>(distances));
+  allocator.Deallocate(const_cast<int64_t *>(ids));
+  // Once recovered, persist in VSAG format and accept subsequent additions.
+  std::stringstream cpu_snapshot;
+  ASSERT_EQ(0, obvsag::fserialize(handler, cpu_snapshot));
+  EXPECT_NE(std::string("OBCUVS02"), cpu_snapshot.str().substr(0, 8));
+  float additional[dim] = {-1, -1, -1, -1};
+  int64_t additional_id = 999999;
+  ASSERT_EQ(0, obvsag::add_index(handler, additional, &additional_id, dim, 1));
+  ASSERT_EQ(0, obvsag::get_index_number(handler, restored_count));
+  EXPECT_EQ(count + 1, restored_count);
+  ASSERT_EQ(0, obvsag::delete_index(handler));
+  // A truncated payload must still fail instead of falling back with partial data.
+  std::string truncated = snapshot.str();
+  truncated.pop_back();
+  std::stringstream incomplete(truncated);
+  ASSERT_EQ(0, obvsag::create_index(handler, obvsag::HNSW_TYPE, "float32", "l2", dim, 16, 100, 100, &allocator));
+  EXPECT_NE(0, obvsag::fdeserialize(handler, incomplete));
+  ASSERT_EQ(0, obvsag::delete_index(handler));
+}
+#endif
+
+TEST_F(TestVsagAdaptor, cpu_snapshot_survives_repeated_gpu_marking)
+{
+  DefaultVsagAllocator allocator;
+  obvsag::VectorIndexPtr handler = nullptr;
+  constexpr int dim = 4;
+  constexpr int count = 128;
+  std::vector<int64_t> ids(count);
+  std::vector<float> vectors(count * dim);
+  for (int row = 0; row < count; ++row) {
+    ids[row] = row;
+    for (int col = 0; col < dim; ++col) { vectors[row * dim + col] = row + col; }
+  }
+  ASSERT_EQ(0, obvsag::create_index(handler, obvsag::HNSW_TYPE, "float32", "l2", dim, 16, 100, 100, &allocator));
+  ASSERT_EQ(0, obvsag::build_index(handler, vectors.data(), ids.data(), dim, count));
+  std::stringstream snapshot;
+  ASSERT_EQ(0, obvsag::fserialize(handler, snapshot));
+  ASSERT_EQ(0, obvsag::delete_index(handler));
+  ASSERT_EQ(0, obvsag::create_index(handler, obvsag::HNSW_TYPE, "float32", "l2", dim, 16, 100, 100, &allocator));
+  obvsag::mark_cuvs_index(handler);
+  ASSERT_EQ(0, obvsag::fdeserialize(handler, snapshot));
+  // The plugin calls mark before every insert, including after snapshot reload.
+  obvsag::mark_cuvs_index(handler);
+  float additional[dim] = {-1, -1, -1, -1};
+  int64_t additional_id = 999999;
+  ASSERT_EQ(0, obvsag::add_index(handler, additional, &additional_id, dim, 1));
+  int64_t actual_count = 0;
+  ASSERT_EQ(0, obvsag::get_index_number(handler, actual_count));
+  EXPECT_EQ(count + 1, actual_count);
+  ASSERT_EQ(0, obvsag::delete_index(handler));
+}
+
 TEST_F(TestVsagAdaptor, test_hnsw)
 {
   ASSERT_TRUE(obvsag::is_init());

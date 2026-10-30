@@ -16,7 +16,8 @@ int seekdb_cuvs_cagra_knn(const float* base, long n, long dim,
  *    the dataset to the device, so `base` may be freed after this returns.
  *  - seekdb_cuvs_search: runs top-k search for nq queries (row-major f32, dim
  *    cols), writing uint32 row offsets to out_ids[nq*topk] and (if non-NULL) L2
- *    distances to out_dist[nq*topk]. Returns 0 on success.
+ *    squared L2 distances to out_dist[nq*topk]. Returns 0 on success, after
+ *    synchronizing the resource stream. Requires 0 < topk <= n and nq > 0.
  *  - seekdb_cuvs_free: releases the handle.
  * All ROCm/cuVS state lives inside the .so; seekdb only ever sees these C symbols. */
 void* seekdb_cuvs_build(const float* base, long n, long dim);
