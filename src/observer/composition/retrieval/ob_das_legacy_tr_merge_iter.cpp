@@ -473,6 +473,9 @@ int ObDASLegacyTRMergeIter::init_daat_iter_param(ObTextDaaTParam &iter_param)
   iter_param.allocator_ = &myself_allocator_;
   iter_param.mode_flag_ = ir_ctdef_->mode_flag_;
   iter_param.function_lookup_mode_ = function_lookup_mode_;
+  if (!ir_ctdef_->need_calc_relevance()) {
+    // Existence-only retrieval has no document aggregate child.
+  } else {
   iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_
       = ir_ctdef_->get_doc_agg_ctdef()->pd_expr_spec_.pd_storage_aggregate_output_.at(0);
   iter_param.bm25_param_est_ctx_.estimated_total_doc_cnt_ = ir_ctdef_->estimated_total_doc_cnt_;
@@ -492,6 +495,7 @@ int ObDASLegacyTRMergeIter::init_daat_iter_param(ObTextDaaTParam &iter_param)
     } else {
       iter_param.bm25_param_est_ctx_.total_doc_cnt_iter_ = static_cast<sql::ObDASScanIter*>(children_[children_cnt_ - 1]);
     }
+  }
   }
   if (OB_SUCC(ret)) {
     if (BOOLEAN_MODE == ir_ctdef_->mode_flag_) {
@@ -524,6 +528,9 @@ int ObDASLegacyTRMergeIter::init_taat_iter_param(ObTextTaaTParam &iter_param)
   iter_param.allocator_ = &myself_allocator_;
   iter_param.mode_flag_ = ir_ctdef_->mode_flag_;
   iter_param.function_lookup_mode_ = function_lookup_mode_;
+  if (!ir_ctdef_->need_calc_relevance()) {
+    // Existence-only retrieval has no document aggregate child.
+  } else {
   iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_
       = ir_ctdef_->get_doc_agg_ctdef()->pd_expr_spec_.pd_storage_aggregate_output_.at(0);
   iter_param.bm25_param_est_ctx_.estimated_total_doc_cnt_ = ir_ctdef_->estimated_total_doc_cnt_;
@@ -531,8 +538,11 @@ int ObDASLegacyTRMergeIter::init_taat_iter_param(ObTextTaaTParam &iter_param)
   iter_param.bm25_param_est_ctx_.can_est_by_sum_skip_index_ = ir_ctdef_->avg_doc_len_est_spec_.can_est_by_sum_skip_index_;
   iter_param.bm25_param_est_ctx_.avg_doc_token_cnt_expr_ = ir_ctdef_->avg_doc_token_cnt_expr_;
   iter_param.bm25_param_est_ctx_.doc_length_est_param_ = &doc_length_est_param_;
+  }
   if (OB_ISNULL(iter_param.dim_iter_ = dim_iter_)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (!ir_ctdef_->need_calc_relevance()) {
+    // Existence-only retrieval has no document aggregate child.
   } else if (OB_ISNULL(iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(init_doc_length_est_param())) {

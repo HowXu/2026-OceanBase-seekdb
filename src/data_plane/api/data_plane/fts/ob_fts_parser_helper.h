@@ -207,12 +207,20 @@ public:
   TO_STRING_KV(KP_(allocator), K_(parser_name), KP_(parser_desc), K_(is_inited));
 
 private:
+  static int segment(
+      const ObFTParserProperty &property,
+      const int64_t parser_version,
+      const ObIFTParserDesc *parser_desc,
+      const ObCharsetInfo *cs,
+      const char *fulltext,
+      const int64_t fulltext_len,
+      common::ObIAllocator &allocator,
+      ObAddWord &add_word);
   int set_add_word_flag(const ObIFTParserDesc &ftparser_desc);
 private:
   common::ObIAllocator *allocator_;
   const ObIFTParserDesc *parser_desc_;
   ObFTParser parser_name_;
-  common::ObString parser_properties_;
   ObAddWordFlag add_word_flag_;
   ObFTParserProperty parser_property_;
   bool is_inited_;

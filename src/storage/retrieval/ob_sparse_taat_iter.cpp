@@ -39,6 +39,9 @@ ObSRTaaTIterImpl::ObSRTaaTIterImpl()
     cache_first_id_(),
     are_chunk_stores_inited_(false),
     are_chunk_stores_filled_(false),
+    use_existence_bitmap_(false),
+    existence_sign_(0),
+    existence_next_id_(0),
     set_datum_func_(nullptr)
 {
 }
@@ -103,6 +106,11 @@ void ObSRTaaTIterImpl::reuse(const bool switch_tablet)
   cache_first_id_.reset();
   are_chunk_stores_inited_ = false;
   are_chunk_stores_filled_ = false;
+  use_existence_bitmap_ = false;
+  existence_bits_[0].clear();
+  existence_bits_[1].clear();
+  existence_sign_ = 0;
+  existence_next_id_ = 0;
   input_row_cnt_ = 0;
   output_row_cnt_ = 0;
 }
@@ -152,8 +160,9 @@ int ObSRTaaTIterImpl::get_next_rows(const int64_t capacity, int64_t &count)
     count = 0;
     const int64_t real_capacity = MIN(capacity, iter_param_->max_batch_size_);
     while (OB_SUCC(ret) && count < real_capacity) {
-      if (-1 != cur_map_idx_ && nullptr != cur_map_iter_
-          && *cur_map_iter_ != hash_maps_[cur_map_idx_]->end()) {
+      if ((use_existence_bitmap_ && existence_sign_ <= 1)
+          || (-1 != cur_map_idx_ && nullptr != cur_map_iter_
+          && *cur_map_iter_ != hash_maps_[cur_map_idx_]->end())) {
         if (OB_FAIL(project_results(real_capacity, count))) {
         }
       } else if (OB_FAIL(load_next_hash_map())) {
@@ -247,6 +256,155 @@ int ObSRTaaTIterImpl::init_chunk_stores()
   return ret;
 }
 
+int ObSRTaaTIterImpl::fill_existence_bitmap()
+{
+  int ret = OB_SUCCESS;
+  ObEvalCtx *eval_ctx = iter_param_->eval_ctx_;
+  const int64_t capacity = iter_param_->max_batch_size_;
+  const bool is_unsigned = ob_is_unsigned_type(iter_param_->id_proj_expr_->datum_meta_.type_);
+  use_existence_bitmap_ = true;
+  existence_sign_ = 0;
+  existence_next_id_ = 0;
+  for (int64_t dim_idx = 0; OB_SUCC(ret); ) {
+    if (iter_param_->id_proj_expr_->is_batch_result()) {
+      while (OB_SUCC(ret)) {
+        int64_t count = 0;
+        if (OB_FAIL(dim_iter_->get_next_batch(capacity, count))) {
+          if (OB_UNLIKELY(OB_ITER_END != ret)) {
+          } else if (count > 0) {
+            ret = OB_SUCCESS;
+          }
+        }
+        for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+          const ObDatum &id_datum = iter_param_->id_proj_expr_->locate_expr_datum(*eval_ctx, i);
+          if (OB_UNLIKELY(id_datum.is_null()) || OB_ISNULL(id_datum.ptr_)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else {
+            const int64_t signed_id = is_unsigned ? static_cast<int64_t>(id_datum.get_uint()) : id_datum.get_int();
+            const int sign = signed_id < 0 ? 1 : 0;
+            const uint64_t bit_id = sign ? static_cast<uint64_t>(-(signed_id + 1)) : static_cast<uint64_t>(signed_id);
+            const uint64_t word_idx = bit_id >> 6;
+            if (word_idx >= existence_bits_[sign].size()) {
+              const uint64_t new_size = MAX(word_idx + 1, MAX(existence_bits_[sign].size() * 2, uint64_t{1024}));
+              existence_bits_[sign].resize(new_size, 0);
+            }
+            existence_bits_[sign][word_idx] |= uint64_t{1} << (bit_id & 63);
+          }
+        }
+      }
+    } else {
+      while (OB_SUCC(ret)) {
+        if (OB_FAIL(dim_iter_->get_next_row())) {
+          if (OB_UNLIKELY(OB_ITER_END != ret)) {
+          }
+        } else {
+          const ObDatum &id_datum = iter_param_->id_proj_expr_->locate_expr_datum(*eval_ctx);
+          if (OB_UNLIKELY(id_datum.is_null()) || OB_ISNULL(id_datum.ptr_)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else {
+            const int64_t signed_id = is_unsigned ? static_cast<int64_t>(id_datum.get_uint()) : id_datum.get_int();
+            const int sign = signed_id < 0 ? 1 : 0;
+            const uint64_t bit_id = sign ? static_cast<uint64_t>(-(signed_id + 1)) : static_cast<uint64_t>(signed_id);
+            const uint64_t word_idx = bit_id >> 6;
+            if (word_idx >= existence_bits_[sign].size()) {
+              const uint64_t new_size = MAX(word_idx + 1, MAX(existence_bits_[sign].size() * 2, uint64_t{1024}));
+              existence_bits_[sign].resize(new_size, 0);
+            }
+            existence_bits_[sign][word_idx] |= uint64_t{1} << (bit_id & 63);
+          }
+        }
+      }
+    }
+    if (OB_ITER_END == ret) {
+      ret = OB_SUCCESS;
+    }
+    if (OB_SUCC(ret)) {
+      eval_ctx->reuse(eval_ctx->get_batch_size());
+      if (OB_FAIL(update_dim_iter(++dim_idx))) {
+        if (OB_ITER_END != ret) {
+        }
+      }
+    }
+  }
+  if (OB_ITER_END == ret) {
+    ret = OB_SUCCESS;
+  }
+  if (OB_SUCC(ret)) {
+    cur_map_idx_ = 0;
+    are_chunk_stores_filled_ = true;
+  }
+  return ret;
+}
+
+int ObSRTaaTIterImpl::fill_existence_map()
+{
+  int ret = OB_SUCCESS;
+  ObSRTaaTHashMap *map = hash_maps_[0];
+  ObEvalCtx *eval_ctx = iter_param_->eval_ctx_;
+  const int64_t capacity = iter_param_->max_batch_size_;
+  for (int64_t dim_idx = 0; OB_SUCC(ret); ) {
+    if (iter_param_->id_proj_expr_->is_batch_result()) {
+      while (OB_SUCC(ret)) {
+        int64_t count = 0;
+        if (OB_FAIL(dim_iter_->get_next_batch(capacity, count))) {
+          if (OB_UNLIKELY(OB_ITER_END != ret)) {
+          } else if (count > 0) {
+            ret = OB_SUCCESS;
+          }
+        }
+        for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+          ObDocIdExt id;
+          const ObDatum &id_datum = iter_param_->id_proj_expr_->locate_expr_datum(*eval_ctx, i);
+          if (OB_UNLIKELY(id_datum.is_null()) || OB_ISNULL(id_datum.ptr_)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (OB_FAIL(id.from_datum(id_datum))) {
+          } else if (OB_FAIL(map->set_refactored(id, 1.0, 1 /* overwrite */))) {
+          }
+        }
+      }
+    } else {
+      while (OB_SUCC(ret)) {
+        ObDocIdExt id;
+        if (OB_FAIL(dim_iter_->get_next_row())) {
+          if (OB_UNLIKELY(OB_ITER_END != ret)) {
+          }
+        } else {
+          const ObDatum &id_datum = iter_param_->id_proj_expr_->locate_expr_datum(*eval_ctx);
+          if (OB_UNLIKELY(id_datum.is_null()) || OB_ISNULL(id_datum.ptr_)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (OB_FAIL(id.from_datum(id_datum))) {
+          } else if (OB_FAIL(map->set_refactored(id, 1.0, 1 /* overwrite */))) {
+          }
+        }
+      }
+    }
+    if (OB_ITER_END == ret) {
+      ret = OB_SUCCESS;
+    }
+    if (OB_SUCC(ret)) {
+      eval_ctx->reuse(eval_ctx->get_batch_size());
+      if (OB_FAIL(update_dim_iter(++dim_idx))) {
+        if (OB_ITER_END != ret) {
+        }
+      }
+    }
+  }
+  if (OB_ITER_END == ret) {
+    ret = OB_SUCCESS;
+  }
+  if (OB_SUCC(ret)) {
+    void *buf = iter_allocator_->alloc(sizeof(ObSRTaaTHashMap::iterator));
+    if (OB_ISNULL(buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      cur_map_iter_ = new (buf) ObSRTaaTHashMap::iterator(map->begin());
+      cur_map_idx_ = 0;
+      are_chunk_stores_filled_ = true;
+    }
+  }
+  return ret;
+}
+
 int ObSRTaaTIterImpl::fill_chunk_stores()
 {
   int ret = OB_SUCCESS;
@@ -254,6 +412,9 @@ int ObSRTaaTIterImpl::fill_chunk_stores()
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_UNLIKELY(are_chunk_stores_filled_)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (!iter_param_->need_project_relevance()) {
+    ret = ob_is_integer_type(iter_param_->id_proj_expr_->datum_meta_.type_)
+        ? fill_existence_bitmap() : fill_existence_map();
   } else {
     ObSEArray<ObExpr *, 2> exprs;
     if (OB_FAIL(exprs.push_back(iter_param_->id_proj_expr_))) {
@@ -405,7 +566,7 @@ int ObSRTaaTIterImpl::load_next_hash_map()
           } else if (OB_FAIL(map->set_refactored(id, cur_relevance + last_relevance, 1 /* overwrite */))) {
           }
         } else {
-          if (OB_FAIL(map->set_refactored(id, 1.0, 0 /* overwrite */))) {
+          if (OB_FAIL(map->set_refactored(id, 1.0, 1 /* overwrite */))) {
           }
         }
       }
@@ -437,6 +598,45 @@ int ObSRTaaTIterImpl::project_results(const int64_t safe_capacity, int64_t &coun
   ObDatum *relevance_datum = nullptr;
   ObExpr *filter_expr = iter_param_->filter_expr_;
   const ObLimitParam *limit_param = iter_param_->limit_param_;
+  if (use_existence_bitmap_) {
+    const bool is_unsigned = ob_is_unsigned_type(iter_param_->id_proj_expr_->datum_meta_.type_);
+    while (OB_SUCC(ret) && count < safe_capacity && existence_sign_ <= 1) {
+      const std::vector<uint64_t> &bits = existence_bits_[existence_sign_];
+      while (existence_next_id_ < bits.size() * 64
+             && 0 == (bits[existence_next_id_ >> 6] & (uint64_t{1} << (existence_next_id_ & 63)))) {
+        ++existence_next_id_;
+      }
+      if (existence_next_id_ >= bits.size() * 64) {
+        ++existence_sign_;
+        existence_next_id_ = 0;
+        continue;
+      }
+      const int64_t numeric_id = existence_sign_ == 0
+          ? static_cast<int64_t>(existence_next_id_)
+          : -static_cast<int64_t>(existence_next_id_) - 1;
+      ObEvalCtx::BatchInfoScopeGuard guard(*eval_ctx);
+      guard.set_batch_idx(count);
+      if (is_unsigned) {
+        id_datum[count].set_uint(static_cast<uint64_t>(numeric_id));
+      } else {
+        id_datum[count].set_int(numeric_id);
+      }
+      if (0 == count && OB_FAIL(cache_first_id_.from_datum(id_datum[count]))) {
+      } else {
+        ++input_row_cnt_;
+        if (limit_param->is_valid() && input_row_cnt_ <= limit_param->offset_) {
+        } else {
+          ++output_row_cnt_;
+          ++count;
+          if (limit_param->is_valid() && output_row_cnt_ >= limit_param->limit_) {
+            ret = OB_ITER_END;
+          }
+        }
+        ++existence_next_id_;
+      }
+    }
+    return ret;
+  }
   if (iter_param_->need_project_relevance()) {
     if (count == 0) {
       relevance_datum = relevance_expr->locate_datums_for_update(*eval_ctx, safe_capacity);

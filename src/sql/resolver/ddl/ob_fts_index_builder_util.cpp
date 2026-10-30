@@ -98,8 +98,18 @@ int ObFtsIndexBuilderUtil::determine_docid_type(const ObTableSchema &table_schem
   int ret = OB_SUCCESS;
   uint64_t docid_col_id = OB_INVALID_ID;
   static constexpr bool ENABLE_DOC_ID_OPT = true;
+  bool use_rowkey_as_docid = false;
+  const ObRowkeyInfo &rowkey_info = table_schema.get_rowkey_info();
+  if (1 == rowkey_info.get_size()) {
+    const ObRowkeyColumn *rowkey_column = rowkey_info.get_column(0);
+    const ObColumnSchemaV2 *column_schema = nullptr == rowkey_column
+        ? nullptr : table_schema.get_column_schema(rowkey_column->column_id_);
+    use_rowkey_as_docid = nullptr != column_schema && ob_is_integer_type(column_schema->get_data_type());
+  }
   // Choose the document-id representation from the current table layout.
-  if (!table_schema.is_table_with_hidden_pk_column()) {
+  if (use_rowkey_as_docid) {
+    doc_id_type = ObDocIDType::HIDDEN_INC_PK;
+  } else if (!table_schema.is_table_with_hidden_pk_column()) {
     doc_id_type = ObDocIDType::TABLET_SEQUENCE;
   } else if (OB_FAIL(table_schema.get_docid_col_id(docid_col_id))) {
     if (OB_ERR_INDEX_KEY_NOT_FOUND == ret) {

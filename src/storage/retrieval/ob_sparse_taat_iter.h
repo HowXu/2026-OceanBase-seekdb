@@ -20,6 +20,8 @@
 #include "query/engine/basic/ob_spill_row_store.h"
 #include "ob_i_sparse_retrieval_iter.h"
 
+#include <vector>
+
 namespace oceanbase
 {
 namespace storage
@@ -45,6 +47,8 @@ protected:
   virtual int pre_process(); // should set partition_cnt_, among other things
   virtual int init_chunk_stores();
   virtual int fill_chunk_stores();
+  int fill_existence_map();
+  int fill_existence_bitmap();
   virtual int load_next_hash_map();
   virtual int project_results(const int64_t safe_capacity, int64_t &count);
   virtual int update_dim_iter(const int64_t dim_idx); // should return OB_ITER_END if no more dimensions
@@ -66,6 +70,10 @@ protected:
   ObDocIdExt cache_first_id_;
   bool are_chunk_stores_inited_;
   bool are_chunk_stores_filled_;
+  bool use_existence_bitmap_;
+  std::vector<uint64_t> existence_bits_[2];
+  int64_t existence_sign_;
+  uint64_t existence_next_id_;
   void (*set_datum_func_)(ObDatum &, const ObDocIdExt &);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSRTaaTIterImpl);
