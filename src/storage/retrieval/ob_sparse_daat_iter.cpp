@@ -287,17 +287,10 @@ int ObSRDaaTIterImpl::fill_merge_heap()
 {
   int ret = OB_SUCCESS;
   ObSRMergeItem item;
-  // Array shapes stay fixed while advancing children; refresh views every merge round.
-  ObISRDaaTDimIter *const *dim_iters = dim_iters_->get_data();
-  const double *dim_weights = nullptr == iter_param_->dim_weights_ ? nullptr : iter_param_->dim_weights_->get_data();
-  const int64_t *next_round_iter_idxes = next_round_iter_idxes_.get_data();
-  const ObDatum **iter_domain_ids = iter_domain_ids_.get_data();
-  OB_ASSERT(next_round_cnt_ <= next_round_iter_idxes_.count());
   for (int64_t i = 0; OB_SUCC(ret) && i < next_round_cnt_; ++i) {
-    const int64_t iter_idx = next_round_iter_idxes[i];
-    OB_ASSERT(iter_idx >= 0 && iter_idx < dim_iters_->count());
+    const int64_t iter_idx = next_round_iter_idxes_[i];
     ObISRDaaTDimIter *dim_iter = nullptr;
-    if (OB_ISNULL(dim_iter = dim_iters[iter_idx])) {
+    if (OB_ISNULL(dim_iter = dim_iters_->at(iter_idx))) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(dim_iter->get_next_row())) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
@@ -306,8 +299,8 @@ int ObSRDaaTIterImpl::fill_merge_heap()
         ret = OB_SUCCESS;
       }
     } else if (OB_FAIL(dim_iter->get_curr_score(item.relevance_))) {
-    } else if (OB_NOT_NULL(dim_weights) && FALSE_IT(item.relevance_ = item.relevance_ * iter_param_->field_boost_ * dim_weights[iter_idx])) {
-    } else if (OB_FAIL(dim_iter->get_curr_id(iter_domain_ids[iter_idx]))) {
+    } else if (OB_NOT_NULL(iter_param_->dim_weights_) && FALSE_IT(item.relevance_ = item.relevance_ * iter_param_->field_boost_ * iter_param_->dim_weights_->at(iter_idx))) {
+    } else if (OB_FAIL(dim_iter->get_curr_id(iter_domain_ids_[iter_idx]))) {
     } else if (FALSE_IT(item.iter_idx_ = iter_idx)) {
     } else if (OB_FAIL(heap_push(item))) {
     } else {
