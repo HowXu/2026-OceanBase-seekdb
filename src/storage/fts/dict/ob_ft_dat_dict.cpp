@@ -252,7 +252,7 @@ int ObFTDATReader<DATA_TYPE>::match_with_hit(const ObString &ft_char,
                                              ObDATrieHit &hit) const
 {
   int ret = OB_SUCCESS;
-  ObFTWordCode code = 0;
+  ObFTWordCode code;
   hit.set_unmatch();
   auto *map = dat_->get_map();
   int32_t *base = reinterpret_cast<int32_t *>(dat_->buff + dat_->base_offset_);
@@ -260,18 +260,7 @@ int ObFTDATReader<DATA_TYPE>::match_with_hit(const ObString &ft_char,
 
   ObFTSingleWord word;
   word.set_word(ft_char.ptr(), ft_char.length());
-  if (OB_NOT_INIT != cached_result_ && cached_word_ == word) {
-    ret = cached_result_;
-    code = cached_code_;
-  } else {
-    ret = map->find(word, code);
-    if (OB_SUCCESS == ret || OB_ENTRY_NOT_EXIST == ret) {
-      cached_word_ = word;
-      cached_code_ = code;
-      cached_result_ = ret;
-    }
-  }
-  if (OB_SUCCESS != ret && OB_ENTRY_NOT_EXIST != ret) {
+  if (OB_FAIL(dat_->get_map()->find(word, code)) && OB_ENTRY_NOT_EXIST != ret) {
   } else if (OB_ENTRY_NOT_EXIST == ret) {
     ret = OB_SUCCESS;
     hit.set_unmatch();

@@ -167,10 +167,7 @@ template <typename DataType = void>
 class ObFTDATReader
 {
 public:
-  ObFTDATReader(ObFTDAT *dat)
-      : dat_(dat), cached_word_(), cached_code_(0), cached_result_(OB_NOT_INIT)
-  {
-  }
+  ObFTDATReader(ObFTDAT *dat) : dat_(dat) {}
 
   // Match single word with hit.
   int match_with_hit(const ObString &single_word,
@@ -179,10 +176,6 @@ public:
 
 private:
   ObFTDAT *dat_;
-  // Readers are parser-private; the parser's cache handles pin this immutable DAT.
-  mutable ObFTSingleWord cached_word_;
-  mutable ObFTWordCode cached_code_;
-  mutable int cached_result_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObFTDATReader);
