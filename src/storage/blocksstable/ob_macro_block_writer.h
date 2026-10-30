@@ -76,6 +76,10 @@ public:
   int compress_micro_block(ObMicroBlockDesc &micro_block_desc);
   int dump_micro_block_writer_buffer(const char *buf, const int64_t size);
   void reset();
+  void set_micro_block_merge_verify_level(const int64_t verify_level)
+  {
+    micro_block_merge_verify_level_ = verify_level;
+  }
 private:
   int prepare_micro_block_reader(
       const char *buf,
@@ -192,6 +196,13 @@ public:
       ObIMacroBlockFlushCallback *callback = nullptr,
       ObIMacroBlockValidator *validator = nullptr,
       ObIODevice *device_handle = nullptr);
+  void set_micro_block_merge_verify_level(const int64_t verify_level)
+  {
+    if (OB_NOT_NULL(micro_writer_)) {
+      micro_writer_->set_micro_block_merge_verify_level(verify_level);
+    }
+    micro_helper_.set_micro_block_merge_verify_level(verify_level);
+  }
   virtual int append_macro_block(const ObMacroBlockDesc &macro_desc,
                                  const ObMicroBlockData *micro_block_data);
   virtual int append_micro_block(const ObMicroBlock &micro_block, const ObMacroBlockDesc *curr_macro_desc = nullptr);

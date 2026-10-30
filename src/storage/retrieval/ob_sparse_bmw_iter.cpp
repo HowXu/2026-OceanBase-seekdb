@@ -32,7 +32,12 @@ ObSRBMWIterImpl::ObSRBMWIterImpl()
     top_k_count_(0),
     domain_id_cmp_(),
     id_cache_(),
-    status_(BMWStatus::MAX_STATUS)
+    status_(BMWStatus::MAX_STATUS),
+    use_dense_top_k_(false),
+    dense_unsigned_(false),
+    dense_scores_(),
+    dense_seen_(),
+    dense_large_scores_()
 {}
 
 int ObSRBMWIterImpl::init(
@@ -52,6 +57,11 @@ int ObSRBMWIterImpl::init(
   } else {
     top_k_count_ = iter_param.topk_limit_;
     status_ = BMWStatus::MAX_STATUS;
+    const ObObjType id_type = iter_param.id_proj_expr_->datum_meta_.type_;
+    const int64_t should_match = relevance_collector.get_should_match();
+    use_dense_top_k_ = ob_is_integer_type(id_type) && should_match >= 0 && should_match <= 1
+        && nullptr == iter_param.dim_weights_;
+    dense_unsigned_ = ob_is_unsigned_type(id_type);
     id_cache_.set_allocator(&allocator_);
     if (OB_FAIL(domain_id_cmp_.init(iter_param.id_proj_expr_->obj_meta_))) {
     } else if (OB_FAIL(id_cache_.init(top_k_count_))) {
@@ -70,6 +80,9 @@ void ObSRBMWIterImpl::reuse(const bool switch_tablet)
     top_k_heap_.pop();
   }
   status_ = BMWStatus::MAX_STATUS;
+  dense_scores_.clear();
+  dense_seen_.clear();
+  dense_large_scores_.clear();
   ObSRDaaTIterImpl::reuse(switch_tablet);
 }
 
@@ -78,6 +91,10 @@ void ObSRBMWIterImpl::reset()
   top_k_heap_.reset();
   top_k_count_ = 0;
   status_ = BMWStatus::MAX_STATUS;
+  use_dense_top_k_ = false;
+  dense_scores_.clear();
+  dense_seen_.clear();
+  dense_large_scores_.clear();
   domain_id_cmp_.reset();
   id_cache_.reset();
   allocator_.reset();
@@ -110,6 +127,15 @@ int ObSRBMWIterImpl::get_next_rows(const int64_t capacity, int64_t &count)
 int ObSRBMWIterImpl::top_k_search()
 {
   int ret = OB_SUCCESS;
+  if (use_dense_top_k_) {
+    if (OB_UNLIKELY(BMWStatus::MAX_STATUS != status_)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(dense_top_k_search())) {
+    } else {
+      status_ = BMWStatus::FINISHED;
+    }
+    return ret;
+  }
   if (OB_UNLIKELY(BMWStatus::MAX_STATUS != status_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(build_top_k_heap())) {
@@ -187,6 +213,81 @@ int ObSRBMWIterImpl::top_k_search()
     }
   }
 
+  return ret;
+}
+
+int ObSRBMWIterImpl::dense_top_k_search()
+{
+  int ret = OB_SUCCESS;
+  static constexpr uint64_t MAX_DIRECT_ID = 1 << 20;
+  for (int64_t dim_idx = 0; OB_SUCC(ret) && dim_idx < dim_iters_->count(); ++dim_idx) {
+    ObISRDimBlockMaxIter *iter = get_iter(dim_idx);
+    if (OB_ISNULL(iter)) {
+      ret = OB_ERR_UNEXPECTED;
+    }
+    while (OB_SUCC(ret)) {
+      const ObDatum *id = nullptr;
+      double relevance = 0.0;
+      if (OB_FAIL(iter->get_next_row())) {
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
+          break;
+        }
+      } else if (OB_FAIL(iter->get_curr_id(id))) {
+      } else if (OB_FAIL(iter->get_curr_score(relevance))) {
+      } else if (OB_ISNULL(id) || OB_UNLIKELY(id->is_null())) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        const int64_t signed_id = dense_unsigned_ ? 0 : id->get_int();
+        const uint64_t unsigned_id = dense_unsigned_ ? id->get_uint() : 0;
+        const bool direct = dense_unsigned_ ? unsigned_id <= MAX_DIRECT_ID
+            : signed_id >= 0 && static_cast<uint64_t>(signed_id) <= MAX_DIRECT_ID;
+        if (direct) {
+          const size_t idx = static_cast<size_t>(dense_unsigned_ ? unsigned_id : signed_id);
+          if (idx >= dense_scores_.size()) {
+            dense_scores_.resize(idx + 1, 0.0);
+            dense_seen_.resize(idx + 1, 0);
+          }
+          dense_seen_[idx] = 1;
+          dense_scores_[idx] += relevance;
+        } else {
+          const uint64_t key = dense_unsigned_ ? unsigned_id : static_cast<uint64_t>(signed_id);
+          dense_large_scores_[key] += relevance;
+        }
+      }
+    }
+  }
+
+  for (size_t idx = 0; OB_SUCC(ret) && idx < dense_scores_.size(); ++idx) {
+    if (dense_seen_[idx]) {
+      if (dense_unsigned_) {
+        const uint64_t value = static_cast<uint64_t>(idx);
+        const ObDatum id(reinterpret_cast<const char *>(&value), sizeof(value), false);
+        if (OB_FAIL(process_collected_row(id, dense_scores_[idx]))) {
+        }
+      } else {
+        const int64_t value = static_cast<int64_t>(idx);
+        const ObDatum id(reinterpret_cast<const char *>(&value), sizeof(value), false);
+        if (OB_FAIL(process_collected_row(id, dense_scores_[idx]))) {
+        }
+      }
+    }
+  }
+  for (const auto &entry : dense_large_scores_) {
+    if (OB_FAIL(ret)) {
+      break;
+    } else if (dense_unsigned_) {
+      const uint64_t value = entry.first;
+      const ObDatum id(reinterpret_cast<const char *>(&value), sizeof(value), false);
+      if (OB_FAIL(process_collected_row(id, entry.second))) {
+      }
+    } else {
+      const int64_t value = static_cast<int64_t>(entry.first);
+      const ObDatum id(reinterpret_cast<const char *>(&value), sizeof(value), false);
+      if (OB_FAIL(process_collected_row(id, entry.second))) {
+      }
+    }
+  }
   return ret;
 }
 

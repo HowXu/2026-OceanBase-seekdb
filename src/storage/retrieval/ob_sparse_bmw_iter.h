@@ -21,6 +21,9 @@
 #include "ob_sparse_daat_iter.h"
 #include "ob_sparse_retrieval_util.h"
 
+#include <map>
+#include <vector>
+
 namespace oceanbase
 {
 namespace storage
@@ -44,6 +47,7 @@ protected:
   virtual int init_before_wand_process() { return OB_SUCCESS; }
 
   int top_k_search();
+  int dense_top_k_search();
   int build_top_k_heap();
   int next_pivot(int64_t &pivot_iter_idx);
   int next_pivot_range(int64_t &skip_range_cnt);
@@ -105,6 +109,11 @@ protected:
   ObDomainIdCmp domain_id_cmp_;
   ObFixedArray<ObDocIdExt, ObIAllocator> id_cache_;
   BMWStatus status_;
+  bool use_dense_top_k_;
+  bool dense_unsigned_;
+  std::vector<double> dense_scores_;
+  std::vector<uint8_t> dense_seen_;
+  std::map<uint64_t, double> dense_large_scores_;
 };
 
 

@@ -131,6 +131,9 @@ int ObDDLMacroBlockWriter::init(
                                            macro_seq_param,
                                            pre_warm_param,
                                            ddl_redo_callback_))) {
+      } else if (share::schema::is_fts_index_aux(param.ddl_table_schema_.table_item_.index_type_)
+                 || share::schema::is_fts_doc_word_aux(param.ddl_table_schema_.table_item_.index_type_)) {
+        macro_block_writer_.set_micro_block_merge_verify_level(MICRO_BLOCK_MERGE_VERIFY_LEVEL::NONE);
       }
     }
   }
