@@ -1,6 +1,8 @@
 # FTS 查询 C1 批量过滤与 C2 批次内 doc-ID 浅引用实施计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans inline. 用户已批准同时验证 C1 和 C2；在当前分支/会话单线执行，不创建 worktree、不调用子代理。本文仅为计划，不在编写计划时修改生产代码或启动跑分。
+> **最新执行状态（用户变更指令）：C2 已取消，本计划不再作为继续实施的授权。** C1 已完成、留档并撤回；C2 未提交的生产改动已撤销，未进行完整 A/B。后续按当前 A+B profile 重新研究 LIMIT 批内跳跃及 C1b，须另行确认设计。下文保留原计划用于追溯。
+>
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans inline. 原授权为验证 C1 和 C2；在当前分支/会话单线执行，不创建 worktree、不调用子代理。
 
 **Goal:** 在不改变 BM25、MATCH 过滤、归并顺序及 LIMIT/BMW 语义的前提下，减少三条 COUNT 查询的逐文档过滤开销，以及 posting 批次内冗余的 doc-ID 深拷贝。
 
@@ -237,6 +239,8 @@ git revert --no-edit <C1_PRODUCTION_COMMIT>
 无论 C1 保留还是撤回，都继续 C2；C2 的直接基线取 C1 决策后的实际生产 HEAD。
 
 ## Task 3：C2——仅在 posting 批次内使用浅 doc-ID
+
+**状态：用户取消，停止执行。** 初始候选编译成功，但首次 query-batch 回归的 ID/相关度与冻结 golden 不一致；未完成六组回归、未做完整 A/B，不能称为正确或有效优化。两处生产文件均恢复至 HEAD，原补丁仅保存在 `run_temp/query-c2-cancelled.patch`，不继续定位或修复。最终工作目录中的生产源码仍为 A+B；`build_release/src/observer/seekdb` 是取消前的实验构建，不可用作最终程序。新研究见 `docs/superpowers/experiments/2026-10-30-fts-query-research-after-c1.md`。
 
 **Files:** `ob_text_retrieval_token_iter.{h,cpp}`；测试与结果资产同第 3 节。
 
