@@ -584,8 +584,6 @@ int ObTextRetrievalDaaTTokenIter::get_curr_score(double &score) const
     ret = OB_ARRAY_OUT_OF_RANGE;
   } else if (relevance_expr_) {
     score = relevance_[cur_idx_];
-  } else {
-    score = 1.0;
   }
   return ret;
 }
