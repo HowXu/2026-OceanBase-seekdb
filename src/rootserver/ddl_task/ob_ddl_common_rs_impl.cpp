@@ -461,10 +461,12 @@ int ObDDLTaskUtil::generate_build_replica_sql(const int64_t data_table_id,
         } else if (OB_FAIL(order_column_ids.push_back(col_id))) {
         }
         if (OB_SUCC(ret) && enable_fts_newsort) {
-          // Only FTS term/doc-ID VARCHAR keys use the existing string encoder.
+          // FTS VARCHAR terms and integer doc IDs both use the existing key encoder.
           const ObCollationType cs = column_schema->get_collation_type();
-          enable_fts_newsort = column_schema->get_data_type() == ObVarcharType
-              && (cs == CS_TYPE_UTF8MB4_GENERAL_CI || cs == CS_TYPE_UTF8MB4_BIN || cs == CS_TYPE_BINARY);
+          const ObObjType type = column_schema->get_data_type();
+          enable_fts_newsort = common::ob_is_integer_type(type)
+              || (type == ObVarcharType
+                  && (cs == CS_TYPE_UTF8MB4_GENERAL_CI || cs == CS_TYPE_UTF8MB4_BIN || cs == CS_TYPE_BINARY));
         }
       }
     }
