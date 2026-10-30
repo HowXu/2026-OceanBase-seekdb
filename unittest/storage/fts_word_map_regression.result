@@ -1,0 +1,23 @@
+{"tokens": [{"gamma": 1}, {"alpha": 3}, {"beta": 2}], "doc_len": 6}
+{"tokens": [{"cafe": 4}, {"resume": 2}], "doc_len": 6}
+{"tokens": [{"café": 2}, {"cafe": 2}, {"résumé": 1}, {"resume": 1}], "doc_len": 6}
+{"tokens": [{"alpha": 2}, {"and": 2}], "doc_len": 4}
+{"tokens": [], "doc_len": 0}
+[]
+{"tokens": [{"alpha": 200}, {"gamma": 100}, {"cafe": 200}, {"beta": 100}], "doc_len": 600}
+{"tokens": [{"oceanbase": 2}, {"数据库": 2}, {"全文索引": 2}], "doc_len": 6}
+{"tokens": [{"数据": 2}, {"索引": 2}, {"oceanbase": 2}, {"全文": 2}, {"数据库": 2}, {"全文索引": 2}, {"库": 2}], "doc_len": 14}
+1	1.77343634
+2	0.82365010
+3	0.82365010
+1
+2
+2
+1
+1
+2
+3
+2
+3
+2
+3
