@@ -19,6 +19,7 @@
 
 #include "ob_i_sparse_retrieval_iter.h"
 #include "ob_sparse_utils.h"
+#include "share/vector/ob_bit_vector.h"
 #include "storage/access/ob_scan_merge_loser_tree.h"
 #include "storage/access/ob_simple_rows_merger.h"
 
@@ -87,7 +88,9 @@ public:
       K_(next_round_iter_idxes), K_(next_round_cnt));
 protected:
   virtual int pre_process();
-  virtual int do_one_merge_round(int64_t &count);
+  int do_one_merge_round(int64_t &count) { return do_one_merge_round(count, false); }
+  int do_one_merge_round(int64_t &count, const bool defer_filter);
+  int filter_batch(const int64_t raw_count, int64_t &filtered_count);
   virtual int fill_merge_heap();
   virtual int collect_dims_by_id(const ObDatum *&id_datum, double &relevance, bool &got_valid_id);
   virtual int process_collected_row(const ObDatum &id_datum, const double relevance);
@@ -122,6 +125,7 @@ protected:
   }
 protected:
   ObIAllocator *iter_allocator_;
+  sql::ObBitVector *empty_skip_;
   ObSparseRetrievalMergeParam *iter_param_;
   ObIArray<ObISRDaaTDimIter *> *dim_iters_;
   ObSRMergeCmp merge_cmp_;
