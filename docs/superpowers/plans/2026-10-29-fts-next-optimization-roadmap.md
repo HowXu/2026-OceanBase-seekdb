@@ -118,6 +118,8 @@ memory_budget=2G datafile_size=1G datafile_maxsize=4G log_disk_size=2G
 
 ## Task 1：只复测一次 A，并给出决定
 
+**状态：已完成。** 2026-10-30 复测四组回归一致；构建 +3.0511%、分词 +9.2725%、查询 -2.2252%，类别等权综合 +3.3662%。按工程门槛保留 A，未追加跑分。
+
 **Files:** 读取当前五个 A 生产文件、四组回归；新产物只写 `run_temp/`。
 
 **Interfaces:** 输入为当前候选及 `bc6dfc916` 基线二进制；输出为复测前/后报告、九项比较、保留或 revert 决定。
@@ -142,6 +144,8 @@ bash run_temp/run-fts-variant.sh route-a-recheck-candidate run_temp/route-a-cand
 - [ ] 使用第 4 节公式生成比较结果，作出一次明确的保留/撤回决定，不循环跑到出现正收益为止。
 
 ## Task 2：提交证据，并按结果保留或 revert A
+
+**状态：已完成（保留分支，无需 revert）。** 测试/证据提交 `0999846ee`，A 生产提交 `a6b94fb24`。未执行 push。详细记录见 `docs/superpowers/experiments/2026-10-29-fts-route-a-results.md`。
 
 **Files:** 创建 `docs/superpowers/experiments/2026-10-29-fts-route-a-results.md`；保存回归测试；A 生产补丁单独成 commit。
 
@@ -179,6 +183,8 @@ git diff --exit-code bc6dfc916 -- \
 - [ ] revert 后若继续使用源构建产物，先 `-j11` 增量构建并运行四组回归；不能把仍含 A 的旧候选二进制当作已恢复基线。只保存一次新基线快照，不额外跑一对完整 benchmark。
 
 ## Task 3：A.5——Friso 借鉴的 IK 字符编码复用短实验
+
+**状态：已完成，收益未证明，候选提交后撤回。** 所有权和重复编码查询已核实，四组回归一致；唯一一对 A/B 的未改动 BEng 控制项也异常变快，不能将表面综合提升归因于本补丁。保存扩展测试与结果，不自动追加评测，继续 B/C。见 `docs/superpowers/experiments/2026-10-30-fts-route-a5-results.md`。
 
 **Files:** 首选定位 `src/storage/fts/dict/ob_ft_dat_dict.{h,cpp}`、`ob_ft_cache_dict.{h,cpp}`、`ob_ft_range_dict.{h,cpp}`、`src/storage/fts/ik/ob_ik_cjk_processor.{h,cpp}`；仅修改经调用链证明必需的文件。扩展 `unittest/storage/fts_ik_chain_regression.sql` 及 `.result`。
 
