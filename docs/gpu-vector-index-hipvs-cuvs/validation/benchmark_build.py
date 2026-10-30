@@ -209,9 +209,9 @@ def main():
                                                              for key, value in vars(args).items()},
               "algorithm_note": "VSAG HNSW vs hipVS CAGRA in the seekdb HNSW SQL route; graph parameters differ",
               "cpu_configuration": {"m": args.m, "ef_construction": args.ef_construction, "ef_search": args.ef_search},
-              "gpu_configuration": {"graph_degree": 128, "intermediate_graph_degree": 256,
-                                    "nn_descent_niter": 100, "itopk_minimum": 1024 if args.dim > 256 else 512,
-                                    "search_mode": "MULTI_CTA" if args.dim > 256 or args.k * 4 > 512 else "library_default"}}
+              "gpu_configuration": {"graph_degree": 32, "intermediate_graph_degree": 64,
+                                    "nn_descent_niter": 6, "itopk_minimum": 4096 if args.dim > 256 else 2048,
+                                    "search_mode": "MULTI_CTA"}}
     try:
         base, queries, truth = make_dataset(args.rows, args.dim, args.queries, args.k, args.seed)
         result["base_sha256"] = hashlib.sha256(base.tobytes()).hexdigest()
