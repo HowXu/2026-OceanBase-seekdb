@@ -9,7 +9,8 @@ typedef struct {
   int build_algo; size_t nn_descent_niter;
 } cuvsCagraIndexParams;
 typedef cuvsCagraIndexParams* cuvsCagraIndexParams_t;
-typedef struct { size_t itopk_size, search_width; } cuvsCagraSearchParams;
+enum cuvsCagraSearchAlgo { SINGLE_CTA, MULTI_CTA, MULTI_KERNEL, AUTO };
+typedef struct { size_t itopk_size, search_width; enum cuvsCagraSearchAlgo algo; } cuvsCagraSearchParams;
 typedef cuvsCagraSearchParams* cuvsCagraSearchParams_t;
 typedef struct { void* data; } cuvsCagraIndex;
 typedef cuvsCagraIndex* cuvsCagraIndex_t;

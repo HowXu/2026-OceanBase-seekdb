@@ -138,7 +138,7 @@ times. Install `numpy` and `pymysql` in the benchmark environment, then run:
 ```bash
 python3 docs/gpu-vector-index-hipvs-cuvs/validation/benchmark_build.py \
   --host 127.0.0.1 --port 2881 --rows 100000 --dim 128 \
-  --queries 100 --k 10 --repeats 3 --minimum-recall 0.95 \
+  --queries 100 --k 10 --repeats 3 --minimum-recall 0.95 --ef-search 16000 --m 32 \
   --trace-file /tmp/hipvs.trace --server-log /path/to/log/seekdb.log \
   --output /tmp/hipvs-evidence/build-benchmark.json
 ```
@@ -148,6 +148,10 @@ database and removes only that database on exit; `--keep-database` preserves it
 for investigation. Run on the server host so evidence files refer to the tested
 process, and avoid unrelated server traffic during measurement. Keep GPU, CPU,
 ROCm/hipVS versions, CPU count, memory budget and source revision with evidence.
+Set host parallelism on the observer process to match its CPU allocation. For
+the tested 16-CPU container, the observer used `cpu_count=16`, an 8 GiB memory
+budget, and `OMP_NUM_THREADS=8`; its host exposed 128 logical CPUs, so relying
+on host-wide OpenMP auto-detection would oversubscribe the container.
 
 The JSON reports DDL time and DDL plus first-query time separately, so lazy
 construction is included. GPU results require both a snapshot build log and a
@@ -160,9 +164,45 @@ dimensions 128/384/768 as hardware memory permits; keep complete raw results.
 This compares VSAG HNSW with CAGRA in seekdb's HNSW SQL route. It does **not**
 convert CAGRA into a VSAG HNSW graph. CAGRA uses graph degree 128, intermediate
 degree 256 (255 for 256 input rows) and 100 NN-Descent iterations; VSAG uses
-`m=16,ef_construction=200`. The algorithms have different graph parameters, so
+`m=16,ef_construction=200` by default (the example raises `m` to 32). The algorithms have different graph parameters, so
 assess build time together with recall and first-ready time. Query batch
 throughput is a separate metric and must not be reported as index-build speedup.
+
+SQL HNSW queries use the session variable `ob_hnsw_ef_search`; setting only the
+DDL `ef_search` parameter leaves the query session at its default. The benchmark
+sets both with `--ef-search` (default 200) and records the effective session
+value. Raise it until the CPU baseline meets the same recall threshold; the
+example uses 16000 for random high-dimensional vectors. This changes query
+effort. CPU graph parameters are separately configurable with `--m` (default 16)
+and `--ef-construction` (default 200), and are recorded in the JSON. If recall
+plateaus even at high query effort, calibrate graph quality before measuring.
+The example uses `m=32`; report the chosen graph parameters with every speedup.
+Compare DDL time independently of first-query time.
+
+For dimensions above 256 the bridge retains at least 1024 search candidates and
+selects `MULTI_CTA`: hipVS's default `SINGLE_CTA` path supports at most 512.
+The same mode switch applies whenever Top-K requires more than 512 retained
+candidates. Construction parameters and the existing 128-dimensional path are
+unchanged.
+
+## Validation on AMD hardware (2026-10-30)
+
+On AMD `gfx1100` with ROCm 7.2.4 / hipVS 1.0.0, the GPU/TRACE Release build,
+GPU routing, filtering/deletes, restart persistence and unavailable-GPU recovery
+checks passed. Three-trial median DDL speedups were **1.64x** for 10K x 128
+vectors and **9.34x** for 100K x 128 vectors, with both backends above 95% Recall@10.
+CPU parameters were `m=16` and `m=32` respectively; both used
+`ef_construction=200` and session `ob_hnsw_ef_search=16000`.
+
+For 100K x 384 vectors, the wider GPU search frontier raised Recall@10 from
+94.8% to 99.5–99.6% across three runs on the same reloaded graph, with 300 GPU
+serves and no rebuild. The CPU `m=32` baseline reached only 86.5%, so this case
+has **no accepted matched-quality build speedup**. The original strict
+three-dataset matrix therefore retains its failed CPU quality gate; it must not
+be described as entirely passing. The 128-D build measurements precede the
+query-only change above, which leaves their construction implementation and
+search configuration unchanged. Full results are in
+[`validation/results-20261030.json`](validation/results-20261030.json).
 
 ## Offline checks
 

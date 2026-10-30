@@ -107,6 +107,13 @@ def run(args, result, base, queries, truth):
             cursor.execute("SELECT version()")
             result["server_version"] = cursor.fetchone()[0]
             cursor.execute(f"SET ob_query_timeout={args.timeout * 1000000}")
+            # DDL ef_search does not set the query session variable. Record the
+            # value actually used by SQL ANN so recall comparisons are valid.
+            cursor.execute(f"SET SESSION ob_hnsw_ef_search={args.ef_search}")
+            cursor.execute("SELECT @@session.ob_hnsw_ef_search")
+            result["effective_hnsw_ef_search"] = int(cursor.fetchone()[0])
+            if result["effective_hnsw_ef_search"] != args.ef_search:
+                raise RuntimeError("session HNSW search effort did not take effect")
             cursor.execute(f"CREATE DATABASE `{db}`")
             created = True
             cursor.execute(f"USE `{db}`")
@@ -125,7 +132,7 @@ def run(args, result, base, queries, truth):
                     log_start = evidence_offset(args.server_log)
                     started = time.perf_counter()
                     cursor.execute(f"CREATE VECTOR INDEX idx ON `{table}`(v) WITH "
-                                   f"(distance=l2,type=hnsw,lib={backend},m=16,ef_construction=200,ef_search=200)")
+                                   f"(distance=l2,type=hnsw,lib={backend},m={args.m},ef_construction={args.ef_construction},ef_search={args.ef_search})")
                     create_seconds = time.perf_counter() - started
                     answers = []
                     first_seconds = None
@@ -152,6 +159,9 @@ def run(args, result, base, queries, truth):
                     args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
                     print(f"{backend} trial={repeat} DDL={create_seconds:.3f}s "
                           f"ready={trial['ready_seconds']:.3f}s recall={trial['recall_at_k']:.4f}", flush=True)
+                    if trial["recall_at_k"] < args.minimum_recall:
+                        raise ValueError(f"{backend} recall {trial['recall_at_k']:.4f} below "
+                                         f"{args.minimum_recall:.4f}; calibrate graph and search parameters before timing")
                     cursor.execute(f"DROP TABLE `{table}`")
             result.update(summarize(result["trials"], args.minimum_recall))
     finally:
@@ -178,6 +188,10 @@ def main():
     parser.add_argument("--batch-size", type=int, default=250)
     parser.add_argument("--timeout", type=int, default=3600)
     parser.add_argument("--minimum-recall", type=float, default=0.95)
+    parser.add_argument("--ef-search", type=int, default=200,
+                        help="SQL session HNSW search effort; increase until the CPU baseline meets the same recall target")
+    parser.add_argument("--m", type=int, default=16, help="CPU HNSW graph degree (recorded explicitly; cuvs uses its own CAGRA graph degree)")
+    parser.add_argument("--ef-construction", type=int, default=200)
     parser.add_argument("--trace-file", type=Path)
     parser.add_argument("--server-log", type=Path)
     parser.add_argument("--output", type=Path, required=True)
@@ -185,7 +199,7 @@ def main():
     parser.add_argument("--keep-database", action="store_true")
     args = parser.parse_args()
     if args.rows < 256 or args.dim < 1 or not 1 <= args.k <= args.rows or min(
-            args.queries, args.repeats, args.batch_size, args.timeout) < 1 or not 0 <= args.minimum_recall <= 1:
+            args.queries, args.repeats, args.batch_size, args.timeout, args.ef_construction) < 1 or not 0 <= args.minimum_recall <= 1 or not 1 <= args.ef_search <= 160000 or not 5 <= args.m <= 128:
         parser.error("invalid dataset, repetition, timeout or recall parameters")
     if not args.prepare_only and (not args.trace_file or not args.server_log):
         parser.error("--trace-file and --server-log are required to prove GPU construction and serving")
@@ -194,9 +208,10 @@ def main():
               "platform": platform.platform(), "parameters": {key: str(value) if isinstance(value, Path) else value
                                                              for key, value in vars(args).items()},
               "algorithm_note": "VSAG HNSW vs hipVS CAGRA in the seekdb HNSW SQL route; graph parameters differ",
-              "cpu_configuration": {"m": 16, "ef_construction": 200, "ef_search": 200},
+              "cpu_configuration": {"m": args.m, "ef_construction": args.ef_construction, "ef_search": args.ef_search},
               "gpu_configuration": {"graph_degree": 128, "intermediate_graph_degree": 256,
-                                    "nn_descent_niter": 100, "itopk_minimum": 512}}
+                                    "nn_descent_niter": 100, "itopk_minimum": 1024 if args.dim > 256 else 512,
+                                    "search_mode": "MULTI_CTA" if args.dim > 256 or args.k * 4 > 512 else "library_default"}}
     try:
         base, queries, truth = make_dataset(args.rows, args.dim, args.queries, args.k, args.seed)
         result["base_sha256"] = hashlib.sha256(base.tobytes()).hexdigest()

@@ -112,8 +112,14 @@ int seekdb_cuvs_search(void* handle, const float* query, long nq, long topk,
   nt = matrix(nd, rs, kDLCUDA, h->device, kDLUInt);
   dt = matrix(dd, rs, kDLCUDA, h->device, kDLFloat);
   sp->itopk_size = (size_t)topk * 4;
-  if (sp->itopk_size < 512) sp->itopk_size = 512;
+  /* High-dimensional data needs a wider retained frontier to maintain recall.
+   * Keep the established 512-candidate path for dimensions up to 256. */
+  if (sp->itopk_size < (h->dim > 256 ? 1024UL : 512UL)) {
+    sp->itopk_size = h->dim > 256 ? 1024 : 512;
+  }
   sp->itopk_size = (sp->itopk_size + 31) / 32 * 32;
+  /* hipVS SINGLE_CTA rejects frontiers larger than 512. */
+  if (sp->itopk_size > 512) sp->algo = MULTI_CTA;
   sp->search_width = 4;
   filter.type = NO_FILTER;
   /* Copies and search must use the same resource stream. A default-stream

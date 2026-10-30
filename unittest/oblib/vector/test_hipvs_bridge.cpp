@@ -84,6 +84,8 @@ cuvsError_t cuvsCagraSearch(cuvsResources_t r, cuvsCagraSearchParams_t p, cuvsCa
   auto distances = static_cast<float*>(dist->dl_tensor.data);
   auto nq = q->dl_tensor.shape[0], k = ids->dl_tensor.shape[1];
   assert(p->itopk_size % 32 == 0 && p->itopk_size >= static_cast<size_t>(k));
+  assert(p->itopk_size >= (index(i)->dim > 256 ? 1024u : 512u));
+  assert(p->itopk_size <= 512 || p->algo == MULTI_CTA);
   resource(r)->pending.push_back([=] {
     for (int64_t row = 0; row < nq; ++row) {
       std::vector<std::pair<float, unsigned>> all;
@@ -144,7 +146,13 @@ int main()
   assert(seekdb_cuvs_search(h, base.data(), 2, 3, ids, nullptr) == 0);
   assert(ids[3] == 1); seekdb_cuvs_free(h);
   assert(!seekdb_cuvs_deserialize("mock.snapshot", 256, 5));
-  int cases = 12;
+  std::vector<float> wide_base(256 * 384);
+  for (size_t i = 0; i < wide_base.size(); ++i) wide_base[i] = static_cast<float>(i);
+  h = seekdb_cuvs_build(wide_base.data(), 256, 384); assert(h);
+  assert(seekdb_cuvs_search(h, wide_base.data(), 2, 3, ids, distances) == 0);
+  assert(ids[0] == 0 && ids[3] == 1);
+  seekdb_cuvs_free(h); assert(live == 0 && buffers.empty());
+  int cases = 13;
   for (int point = 1; point <= build_calls; ++point) {
     calls = 0; fail_at = point;
     h = seekdb_cuvs_build(base.data(), 256, 4); assert(!h);

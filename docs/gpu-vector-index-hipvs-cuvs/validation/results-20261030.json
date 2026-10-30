@@ -1,0 +1,172 @@
+{
+  "test_date": "2026-10-30",
+  "repository": "HowXu/2026-OceanBase-seekdb",
+  "branch": "hipvs-hnsw-build-fixes",
+  "server_cpp_and_index_construction_revision": "817335fbb37bc45054e15ca71220587e11cecfbb",
+  "result": "GPU functional validation and two matched-quality build benchmarks passed; 384-D CPU baseline quality remains below the acceptance threshold.",
+  "hardware": {
+    "gpu": "AMD gfx1100",
+    "gpu_vram_bytes": 51522830336,
+    "cpu": "AMD EPYC 9334 32-Core Processor",
+    "cpu_quota_cores": 16.0,
+    "container_memory_bytes": 59055800320,
+    "observer_cpu_count": 16,
+    "observer_memory_budget_gib": 8,
+    "omp_num_threads": 8
+  },
+  "software": {
+    "os": "Ubuntu 24.04.4 LTS",
+    "rocm": "7.2.4",
+    "hipvs_package_version": "1.0.0",
+    "cuvs_c_api_version": [
+      1,
+      0,
+      0
+    ]
+  },
+  "functional_validation": {
+    "gpu_smoke_status": "PASS",
+    "gpu_smoke_cases": 12,
+    "gpu_persistence_restart": "PASS",
+    "gpu_snapshot_cpu_recovery": "PASS",
+    "insert_delete_after_cpu_recovery": "PASS",
+    "small_256_by_384_gpu_boundary": "PASS"
+  },
+  "accepted_benchmarks": [
+    {
+      "rows": 10000,
+      "dim": 128,
+      "status": "VALID_ACCELERATION",
+      "cpu_configuration": {
+        "m": 16,
+        "ef_construction": 200,
+        "ef_search": 16000
+      },
+      "gpu_configuration": {
+        "graph_degree": 128,
+        "intermediate_graph_degree": 256,
+        "nn_descent_niter": 100,
+        "itopk_minimum": 512
+      },
+      "effective_hnsw_ef_search": 16000,
+      "seed": 20261030,
+      "queries": 100,
+      "repeats": 3,
+      "base_sha256": "1ed96a306b48978bf752125ef3f81c4d853a7fb2306db1acf3219593784d0bd9",
+      "queries_sha256": "80b46774cab24151f9d57e83ad530818988f775122aa66c69eccbb94b7f09fb5",
+      "ddl_speedup": 1.6424480334283875,
+      "ready_speedup": 1.6174780092496401,
+      "medians": {
+        "vsag": {
+          "create_seconds": 2.8276819640304893,
+          "first_query_seconds": 0.01211178197991103,
+          "ready_seconds": 2.8397937460104004,
+          "recall_at_k": 1.0
+        },
+        "cuvs": {
+          "create_seconds": 1.7216264420421794,
+          "first_query_seconds": 0.022050232044421136,
+          "ready_seconds": 1.755692336941138,
+          "recall_at_k": 1.0
+        }
+      },
+      "cpu_recall_min": 1.0,
+      "gpu_recall_min": 1.0,
+      "gpu_build_evidence_count": 3,
+      "gpu_serve_evidence_count": 300
+    },
+    {
+      "rows": 100000,
+      "dim": 128,
+      "status": "VALID_ACCELERATION",
+      "cpu_configuration": {
+        "m": 32,
+        "ef_construction": 200,
+        "ef_search": 16000
+      },
+      "gpu_configuration": {
+        "graph_degree": 128,
+        "intermediate_graph_degree": 256,
+        "nn_descent_niter": 100,
+        "itopk_minimum": 512
+      },
+      "effective_hnsw_ef_search": 16000,
+      "seed": 20261030,
+      "queries": 100,
+      "repeats": 3,
+      "base_sha256": "278e574374b5bc1e7892145a7b8f1c8efc790e187c342d0442c763399a5f3790",
+      "queries_sha256": "a9dabb14a4ce9f1ccf5d17017cdb1f4a53b231b453647ec087d6a5221495235d",
+      "ddl_speedup": 9.341938101463324,
+      "ready_speedup": 9.318123986513248,
+      "medians": {
+        "vsag": {
+          "create_seconds": 85.5483397920616,
+          "first_query_seconds": 0.0690518569899723,
+          "ready_seconds": 85.61738439206965,
+          "recall_at_k": 0.984
+        },
+        "cuvs": {
+          "create_seconds": 9.157450933940709,
+          "first_query_seconds": 0.01774979301262647,
+          "ready_seconds": 9.188264130847529,
+          "recall_at_k": 1.0
+        }
+      },
+      "cpu_recall_min": 0.984,
+      "gpu_recall_min": 1.0,
+      "gpu_build_evidence_count": 3,
+      "gpu_serve_evidence_count": 300
+    }
+  ],
+  "high_dimensional_query_fix": {
+    "rows": 100000,
+    "dim": 384,
+    "queries_per_trial": 100,
+    "top_k": 10,
+    "recall_before_fix": 0.948,
+    "recall_after_fix_trials": [
+      0.995,
+      0.996,
+      0.995
+    ],
+    "retained_candidates": 1024,
+    "search_mode": "MULTI_CTA",
+    "same_saved_graph_reloaded": true,
+    "gpu_serves": 300,
+    "graph_rebuilds": 0
+  },
+  "excluded_benchmark": {
+    "rows": 100000,
+    "dim": 384,
+    "cpu_m": 32,
+    "cpu_ef_construction": 200,
+    "cpu_ef_search": 16000,
+    "cpu_recall_at_10": 0.865,
+    "required_minimum_recall": 0.95,
+    "accepted_speedup": null,
+    "reason": "CPU baseline failed the quality gate. Do not present this case as a matched-quality acceleration result."
+  },
+  "validation_method": {
+    "metric": "squared L2; float32 normalized random vectors",
+    "top_k": 10,
+    "minimum_recall": 0.95,
+    "speedup": "median VSAG DDL seconds / median cuvs DDL seconds",
+    "order": "alternating backend order across three trials",
+    "data_load": "excluded; all rows present before DDL",
+    "first_ready": "DDL plus first SQL ANN query, reported separately",
+    "algorithm_note": "VSAG HNSW versus hipVS CAGRA in seekdb HNSW SQL route; graph parameters differ",
+    "initial_trials": "Default-session and insufficient-quality CPU calibration trials are retained but excluded from accepted speedups.",
+    "bridge_fix_scope": "Only query-frontier selection changed: dimensions >256 retain 1024 candidates and use MULTI_CTA. Index construction and the 128-D configuration are unchanged."
+  },
+  "measurement_provenance": "The accepted 128-D construction measurements use the original bridge. The later change affects only query-frontier/mode selection for wider frontiers; the construction implementation and tested 128-D search settings are unchanged.",
+  "unit_checks": {
+    "bridge_contract_and_fault_injection_cases": 36,
+    "benchmark_offline_tests": 11
+  },
+  "limitations": [
+    "Single gfx1100 GPU and synthetic normalized float32 L2 data.",
+    "VSAG HNSW is compared with CAGRA in the seekdb HNSW SQL route; this is not conversion to a VSAG HNSW graph.",
+    "The strict original three-dataset matrix is not entirely passing: the 384-D CPU quality gate remains failed.",
+    "No multi-GPU, long-duration or heavy-concurrency validation was performed."
+  ]
+}
