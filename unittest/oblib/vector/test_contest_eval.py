@@ -3,6 +3,8 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 import numpy as np
 
@@ -119,6 +121,75 @@ class RunnerContractTest(unittest.TestCase):
         self.assertTrue(contest_eval.owned_process_cmdline(
             "/opt/candidate/seekdb --nodaemon --base-dir /work/run/candidate",
             Path("/opt/candidate/seekdb"), Path("/work/run/candidate")))
+
+    def test_startup_failure_invokes_cleanup(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = contest_eval.ServerConfig("candidate", root / "seekdb", root / "bridge.so",
+                                               2982, root / "run")
+            process = mock.Mock()
+            process.poll.return_value = 1
+            process.returncode = 1
+            sampler = mock.Mock()
+            with mock.patch.object(contest_eval.subprocess, "Popen", return_value=process), \
+                 mock.patch.object(contest_eval, "ResourceSampler", return_value=sampler):
+                server = contest_eval.ObserverServer(config)
+                with mock.patch.object(server, "stop") as stop:
+                    with self.assertRaisesRegex(RuntimeError, "observer exited"):
+                        server.start()
+                    stop.assert_called_once()
+
+    def test_query_and_vector_contract(self):
+        self.assertEqual(contest_eval.vector_literal(np.array([1, -0.5], dtype=np.float32)), "[1,-0.5]")
+        sql = contest_eval.query_sql("items", 100)
+        self.assertIn("APPROXIMATE LIMIT 100", sql)
+        self.assertNotIn("batch_knn", sql)
+        with self.assertRaisesRegex(ValueError, "table"):
+            contest_eval.query_sql("items; DROP TABLE x", 10)
+
+    def test_latency_and_gpu_evidence(self):
+        summary = contest_eval.latency_summary([0.1, 0.2, 0.3, 0.4])
+        self.assertEqual(summary["qps"], 4)
+        self.assertAlmostEqual(summary["p95_ms"], 385)
+        evidence = contest_eval.gpu_evidence(
+            "cuvs_serve id=1\ncuvs_serve id=2\n",
+            "serialized GPU CAGRA snapshot built=true graph_bytes=100\n")
+        self.assertTrue(evidence["passed"])
+        self.assertEqual(evidence["gpu_serves"], 2)
+        self.assertFalse(contest_eval.gpu_evidence("", "built=true")["passed"])
+        self.assertFalse(contest_eval.gpu_evidence(
+            "cuvs_serve", "serialized GPU CAGRA snapshot built=true\nlazily built VSAG fallback")["passed"])
+
+    def test_only_official_shaped_sets_get_official_thresholds(self):
+        self.assertEqual(contest_eval.dataset_kind("gaussian250k-d128"), "sift")
+        self.assertEqual(contest_eval.dataset_kind("gaussian250k-d256"), "hidden")
+        self.assertEqual(contest_eval.dataset_kind("clustered250k-d256"), "local")
+
+    def test_pair_reverses_order_and_writes_summary(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name in ("baseline-observer", "candidate-observer", "baseline-bridge", "candidate-bridge"):
+                (root / name).write_bytes(b"test")
+            args = SimpleNamespace(mode="quick", dataset=None, rounds=2,
+                output_dir=root / "output", data_cache=root / "cache", port=2982,
+                baseline_observer=root / "baseline-observer", candidate_observer=root / "candidate-observer",
+                baseline_bridge=root / "baseline-bridge", candidate_bridge=root / "candidate-bridge",
+                baseline_revision="v5", candidate_revision="candidate")
+            order = []
+
+            def fake_run(spec, data, config, raw_dir, cache_dir):
+                order.append(config.role)
+                baseline = config.role == "baseline"
+                return {"ready_seconds": 20 if baseline else 10,
+                        "qps": {10: 100, 100: 100}, "recall": {10: 0.99, 100: 0.99},
+                        "resources": {"peak_vram_bytes": 100, "peak_rss_bytes": 100}}
+
+            with mock.patch.object(contest_eval, "run_single", fake_run):
+                result = contest_eval.run_evaluation(args)
+            self.assertEqual(order, ["baseline", "candidate", "candidate", "baseline"])
+            self.assertEqual(result["status"], "QUICK_PASS")
+            self.assertEqual(len(result["rounds"]), 2)
+            self.assertTrue((args.output_dir / "summary.json").exists())
 
 
 if __name__ == "__main__":
