@@ -12,7 +12,9 @@
 - [x] 离线拆分现有 LIMIT 栈，区分查找与换批子路径。
 - [x] 对比三个窄范围方案及正确性边界。
 - [x] 用户确认下一轮设计方向：LIMIT 优先，先诊断跳距再选算法。
-- [ ] 设计已写入 `docs/superpowers/specs/2026-10-30-fts-limit-inbatch-seek-design.md`，等待用户审阅具体规则与门槛；通过后再编写实施计划、另行执行。
+- [x] 设计已写入 `docs/superpowers/specs/2026-10-30-fts-limit-inbatch-seek-design.md`，具体规则与门槛经用户确认。
+- [x] 诊断实施计划已写入 `docs/superpowers/plans/2026-10-30-fts-limit-inbatch-seek-diagnostics.md`。
+- [ ] 按实施计划执行诊断；本轮尚未启动。
 
 无可视化问题，无需浏览器。未调用子代理，未创建 worktree，未修改 benchmark。
 
@@ -104,4 +106,4 @@ COUNT 的 `filter_on_demand()` 为 10.61%–13.31%，bool double 为 3.21%–6.1
 
 ## 本轮结束边界
 
-研究复核时只完成取消清理与证据分析。用户随后已确认 LIMIT-first 方向；具体诊断、算法选择及验收门槛见新设计，等待文档审阅。未实现 C3 或 C1b，未补跑 C1，未给任何新方案宣称性能收益。
+研究复核时只完成取消清理与证据分析。用户随后已确认 LIMIT-first 设计及门槛，诊断实施计划已编写，尚未启动执行。未实现 C3 或 C1b，未补跑 C1，未给任何新方案宣称性能收益。
