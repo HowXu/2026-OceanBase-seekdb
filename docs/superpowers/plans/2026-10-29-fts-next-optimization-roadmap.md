@@ -200,6 +200,8 @@ git diff --exit-code bc6dfc916 -- \
 
 ## Task 4：B——优先推进 FTS 构建排序快路径
 
+**状态：已完成，保留。** 内部 DDL SQL 显式禁用 newsort；已对合法 FTS VARCHAR term/doc-ID 键窄范围复用编码器，其他 DDL/键/排序规则不变。五组回归及非白名单回退测试一致；唯一一对完整 A/B 综合 2.9998%，构建类别 3.5844%，同时记录 IK 多字段构建回退。见 `docs/superpowers/experiments/2026-10-30-fts-route-b-results.md`。
+
 **Files:** 首先检查 `src/sql/code_generator/ob_static_engine_cg.cpp`、`src/sql/engine/sort/ob_sort_op.{h,cpp}`、`src/sql/engine/sort/ob_sort_op_impl.{h,cpp}`。新增聚焦测试：`unittest/storage/fts_build_sort_regression.sql` 及 `.result`，接入现有回归 runner。
 
 **Interfaces:** 复用现有 `ObSortSpec::enable_encode_sortkey_opt_`、`ObSortOpImpl::Compare` 和 `sort_inmem_data()` 的编码键/AQS 分支。原排序在 collation、NULL、升降序、相等项上的语义不变；不添加一个平行的通用排序引擎。
