@@ -9,7 +9,7 @@ TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 $MYSQL -e 'CREATE DATABASE IF NOT EXISTS fts_parser_regression;'
-for test in fts_beng_regression fts_ik_chain_regression fts_word_map_regression fts_build_sort_regression; do
+for test in fts_beng_regression fts_ik_chain_regression fts_word_map_regression fts_build_sort_regression fts_query_batch_regression; do
   $MYSQL --default-character-set=utf8mb4 --batch --skip-column-names --raw \
     fts_parser_regression < "$SCRIPT_DIR/$test.sql" > "$TMP_DIR/$test.result"
   diff -u "$SCRIPT_DIR/$test.result" "$TMP_DIR/$test.result"

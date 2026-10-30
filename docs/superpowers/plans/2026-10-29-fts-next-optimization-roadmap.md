@@ -217,6 +217,8 @@ git diff --exit-code bc6dfc916 -- \
 
 ## Task 5：C——优先推进查询批内归并和过滤
 
+**状态：本轮小实验已完成并决定撤回；真正批量过滤尚未实施。** 六组回归一致；唯一一对 A/B 的查询类别 -0.3354%，综合 -2.2486%，无足够收益。at 为非虚 inline，候选未减少迭代器虚调用；不继续堆数组微调。批量过滤涉及候选暂存、求值状态和紧凑投影，留作独立后续设计，不混做。见 `docs/superpowers/experiments/2026-10-30-fts-route-c-results.md`。
+
 **Files:** `src/storage/retrieval/ob_sparse_daat_iter.{h,cpp}`、`src/storage/access/ob_simple_rows_merger.h`（只有确需修改时）；必要时检查 `src/sql/das/iter/ob_das_text_retrieval_merge_iter.cpp`。新增 `unittest/storage/fts_query_batch_regression.sql` 及 `.result` 并接入 runner。
 
 **Interfaces:** 保持 `get_next_rows(capacity, count)`、`fill_merge_heap()`、`collect_dims_by_id()`、`filter_on_demand()` 的输出/错误/结束契约；不改变 BM25 及浮点累加顺序来获取表面速度。
