@@ -241,7 +241,9 @@ git commit -m "perf(fts): memoize deterministic TOKENIZE results per worker"
 
 ---
 
-### Task 3：B0——FTS 排序临时压缩 NONE
+### Task 3：B0——FTS 排序临时压缩 NONE（已完成，保留）
+
+唯一完整 A/B 成功；三项构建均改善，构建类别 +1.5457%，综合 +2.8077%。mixed/LIMIT 负项完整记录，不重跑。详见 `docs/superpowers/experiments/2026-10-30-fts-sort-none-results.md`。
 
 **Files:**
 - Modify: `src/sql/code_generator/ob_static_engine_cg.cpp`
