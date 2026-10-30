@@ -1484,6 +1484,12 @@ int ObStaticEngineCG::fill_compress_type(ObLogSort &op, ObCompressorType &compr_
 {
   int ret = OB_SUCCESS;
   compr_type = NONE_COMPRESSOR;
+  bool is_fts_sort = false;
+  for (int64_t i = 0; !is_fts_sort && i < op.get_sort_keys().count(); ++i) {
+    const ObRawExpr *expr = op.get_sort_keys().at(i).expr_;
+    is_fts_sort = nullptr != expr && expr->get_expr_type() == T_REF_COLUMN
+        && static_cast<const ObColumnRefRawExpr *>(expr)->is_word_segment_column();
+  }
   
   // for normal sort we use default compress type. for online ddl, we use the compress type in source table
   ObLogicalOperator *child_op = op.get_child(0);
@@ -1501,7 +1507,7 @@ int ObStaticEngineCG::fill_compress_type(ObLogSort &op, ObCompressorType &compr_
       }
     }
   }
-  if (OB_SUCC(ret) && OB_NOT_NULL(table_schema)) {
+  if (OB_SUCC(ret) && !is_fts_sort && OB_NOT_NULL(table_schema)) {
     if (OB_FAIL(ObDDLUtil::get_temp_store_compress_type(table_schema,
                                               op.get_parallel(),
                                               compr_type))) {
