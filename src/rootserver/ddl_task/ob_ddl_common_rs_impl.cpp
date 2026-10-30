@@ -345,6 +345,7 @@ int ObDDLTaskUtil::generate_build_replica_sql(const int64_t data_table_id,
     bool is_shadow_column = false;
     const int64_t real_parallelism = ObDDLTaskUtil::get_real_parallelism(parallelism);
     const bool is_rowkey_doc_aux_table = dest_table_schema->is_rowkey_doc_id();
+    bool enable_fts_newsort = dest_table_schema->is_fts_index_aux() && config::_enable_newsort();
     uint64_t doc_id_col_id = OB_INVALID_ID;
     uint64_t ft_id_col_id = OB_INVALID_ID;
     // get dest table column names
@@ -459,6 +460,12 @@ int ObDDLTaskUtil::generate_build_replica_sql(const int64_t data_table_id,
         } else if (OB_FAIL(rowkey_column_names.push_back(ObColumnNameInfo(column_schema->get_column_name_str(), is_shadow_column)))) {
         } else if (OB_FAIL(order_column_ids.push_back(col_id))) {
         }
+        if (OB_SUCC(ret) && enable_fts_newsort) {
+          // Only FTS term/doc-ID VARCHAR keys use the existing string encoder.
+          const ObCollationType cs = column_schema->get_collation_type();
+          enable_fts_newsort = column_schema->get_data_type() == ObVarcharType
+              && (cs == CS_TYPE_UTF8MB4_GENERAL_CI || cs == CS_TYPE_UTF8MB4_BIN || cs == CS_TYPE_BINARY);
+        }
       }
     }
 
@@ -534,8 +541,8 @@ int ObDDLTaskUtil::generate_build_replica_sql(const int64_t data_table_id,
         }
         if (OB_FAIL(ret)) {
         } else {
-          if (OB_FAIL(sql_string.assign_fmt("INSERT /*+ enable_parallel_dml parallel(%ld) opt_param('ddl_execution_id', %ld) opt_param('ddl_task_id', %ld) opt_param('enable_newsort', 'false') %.*s use_px */INTO `%.*s`.`%.*s` %.*s(%.*s) SELECT /*+ index(`%.*s` primary) %.*s */ %.*s from `%.*s`.`%.*s` %.*s as of snapshot %ld %.*s",
-              real_parallelism, execution_id, task_id,
+          if (OB_FAIL(sql_string.assign_fmt("INSERT /*+ enable_parallel_dml parallel(%ld) opt_param('ddl_execution_id', %ld) opt_param('ddl_task_id', %ld) opt_param('enable_newsort', '%s') %.*s use_px */INTO `%.*s`.`%.*s` %.*s(%.*s) SELECT /*+ index(`%.*s` primary) %.*s */ %.*s from `%.*s`.`%.*s` %.*s as of snapshot %ld %.*s",
+              real_parallelism, execution_id, task_id, enable_fts_newsort ? "true" : "false",
               static_cast<int>(strlen(io_read_hint)), io_read_hint,
               static_cast<int>(new_dest_database_name.length()), new_dest_database_name.ptr(), static_cast<int>(new_dest_table_name.length()), new_dest_table_name.ptr(),
               static_cast<int>(partition_names.length()), partition_names.ptr(),
