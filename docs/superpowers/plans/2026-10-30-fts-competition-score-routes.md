@@ -12,6 +12,8 @@
 
 以本地运行未修改原始 benchmark 的完整九项报告、类别及综合改善，决定各候选暂留或撤回；官方 CI 成绩单独标记为待验证，不将本地成绩称为官方收益。下文各任务的“官方 A/B / 结果 / 分数”在当前执行阶段均按此口径解释，不修改 benchmark 或评分规则。
 
+用户追加确认：取消原先 50%／5%／20% 的收益幅度门槛。编译与完整 benchmark 成功、目标指标有改善即可保留；其他指标和整体变化仍完整报告，不把波动冒充目标收益。编译或 benchmark 失败的候选仍不能保留。
+
 ## 1. 唯一交付标准
 
 用户已明确缩小验收范围，**不新增或运行任何额外功能回归测试**：
@@ -182,9 +184,11 @@ git revert --no-edit "$Q0_COMMIT"
 
 ---
 
-### Task 2：T0-SQL——TOKENIZE 最终结果 memoization（源码审查中，暂停待确认）
+### Task 2：T0-SQL——TOKENIZE 最终结果 memoization（已完成，保留）
 
-执行前发现所有权缺口：按 Step 1 将命中 datum 直接指向单项缓存，后续不同 key 的求值会 reset 缓存并使旧结果悬空。待用户确认的最小修正是命中时将完整缓存 payload 复制到 `ObExpr::get_str_res_mem()` 提供的表达式结果内存，保留完整 datum 标志；其余缓存策略和验收方式不变。尚未修改 T0 生产代码，尚未运行 T0 A/B。
+编译及唯一完整 A/B 成功；IK 改善 36.1022%，BEng 改善 11.1111%，综合 +8.6985%。原始评分脚本两端均为 100（饱和，本地而非官方 CI）。按用户追加的“有改善就留”规则保留，不重跑。详见 `docs/superpowers/experiments/2026-10-30-fts-tokenize-memo-results.md`。
+
+用户已允许所有权修正：命中时将完整缓存 payload 复制到 `ObExpr::get_str_res_mem()` 提供的表达式结果内存，保留完整 datum 标志；其余缓存策略和验收方式不变。不得将可被后续 key 淘汰的缓存内存作为表达式结果返回。
 
 **Files:**
 - Modify: `src/sql/engine/expr/ob_expr_tokenize.cpp`
@@ -209,7 +213,7 @@ ObDatum result_datum_;
 bool valid_;
 ```
 
-`result_datum_` 保存完整 datum，`result_payload_` 保存深拷贝结果字节。命中时复制 datum，再令其 `ptr_` 指向 `result_payload_`，不能返回 temp arena 指针。
+`result_datum_` 保存完整 datum，`result_payload_` 保存深拷贝结果字节。命中时复制 payload 到表达式自己的结果内存，再复制完整 datum 并将其 `ptr_` 指向该表达式结果内存；不能返回缓存或 temp arena 指针。
 
 - [ ] **Step 2：使用完整 key 和内存上限**
 
@@ -221,9 +225,9 @@ key 比较包含 fulltext 长度/原始字节、规范化 parser name/properties
 
 - [ ] **Step 3：编译并运行官方 A/B**
 
-以 Task 1 决策后的实际生产版本和二进制为直接基线，按第 4 节跑一对原始 benchmark。目标为官方 tokenize_ik、tokenize_beng 指标改善 **50% 以上**，最终去留只看官方完整结果，不用局部 TOKENIZE 循环。
+以 Task 1 决策后的实际生产版本和二进制为直接基线，按第 4 节跑一对原始 benchmark。以完整原始 benchmark 中 tokenize_ik、tokenize_beng 的实际改善决定保留，不再要求 50% 幅度，不用局部 TOKENIZE 循环。
 
-若改善不足或整体回退，记录实际结果并撤回；构建/查询波动不能算作 TOKENIZE 收益。
+有改善即可保留；全部九项和整体变化如实报告，构建/查询波动不能算作 TOKENIZE 收益。
 
 - [ ] **Step 4：记录、提交，必要时撤回**
 
@@ -270,7 +274,7 @@ compr_type = NONE_COMPRESSOR;
 
 - [ ] **Step 3：编译并运行官方 A/B**
 
-以 Task 2 决策后的生产版本为直接基线，跑原始完整 benchmark，报告三项构建、全部九项和分数。目标为构建类别改善 **5% 以上**，最终只按官方结果决定保留或撤回。
+以 Task 2 决策后的生产版本为直接基线，跑原始完整 benchmark，报告三项构建、全部九项和分数。构建类别有改善即可保留，不再要求 5% 幅度；完整报告其他类别和整体变化。
 
 之前失败的 NONE 启动配置数字无效，严禁引用。
 
@@ -334,7 +338,7 @@ add_word.process_word(token.bytes.data(),
 
 缓存至少容纳 20,000 篇不同文本，设置 **128 MiB** 总字节上限和明确条目上限，达到上限时清空重建或有界淘汰，不能无限增长。统计 key/token 实际字节，不只统计元素数。
 
-首次 `fti_all_ik` 的 miss/插入成本与第二次 `fti_content_ik` 的命中收益必须一起通过官方完整结果评价。目标为第二次 content 构建改善 **20% 以上**，且官方整体构建类别改善；不能用第二次局部收益掩盖首次构建或整体分数回退。
+首次 `fti_all_ik` 的 miss/插入成本与第二次 `fti_content_ik` 的命中收益必须一起通过官方完整结果评价。第二次 content 构建有改善即可保留，不再要求 20% 幅度；必须同时完整披露首次构建、整体构建类别和综合变化，不能将第二次局部收益冒充整体收益。
 
 - [ ] **Step 5：编译并运行官方 A/B**
 
