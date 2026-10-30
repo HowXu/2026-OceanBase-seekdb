@@ -292,7 +292,9 @@ git commit -m "perf(fts): avoid compression for inverted-index sort runs"
 
 ---
 
-### Task 4：T0-internal/B0-reuse——跨 DDL 原始 IK token 序列缓存
+### Task 4：T0-internal/B0-reuse——跨 DDL 原始 IK token 序列缓存（已完成，暂保留）
+
+唯一完整 A/B 成功，综合 +4.0239%；但首次 IK −1.6877%、第二次 content −2.2022%，没有证明预期 content 构建收益。按用户“有改善就留”的口径暂保留，完整披露负项、不重跑。见 `docs/superpowers/experiments/2026-10-30-fts-token-stream-reuse-results.md`。
 
 **Files:**
 - Modify: `src/data_plane/api/data_plane/fts/ob_fts_parser_helper.h`
@@ -358,7 +360,7 @@ git commit -m "perf(fts): reuse bounded IK token streams across index builds"
 
 ---
 
-### Task 5：最终编译与官方结果交付
+### Task 5：最终编译与官方结果交付（执行中）
 
 **Files:** 更新各实验结果文档；最终只保留官方结果证明有收益的生产补丁。
 
