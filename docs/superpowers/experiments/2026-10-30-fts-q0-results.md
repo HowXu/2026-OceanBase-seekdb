@@ -49,4 +49,6 @@ bash run_temp/run-fts-score-route.sh score-q0-candidate run_temp/score-q0-seekdb
 - `run_temp/score-q0-{baseline,candidate}-wrapper.log`
 - `run_temp/score-q0-{baseline,candidate}-instance/log/` 和配置保留；停止后仅删除可重建的 store。
 
-实验补丁独立提交后定向 revert，证据文档保留；Task 2 的直接基线恢复为 A+B，不包含 Q0。
+生产实验提交 `b98b05694` 已由 `b257d0682` 定向 revert，证据文档保留；Task 2 的直接基线恢复为 A+B，不包含 Q0。
+
+暂停 T0 源码审查时已用 `-j11` 重建实际 A+B 可执行文件，成功日志为 `run_temp/score-q0-restored-build.log`。`build_release/src/observer/seekdb` SHA256 为 `0b780889174f8fd185d86b774bb744a58e7716e06457da8bc5ec3fc04e05434d`。`git diff --exit-code 0da4ece92 -- src/ tools/benchmark/` 通过。没有为此追加完整 benchmark 或功能测试；最终 Task 5 尚未执行。

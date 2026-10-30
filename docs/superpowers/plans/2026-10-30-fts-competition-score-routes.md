@@ -93,7 +93,9 @@ bash tools/benchmark/fts_large_bench.sh \
 
 ---
 
-### Task 1：Q0——纯 MATCH 命中查询免评分
+### Task 1：Q0——纯 MATCH 命中查询免评分（已执行，失败撤回）
+
+执行结果：编译通过；唯一 A/B 的候选在第一条 MATCH 查询中段错误，未生成完整报告，不重跑。证据提交 `1bd6f3dd9`；生产实验 `b98b05694`；定向撤回 `b257d0682`。生产源码已恢复 A+B。
 
 **Files:**
 - Modify: `src/sql/rewrite/ob_transform_utils.h`
@@ -180,7 +182,9 @@ git revert --no-edit "$Q0_COMMIT"
 
 ---
 
-### Task 2：T0-SQL——TOKENIZE 最终结果 memoization
+### Task 2：T0-SQL——TOKENIZE 最终结果 memoization（源码审查中，暂停待确认）
+
+执行前发现所有权缺口：按 Step 1 将命中 datum 直接指向单项缓存，后续不同 key 的求值会 reset 缓存并使旧结果悬空。待用户确认的最小修正是命中时将完整缓存 payload 复制到 `ObExpr::get_str_res_mem()` 提供的表达式结果内存，保留完整 datum 标志；其余缓存策略和验收方式不变。尚未修改 T0 生产代码，尚未运行 T0 A/B。
 
 **Files:**
 - Modify: `src/sql/engine/expr/ob_expr_tokenize.cpp`
