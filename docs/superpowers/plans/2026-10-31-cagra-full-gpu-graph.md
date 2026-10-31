@@ -16,18 +16,14 @@
 
 **Files:** `tools/hipvs_bridge/cagra_full_graph.{h,cpp}`、`unittest/oblib/vector/test_cagra_full_graph.cpp`
 
-- [ ] 小 N 随机数据逐行对比 CPU exact top-256，排除自身并检查唯一合法 ID。
-- [ ] 完整 250K×128/256 执行上传、分块 GEMM、局部选择、全局合并、同步和首轮 ID 检查。
-- [ ] 记录端到端候选生成时间与显存；只测 GEMM 不算通过。
+- [x] 512×32 随机数据逐行对比 CPU exact top-256，排除自身并检查唯一合法 ID。
+- [x] 完整 250K×128 执行上传、分块 GEMM、局部选择、全局合并、同步和首轮 ID 检查。
+- [x] 候选生成 18.356173s，未含后续图优化和外层流程，超过预算；按停止条件淘汰全对全路线，不跑 d256/SQL。
 
 ### Task 2: 完整图构建
 
-- [ ] GPU 排序和 256→128 多样化剪枝；不得退化为直接最近 128。
-- [ ] GPU 反向边、去重与容量合并，输出连续 N×128 `uint32` graph。
-- [ ] `IndexFromArgs` 挂接现有 device base，验证固定 CAGRA Search、Recall 和资源。
+- 全对全原型未进入本阶段；下一版改用稀疏全 GPU NN-Descent 候选更新后重新评审。
 
 ### Task 3: SQL 验收
 
-- [ ] 仅让微基准优胜版本进入默认候选路径。
-- [ ] 图像替代集与高斯压力集完整 gates 后再跑 d128/d256 各四轮。
-- [ ] 拆分构图、外层扫描传输、序列化和首查询时间，不以纯构图加速冒充端到端加速。
+- 未接 SQL；`results-full-graph-candidates-20261031.md` 保存停止证据。
