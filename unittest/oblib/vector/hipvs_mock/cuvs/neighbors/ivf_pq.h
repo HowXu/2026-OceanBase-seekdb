@@ -13,7 +13,13 @@ typedef struct {
   bool conservative_memory_allocation;
 } cuvsIvfPqIndexParams;
 typedef cuvsIvfPqIndexParams* cuvsIvfPqIndexParams_t;
-typedef struct { uint32_t n_probes; } cuvsIvfPqSearchParams;
+typedef int cudaDataType_t;
+enum { CUDA_R_16F = 2 };
+typedef struct {
+  uint32_t n_probes;
+  cudaDataType_t lut_dtype, internal_distance_dtype, coarse_search_dtype;
+  uint32_t max_internal_batch_size;
+} cuvsIvfPqSearchParams;
 typedef cuvsIvfPqSearchParams* cuvsIvfPqSearchParams_t;
 cuvsError_t cuvsIvfPqIndexParamsCreate(cuvsIvfPqIndexParams_t*);
 cuvsError_t cuvsIvfPqIndexParamsDestroy(cuvsIvfPqIndexParams_t);

@@ -21,7 +21,8 @@ static int from_args_calls;
 static size_t cagra_last_niter, cagra_last_graph_degree, cagra_last_intermediate_degree;
 static size_t cagra_last_itopk, cagra_last_search_width;
 static int cagra_last_build_algo, cagra_last_search_algo;
-static unsigned ivf_last_nprobes, ivf_last_nlists;
+static unsigned ivf_last_nprobes, ivf_last_nlists, ivf_last_batch;
+static int ivf_last_lut, ivf_last_internal, ivf_last_coarse;
 static float ivf_last_refinement;
 static bool ivf_last_conservative;
 static int rmm_allocs, cagra_search_param_creates;
@@ -97,6 +98,10 @@ cuvsError_t cuvsCagraBuild(cuvsResources_t r, cuvsCagraIndexParams_t p, DLManage
   if (p->graph_build_params) {
     ivf_last_nprobes = p->graph_build_params->ivf_pq_search_params->n_probes;
     ivf_last_nlists = p->graph_build_params->ivf_pq_build_params->n_lists;
+    ivf_last_lut = p->graph_build_params->ivf_pq_search_params->lut_dtype;
+    ivf_last_internal = p->graph_build_params->ivf_pq_search_params->internal_distance_dtype;
+    ivf_last_coarse = p->graph_build_params->ivf_pq_search_params->coarse_search_dtype;
+    ivf_last_batch = p->graph_build_params->ivf_pq_search_params->max_internal_batch_size;
     ivf_last_refinement = p->graph_build_params->refinement_rate;
     ivf_last_conservative = p->graph_build_params->ivf_pq_build_params->conservative_memory_allocation;
   }
@@ -347,7 +352,9 @@ int main()
   assert(setenv("SEEKDB_CUVS_CAGRA_IVF_REFINEMENT", "2.5", 1) == 0);
   fail_at = 0; h = seekdb_cuvs_build(base.data(), 256, 4);
   assert(h && cagra_last_build_algo == IVF_PQ && ivf_last_nprobes == 20 &&
-         ivf_last_nlists == 1 && ivf_last_refinement == 2.5f && ivf_last_conservative);
+         ivf_last_nlists == 1 && ivf_last_refinement == 2.5f && ivf_last_conservative &&
+         ivf_last_lut == CUDA_R_16F && ivf_last_internal == CUDA_R_16F &&
+         ivf_last_coarse == CUDA_R_16F && ivf_last_batch == 128 * 1024);
   seekdb_cuvs_free(h);
   assert(setenv("SEEKDB_CUVS_CAGRA_IVF_REFINEMENT", "0", 1) == 0);
   assert(!seekdb_cuvs_build(base.data(), 256, 4));
