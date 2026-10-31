@@ -20,7 +20,7 @@ static bool cagra_include_dataset;
 static int from_args_calls;
 static size_t cagra_last_niter, cagra_last_graph_degree, cagra_last_intermediate_degree;
 static size_t cagra_last_itopk, cagra_last_search_width;
-static int cagra_last_build_algo;
+static int cagra_last_build_algo, cagra_last_search_algo;
 static int rmm_allocs, cagra_search_param_creates;
 static int bf_builds, bf_searches, bf_saves, bf_loads;
 static const void* bf_base_ptr;
@@ -100,8 +100,9 @@ cuvsError_t cuvsCagraSearch(cuvsResources_t r, cuvsCagraSearchParams_t p, cuvsCa
   auto distances = static_cast<float*>(dist->dl_tensor.data);
   auto nq = q->dl_tensor.shape[0], k = ids->dl_tensor.shape[1];
   cagra_last_itopk = p->itopk_size; cagra_last_search_width = p->search_width;
+  cagra_last_search_algo = p->algo;
   assert(p->itopk_size % 32 == 0 && p->itopk_size >= static_cast<size_t>(k));
-  assert(p->itopk_size <= 512 || p->algo == MULTI_CTA);
+  if (p->algo == SINGLE_CTA) assert(p->itopk_size <= 512);
   resource(r)->pending.push_back([=] {
     for (int64_t row = 0; row < nq; ++row) {
       std::vector<std::pair<float, unsigned>> all;
@@ -336,18 +337,34 @@ int main()
   assert(setenv("SEEKDB_CUVS_CAGRA_INTERMEDIATE_DEGREE", "128", 1) == 0);
   assert(setenv("SEEKDB_CUVS_CAGRA_ITOPK", "256", 1) == 0);
   assert(setenv("SEEKDB_CUVS_CAGRA_SEARCH_WIDTH", "2", 1) == 0);
+  assert(setenv("SEEKDB_CUVS_CAGRA_SEARCH_ALGO", "multi", 1) == 0);
   h = seekdb_cuvs_build(base.data(), 256, 4);
   assert(h && cagra_last_graph_degree == 64 && cagra_last_intermediate_degree == 128);
   unsigned config_ids[10]; float config_distances[10];
   assert(seekdb_cuvs_search(h, base.data(), 1, 10, config_ids, config_distances) == 0);
-  assert(cagra_last_itopk == 256 && cagra_last_search_width == 2);
+  assert(cagra_last_itopk == 256 && cagra_last_search_width == 2 && cagra_last_search_algo == MULTI_CTA);
+  seekdb_cuvs_free(h);
+  assert(setenv("SEEKDB_CUVS_CAGRA_SEARCH_ALGO", "auto", 1) == 0);
+  h = seekdb_cuvs_build(base.data(), 256, 4);
+  assert(h && seekdb_cuvs_search(h, base.data(), 1, 10, config_ids, config_distances) == 0);
+  assert(cagra_last_search_algo == AUTO);
+  seekdb_cuvs_free(h);
+  assert(setenv("SEEKDB_CUVS_CAGRA_SEARCH_ALGO", "single", 1) == 0);
+  assert(setenv("SEEKDB_CUVS_CAGRA_ITOPK", "1024", 1) == 0);
+  h = seekdb_cuvs_build(base.data(), 256, 4);
+  assert(h && seekdb_cuvs_search(h, base.data(), 1, 10, config_ids, config_distances) != 0);
+  seekdb_cuvs_free(h);
+  assert(setenv("SEEKDB_CUVS_CAGRA_SEARCH_ALGO", "invalid", 1) == 0);
+  h = seekdb_cuvs_build(base.data(), 256, 4);
+  assert(h && seekdb_cuvs_search(h, base.data(), 1, 10, config_ids, config_distances) != 0);
   seekdb_cuvs_free(h);
   assert(setenv("SEEKDB_CUVS_CAGRA_INTERMEDIATE_DEGREE", "32", 1) == 0);
   assert(!seekdb_cuvs_build(base.data(), 256, 4));
   for (const char* name : {"SEEKDB_CUVS_CAGRA_BUILD_ALGO", "SEEKDB_CUVS_CAGRA_NN_NITER",
        "SEEKDB_CUVS_CAGRA_GRAPH_DEGREE", "SEEKDB_CUVS_CAGRA_INTERMEDIATE_DEGREE",
-       "SEEKDB_CUVS_CAGRA_ITOPK", "SEEKDB_CUVS_CAGRA_SEARCH_WIDTH"}) unsetenv(name);
-  cases += 2;
+       "SEEKDB_CUVS_CAGRA_ITOPK", "SEEKDB_CUVS_CAGRA_SEARCH_WIDTH",
+       "SEEKDB_CUVS_CAGRA_SEARCH_ALGO"}) unsetenv(name);
+  cases += 5;
 
   assert(setenv("SEEKDB_CUVS_ALGO", "invalid", 1) == 0);
   assert(!seekdb_cuvs_build(base.data(), 256, 4));

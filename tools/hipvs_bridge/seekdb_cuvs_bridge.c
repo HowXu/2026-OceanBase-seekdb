@@ -23,6 +23,7 @@ typedef struct {
   int64_t* wide_ids;
   size_t query_capacity, neighbor_capacity, distance_capacity, wide_capacity;
   size_t cagra_itopk, cagra_search_width;
+  int cagra_search_algo;
   sk_algorithm algorithm;
   long n, dim;
   int device;
@@ -136,8 +137,23 @@ static int configure_cagra_search(sk_cuvs_index* h)
 {
   uint32_t itopk = h->dim > 256 ? 1024 : 512;
   uint32_t width = 4;
+  const char* algorithm = getenv("SEEKDB_CUVS_CAGRA_SEARCH_ALGO");
   if (!parse_uint_override("SEEKDB_CUVS_CAGRA_ITOPK", itopk, &itopk) ||
       !parse_uint_override("SEEKDB_CUVS_CAGRA_SEARCH_WIDTH", width, &width)) return 0;
+  h->cagra_search_algo = -1;
+  if (algorithm && algorithm[0]) {
+    if (strcmp(algorithm, "single") == 0) h->cagra_search_algo = SINGLE_CTA;
+    else if (strcmp(algorithm, "multi") == 0) h->cagra_search_algo = MULTI_CTA;
+    else if (strcmp(algorithm, "auto") == 0) h->cagra_search_algo = AUTO;
+    else {
+      fprintf(stderr, "[seekdb_cuvs] unknown CAGRA search algorithm: %s\n", algorithm);
+      return 0;
+    }
+  }
+  if (h->cagra_search_algo == SINGLE_CTA && itopk > 512) {
+    fprintf(stderr, "[seekdb_cuvs] SINGLE_CTA requires itopk <= 512\n");
+    return 0;
+  }
   h->cagra_itopk = itopk;
   h->cagra_search_width = width;
   return 1;
@@ -253,7 +269,8 @@ int seekdb_cuvs_search(void* handle, const float* query, long nq, long topk,
     if (h->sp->itopk_size < h->cagra_itopk) h->sp->itopk_size = h->cagra_itopk;
     h->sp->itopk_size = (h->sp->itopk_size + 31) / 32 * 32;
     /* hipVS SINGLE_CTA rejects frontiers larger than 512. */
-    if (h->sp->itopk_size > 512) h->sp->algo = MULTI_CTA;
+    if (h->cagra_search_algo >= 0) h->sp->algo = (enum cuvsCagraSearchAlgo)h->cagra_search_algo;
+    else if (h->sp->itopk_size > 512) h->sp->algo = MULTI_CTA;
     h->sp->search_width = h->cagra_search_width;
   }
   /* Copies and search must use the same resource stream. A default-stream
