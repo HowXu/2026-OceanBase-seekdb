@@ -268,10 +268,21 @@ void* seekdb_cuvs_build(const float* base, long n, long dim)
     h->ip->intermediate_graph_degree = n > 256 ? 256 : (size_t)n - 1;
     h->ip->nn_descent_niter = 100;
     if (!configure_cagra_build(h) || !configure_cagra_degrees(h, n) ||
-        (h->ip->build_algo == IVF_PQ && !configure_ivf_pq(h, n, dim)) ||
-        cuvsCagraIndexCreate(&h->idx) != CUVS_SUCCESS ||
+        (h->ip->build_algo == IVF_PQ && !configure_ivf_pq(h, n, dim))) goto fail;
+    if (h->ip->build_algo == IVF_PQ) {
+      if (cuvsStreamGet(h->res, &stream) != CUVS_SUCCESS ||
+          cuvsRMMAlloc(h->res, (void**)&device_base, bytes) != CUVS_SUCCESS ||
+          cudaMemcpyAsync(device_base, base, bytes, cudaMemcpyHostToDevice, stream) != cudaSuccess) goto fail;
+      dataset = matrix(device_base, shape, kDLCUDA, h->device, kDLFloat);
+    }
+    if (cuvsCagraIndexCreate(&h->idx) != CUVS_SUCCESS ||
         cuvsCagraBuild(h->res, h->ip, &dataset, h->idx) != CUVS_SUCCESS ||
         cuvsStreamSync(h->res) != CUVS_SUCCESS) goto fail;
+    if (h->ip->build_algo == IVF_PQ) {
+      h->device_base = device_base;
+      h->device_bytes = bytes;
+      device_base = NULL;
+    }
   } else {
     if (cuvsStreamGet(h->res, &stream) != CUVS_SUCCESS ||
         cuvsRMMAlloc(h->res, (void**)&device_base, bytes) != CUVS_SUCCESS ||
