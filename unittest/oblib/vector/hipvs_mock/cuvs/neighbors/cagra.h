@@ -4,7 +4,8 @@
 extern "C" {
 #endif
 typedef int cuvsDistanceType;
-enum { L2Expanded, NN_DESCENT, NO_FILTER };
+enum { L2Expanded, NO_FILTER };
+enum cuvsCagraGraphBuildAlgo { AUTO_SELECT, IVF_PQ, NN_DESCENT, ITERATIVE_CAGRA_SEARCH };
 typedef struct {
   int metric; size_t intermediate_graph_degree, graph_degree;
   int build_algo; size_t nn_descent_niter;

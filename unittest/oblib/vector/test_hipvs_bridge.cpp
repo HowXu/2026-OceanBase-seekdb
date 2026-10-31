@@ -18,6 +18,8 @@ static Index saved;
 static int calls, fail_at, live;
 static bool cagra_include_dataset;
 static int from_args_calls;
+static size_t cagra_last_niter;
+static int cagra_last_build_algo;
 static int rmm_allocs, cagra_search_param_creates;
 static int bf_builds, bf_searches, bf_saves, bf_loads;
 static const void* bf_base_ptr;
@@ -76,8 +78,9 @@ cuvsError_t cuvsCagraBuild(cuvsResources_t r, cuvsCagraIndexParams_t p, DLManage
   assert(!t->manager_ctx && !t->deleter && !t->dl_tensor.strides);
   assert(p->metric == L2Expanded && p->graph_degree < p->intermediate_graph_degree);
   int64_t n = t->dl_tensor.shape[0], dim = t->dl_tensor.shape[1];
-  // The supplied task branch fixes these build parameters.
-  assert(p->graph_degree == 128 && p->nn_descent_niter == 100);
+  cagra_last_niter = p->nn_descent_niter;
+  cagra_last_build_algo = p->build_algo;
+  assert(p->graph_degree == 128 && p->nn_descent_niter > 0);
   assert(p->intermediate_graph_degree == (n > 256 ? 256u : static_cast<size_t>(n) - 1));
   assert(p->intermediate_graph_degree < static_cast<size_t>(n));
   auto data = static_cast<float*>(t->dl_tensor.data);
@@ -312,6 +315,20 @@ int main()
   h = seekdb_cuvs_deserialize("mock.snapshot", 256, 4); assert(h && bf_loads == 1);
   assert(seekdb_cuvs_search(h, base.data(), 2, 3, ids, distances) == 0);
   seekdb_cuvs_free(h); assert(live == 0 && buffers.empty());
+  assert(unsetenv("SEEKDB_CUVS_ALGO") == 0);
+  assert(setenv("SEEKDB_CUVS_CAGRA_NN_NITER", "25", 1) == 0);
+  assert(setenv("SEEKDB_CUVS_CAGRA_BUILD_ALGO", "iterative", 1) == 0);
+  fail_at = 0; h = seekdb_cuvs_build(base.data(), 256, 4);
+  assert(h && cagra_last_niter == 25 && cagra_last_build_algo == ITERATIVE_CAGRA_SEARCH);
+  seekdb_cuvs_free(h);
+  assert(setenv("SEEKDB_CUVS_CAGRA_NN_NITER", "0", 1) == 0);
+  assert(!seekdb_cuvs_build(base.data(), 256, 4));
+  assert(setenv("SEEKDB_CUVS_CAGRA_BUILD_ALGO", "invalid", 1) == 0);
+  assert(!seekdb_cuvs_build(base.data(), 256, 4));
+  assert(unsetenv("SEEKDB_CUVS_CAGRA_NN_NITER") == 0);
+  assert(unsetenv("SEEKDB_CUVS_CAGRA_BUILD_ALGO") == 0);
+  cases += 3;
+
   assert(setenv("SEEKDB_CUVS_ALGO", "invalid", 1) == 0);
   assert(!seekdb_cuvs_build(base.data(), 256, 4));
   assert(setenv("SEEKDB_CUVS_ALGO", "ivf_flat", 1) == 0);
