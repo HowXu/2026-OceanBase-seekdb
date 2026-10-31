@@ -8,7 +8,7 @@
 
 ## 方案
 
-新增独立的 Python 评测入口，不修改 seekdb 内核，也不改变现有 CPU/GPU benchmark。数据生成、精确 ground truth、数据库生命周期、配对执行、指标计算和报告由工具统一负责。运行依赖远端已有 `/opt/venv` 的 NumPy 和 PyMySQL；缺少依赖时明确失败，不联网安装。
+新增独立的 Python 评测入口，不修改 seekdb 内核，也不改变现有 CPU/GPU benchmark。数据生成、精确 ground truth、数据库生命周期、配对执行、指标计算和报告由工具统一负责。运行依赖远端已有 `/opt/venv` 的 NumPy 和系统 `mysql` 客户端；缺少依赖时明确失败，不联网安装。全部 SQL 在同一个持久 mysql 客户端进程中执行，避免每条查询的进程启动开销。
 
 文件：
 

@@ -143,6 +143,7 @@ Statuses:
 - `OFFICIAL_LIKE_PASS`: the two official-shaped synthetic sets passed; this is
   not an official result.
 - `LOCAL_STRICT_PASS`: the complete eight-dataset matrix passed.
+- `SUBSET_PASS`: a selected subset passed without claiming full-matrix coverage.
 - `FAILED`: a query, quality, evidence, resource or execution gate failed.
 
 ## Existing functional suites

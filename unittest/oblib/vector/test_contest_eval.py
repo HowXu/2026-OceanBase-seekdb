@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -93,6 +94,30 @@ class DatasetTest(unittest.TestCase):
         manifest.write_text(manifest.read_text().replace('"rows": 256', '"rows": 255'))
         with self.assertRaisesRegex(RuntimeError, "manifest"):
             contest_eval.load_or_create_dataset(spec, self.cache_dir)
+
+
+class MysqlCliTest(unittest.TestCase):
+    def test_persistent_client_returns_result_sets(self):
+        script = r'''
+import sys
+for statement in sys.stdin.buffer:
+    if b"SELECT 1" in statement:
+        sys.stdout.buffer.write(b"1\n")
+    if b"SELECT id" in statement:
+        sys.stdout.buffer.write(b"1\n2\n")
+    if b"__SEEKDB_CONTEST_DONE__" in statement:
+        sys.stdout.buffer.write(b"__SEEKDB_CONTEST_DONE__\n")
+        sys.stdout.buffer.flush()
+'''
+        client = contest_eval.MysqlCli([sys.executable, "-u", "-c", script])
+        try:
+            with client.cursor() as cursor:
+                cursor.execute("SELECT 1", expected_rows=1)
+                self.assertEqual(cursor.fetchone(), ("1",))
+                cursor.execute(contest_eval.query_sql("items", 10), ("[1,2]",), expected_rows=2)
+                self.assertEqual(cursor.fetchall(), [("1",), ("2",)])
+        finally:
+            client.close()
 
 
 class RunnerContractTest(unittest.TestCase):
@@ -190,6 +215,28 @@ class RunnerContractTest(unittest.TestCase):
             self.assertEqual(result["status"], "QUICK_PASS")
             self.assertEqual(len(result["rounds"]), 2)
             self.assertTrue((args.output_dir / "summary.json").exists())
+
+    def test_full_subset_cannot_claim_strict_matrix_pass(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name in ("baseline-observer", "candidate-observer", "baseline-bridge", "candidate-bridge"):
+                (root / name).write_bytes(b"test")
+            args = SimpleNamespace(mode="full", dataset=["tiny"], rounds=1,
+                output_dir=root / "output", data_cache=root / "cache", port=2982,
+                baseline_observer=root / "baseline-observer", candidate_observer=root / "candidate-observer",
+                baseline_bridge=root / "baseline-bridge", candidate_bridge=root / "candidate-bridge",
+                baseline_revision="v5", candidate_revision="candidate")
+            spec = contest_eval.DatasetSpec("tiny", 256, 4, 16, "gaussian", 7)
+
+            def fake_run(spec, data, config, raw_dir, cache_dir):
+                return {"ready_seconds": 10, "qps": {10: 100, 100: 100},
+                        "recall": {10: 1, 100: 1},
+                        "resources": {"peak_vram_bytes": 100, "peak_rss_bytes": 100}}
+
+            with mock.patch.object(contest_eval, "dataset_specs", return_value=[spec]), \
+                 mock.patch.object(contest_eval, "run_single", fake_run):
+                result = contest_eval.run_evaluation(args)
+            self.assertEqual(result["status"], "SUBSET_PASS")
 
 
 if __name__ == "__main__":

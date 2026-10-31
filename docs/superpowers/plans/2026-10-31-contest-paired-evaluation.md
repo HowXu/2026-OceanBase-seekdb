@@ -6,7 +6,7 @@
 
 **Architecture:** One Python entry point owns deterministic data/cache generation, isolated server lifecycle, paired SQL execution, and reports. Pure metric functions remain independent of the database for standard-library unit testing. NumPy and PyMySQL come from the remote offline virtual environment; large artifacts stay outside Git.
 
-**Tech Stack:** Python 3.12, NumPy, PyMySQL, seekdb mysql protocol, ROCm SMI, Bash, Git, standard-library `unittest`.
+**Tech Stack:** Python 3.12, NumPy, persistent mysql CLI using the seekdb mysql protocol, ROCm SMI, Bash, Git, standard-library `unittest`.
 
 ## Global Constraints
 
@@ -276,7 +276,7 @@ Expected: FAIL because runner APIs do not exist.
 
 Use `subprocess.Popen` with `--nodaemon`, `--port`, `--data-dir`, `--base-dir`, `cpu_count=24`, and private trace/log paths. Set `LD_LIBRARY_PATH` to the selected bridge directory plus `/opt/hipvs/lib:/opt/rocm/lib`. Wait for `SELECT 1`, fail with log paths on timeout, and terminate only matching owned PIDs. Sample process RSS and `rocm-smi` VRAM/utilization on a background thread.
 
-Load each dataset once per fresh server using `LOAD DATA LOCAL INFILE` from a deterministic TSV cache. Verify row count before DDL. Use PyMySQL with autocommit and explicit query timeout. Start timing immediately before the fixed DDL; execute the first fixed query immediately afterward.
+Load each dataset once per fresh server using `LOAD DATA LOCAL INFILE` from a deterministic TSV cache. Verify row count before DDL. Use one persistent mysql CLI process with autocommit and explicit query timeout so per-query process startup is not included. Start timing immediately before the fixed DDL; execute the first fixed query immediately afterward.
 
 - [ ] **Step 3: Implement 4096-query execution and GPU evidence**
 

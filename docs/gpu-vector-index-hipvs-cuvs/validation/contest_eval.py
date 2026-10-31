@@ -9,7 +9,7 @@ import json
 import math
 import os
 import re
-import shutil
+import select
 import socket
 import statistics
 import subprocess
@@ -285,12 +285,90 @@ def owned_process_cmdline(cmdline, observer, base_dir):
     return str(observer) in cmdline and f"--base-dir {base_dir}" in cmdline
 
 
+class MysqlCursor:
+    def __init__(self, client):
+        self.client = client
+        self.rows = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def execute(self, sql, params=None, expected_rows=None):
+        self.rows = self.client.execute(sql, params, expected_rows)
+
+    def fetchone(self):
+        return self.rows[0] if self.rows else None
+
+    def fetchall(self):
+        return self.rows
+
+
+class MysqlCli:
+    DONE = "__SEEKDB_CONTEST_DONE__"
+
+    def __init__(self, command, env=None, timeout=7200):
+        self.timeout = timeout
+        self.process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE, env=env, bufsize=0)
+
+    def cursor(self):
+        return MysqlCursor(self)
+
+    def execute(self, sql, params=None, expected_rows=None):
+        if "\n" in sql or "\r" in sql:
+            raise ValueError("SQL statement must be single-line")
+        if params:
+            if len(params) != 1 or sql.count("%s") != 1:
+                raise ValueError("only one scalar SQL parameter is supported")
+            value = str(params[0]).replace("\\", "\\\\").replace("'", "''")
+            sql = sql.replace("%s", f"'{value}'")
+        statement = sql.rstrip().rstrip(";") + ";"
+        self.process.stdin.write(statement.encode("utf-8") + b"\n")
+        if expected_rows is None:
+            self.process.stdin.write(f"SELECT '{self.DONE}';\n".encode("ascii"))
+        self.process.stdin.flush()
+        rows = []
+        while True:
+            ready, _, _ = select.select([self.process.stdout], [], [], self.timeout)
+            if not ready:
+                raise TimeoutError(f"mysql query exceeded {self.timeout}s")
+            line = self.process.stdout.readline()
+            if not line:
+                self.process.wait(5)
+                error = self.process.stderr.read().decode("utf-8", errors="replace")
+                raise RuntimeError(f"mysql client exited with {self.process.returncode}: {error}")
+            text = line.decode("utf-8", errors="strict").rstrip("\r\n")
+            if text == self.DONE:
+                return rows
+            rows.append(tuple(text.split("\t")))
+            if expected_rows is not None and len(rows) == expected_rows:
+                return rows
+
+    def close(self):
+        if self.process.poll() is None:
+            self.process.stdin.close()
+            try:
+                self.process.wait(5)
+            except subprocess.TimeoutExpired:
+                self.process.terminate()
+                self.process.wait(5)
+        self.process.stdout.close()
+        self.process.stderr.close()
+
+
 def connect_mysql(config, timeout=7200):
-    import pymysql
-    return pymysql.connect(host="127.0.0.1", port=config.port, user="root",
-                           password=os.environ.get("SEEKDB_PASSWORD", ""),
-                           autocommit=True, local_infile=True, connect_timeout=10,
-                           read_timeout=timeout, write_timeout=timeout)
+    command = [os.environ.get("MYSQL_BIN", "mysql"), "--protocol=TCP", "-h127.0.0.1",
+               f"-P{config.port}", "-uroot", "-ANB", "--raw", "--local-infile=1",
+               "--connect-timeout=10"]
+    env = dict(os.environ)
+    if os.environ.get("SEEKDB_PASSWORD"):
+        env["MYSQL_PWD"] = os.environ["SEEKDB_PASSWORD"]
+    client = MysqlCli(command, env=env, timeout=timeout)
+    client.execute(f"SET ob_query_timeout={timeout * 1000000}")
+    return client
 
 
 def evidence_offset(path):
@@ -386,7 +464,7 @@ class ObserverServer:
                 try:
                     connection = connect_mysql(config, timeout=30)
                     with connection.cursor() as cursor:
-                        cursor.execute("SELECT 1")
+                        cursor.execute("SELECT 1", expected_rows=1)
                     connection.close()
                     return self
                 except Exception:
@@ -445,8 +523,8 @@ def load_data(connection, spec, data, cache_dir):
         escaped = str(tsv).replace("'", "''")
         cursor.execute(f"LOAD DATA LOCAL INFILE '{escaped}' INTO TABLE items "
                        "FIELDS TERMINATED BY '\\t' LINES TERMINATED BY '\\n' (id,v)")
-        cursor.execute("SELECT COUNT(*) FROM items")
-        if cursor.fetchone()[0] != spec.rows:
+        cursor.execute("SELECT COUNT(*) FROM items", expected_rows=1)
+        if int(cursor.fetchone()[0]) != spec.rows:
             raise RuntimeError("loaded row count mismatch")
 
 
@@ -457,7 +535,7 @@ def run_queries(connection, spec, data, k, raw_dir):
     with connection.cursor() as cursor:
         for query in data.queries:
             started = time.perf_counter()
-            cursor.execute(sql, (vector_literal(query),))
+            cursor.execute(sql, (vector_literal(query),), expected_rows=k)
             answer = [int(row[0]) for row in cursor.fetchall()]
             latencies.append(time.perf_counter() - started)
             answers.append(answer)
@@ -494,7 +572,7 @@ def run_single(spec, data, config, raw_dir, cache_dir):
                 cursor.execute(create_index_sql("items", "cuvs"))
                 result["create_seconds"] = time.perf_counter() - started
                 started = time.perf_counter()
-                cursor.execute(query_sql("items", 10), (vector_literal(data.queries[0]),))
+                cursor.execute(query_sql("items", 10), (vector_literal(data.queries[0]),), expected_rows=10)
                 cursor.fetchall()
                 result["first_query_seconds"] = time.perf_counter() - started
             result["ready_seconds"] = result["create_seconds"] + result["first_query_seconds"]
@@ -587,8 +665,9 @@ def run_evaluation(args):
                                all(item["passed"] for item in official))
             result["official_like_passed"] = official_passed
             result["local_strict_passed"] = all_passed
-            result["status"] = ("LOCAL_STRICT_PASS" if all_passed else
-                                "OFFICIAL_LIKE_PASS" if official_passed else "FAILED")
+            result["status"] = ("LOCAL_STRICT_PASS" if all_passed and len(specs) == 8 else
+                                "OFFICIAL_LIKE_PASS" if official_passed else
+                                "SUBSET_PASS" if all_passed else "FAILED")
     write_reports(result, output_dir)
     return result
 
