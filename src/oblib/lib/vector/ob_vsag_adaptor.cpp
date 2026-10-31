@@ -32,6 +32,7 @@
 #include <cstdio>
 #include <cstring>
 #include <pthread.h>
+#include <omp.h>
 #include "vsag/vsag.h"
 #include "vsag/errors.h"
 #include "vsag/dataset.h"
@@ -230,11 +231,18 @@ static bool ob_cuvs_run_big_stack(void *(*function)(void *), void *argument) {
   return ob_cuvs_run_dedicated(function, argument);
 }
 
+static void ob_cuvs_set_build_threads() {
+  const char *configured = getenv("OMP_NUM_THREADS");
+  const long threads = configured != nullptr ? strtol(configured, nullptr, 10) : 8;
+  omp_set_num_threads(threads > 0 ? static_cast<int>(threads) : 8);
+}
+
 struct ObCuvsBuildJob {
   const float *base; long n; long dim; void *out;
 };
 static void *ob_cuvs_build_job(void *arg) {
   ObCuvsBuildJob *j = static_cast<ObCuvsBuildJob *>(arg);
+  ob_cuvs_set_build_threads();
   j->out = seekdb_cuvs_build(j->base, j->n, j->dim);
   return nullptr;
 }
@@ -303,6 +311,7 @@ struct ObCuvsJob {
 static void *ob_cuvs_job(void *arg) {
   ObCuvsJob *j = static_cast<ObCuvsJob *>(arg);
   if (j->need_build) {
+    ob_cuvs_set_build_threads();
     void *nb = seekdb_cuvs_build(j->ent->buf_vecs_.data(), static_cast<long>(j->n),
                                  static_cast<long>(j->dim));
     if (nb != nullptr) {
@@ -330,6 +339,7 @@ struct ObCuvsBatchJob {
 static void *ob_cuvs_batch_job(void *arg) {
   ObCuvsBatchJob *j = static_cast<ObCuvsBatchJob *>(arg);
   if (j->need_build) {
+    ob_cuvs_set_build_threads();
     void *nb = seekdb_cuvs_build(j->ent->buf_vecs_.data(), static_cast<long>(j->n),
                                  static_cast<long>(j->ent->dim_));
     if (nb != nullptr) {
@@ -353,6 +363,7 @@ struct ObCuvsRawBatchJob {
 };
 static void *ob_cuvs_raw_batch_job(void *arg) {
   ObCuvsRawBatchJob *j = static_cast<ObCuvsRawBatchJob *>(arg);
+  ob_cuvs_set_build_threads();
   void *h = seekdb_cuvs_build(j->base, j->n, j->dim);
   if (h != nullptr) {
     if (seekdb_cuvs_search(h, j->query, j->nq, j->topk, j->off, j->dst) == 0) {

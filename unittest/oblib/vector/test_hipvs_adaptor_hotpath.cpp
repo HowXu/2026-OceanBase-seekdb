@@ -9,7 +9,12 @@
 #include <pthread.h>
 #include <vector>
 
-static std::atomic<int> thread_creations{0};
+static std::atomic<int> thread_creations{0}, omp_threads{0};
+extern "C" void __real_omp_set_num_threads(int);
+extern "C" void __wrap_omp_set_num_threads(int threads) {
+  omp_threads = threads;
+  __real_omp_set_num_threads(threads);
+}
 extern "C" int __real_pthread_create(pthread_t *, const pthread_attr_t *, void *(*)(void *), void *);
 extern "C" int __wrap_pthread_create(pthread_t *thread, const pthread_attr_t *attr,
                                      void *(*function)(void *), void *arg) {
@@ -97,6 +102,7 @@ int main(int argc, char **) {
                             warm_count, 100, false, warm_extra) == 0);
   allocator.Deallocate(const_cast<int64_t *>(warm_ids));
   allocator.Deallocate(const_cast<float *>(warm_distance));
+  assert(omp_threads == 8);
   const int warmed_creations = thread_creations;
   for (int repeat = 0; repeat < 200; ++repeat) {
     const float *distance = nullptr;
