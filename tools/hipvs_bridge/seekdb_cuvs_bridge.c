@@ -105,7 +105,7 @@ static int parse_uint_override(const char* name, uint32_t fallback, uint32_t* va
 static int configure_cagra_build(sk_cuvs_index* h)
 {
   const char* algorithm = getenv("SEEKDB_CUVS_CAGRA_BUILD_ALGO");
-  uint32_t niter = 100;
+  uint32_t niter = 3;
   if (!algorithm || !algorithm[0] || strcmp(algorithm, "nn_descent") == 0) {
     h->ip->build_algo = NN_DESCENT;
   } else if (strcmp(algorithm, "iterative") == 0) {
@@ -116,7 +116,7 @@ static int configure_cagra_build(sk_cuvs_index* h)
     fprintf(stderr, "[seekdb_cuvs] unknown CAGRA build algorithm: %s\n", algorithm);
     return 0;
   }
-  if (!parse_uint_override("SEEKDB_CUVS_CAGRA_NN_NITER", 100, &niter)) return 0;
+  if (!parse_uint_override("SEEKDB_CUVS_CAGRA_NN_NITER", 3, &niter)) return 0;
   h->ip->nn_descent_niter = niter;
   return 1;
 }
@@ -137,7 +137,7 @@ static int configure_cagra_degrees(sk_cuvs_index* h, long n)
 
 static int configure_cagra_search(sk_cuvs_index* h)
 {
-  uint32_t itopk = h->dim > 256 ? 1024 : 512;
+  uint32_t itopk = 2048;
   uint32_t width = 4;
   const char* algorithm = getenv("SEEKDB_CUVS_CAGRA_SEARCH_ALGO");
   if (!parse_uint_override("SEEKDB_CUVS_CAGRA_ITOPK", itopk, &itopk) ||
@@ -203,7 +203,7 @@ void* seekdb_cuvs_build(const float* base, long n, long dim)
     h->ip->build_algo = NN_DESCENT;
     h->ip->graph_degree = 128;
     h->ip->intermediate_graph_degree = n > 256 ? 144 : (size_t)n - 1;
-    h->ip->nn_descent_niter = 100;
+    h->ip->nn_descent_niter = 3;
     if (!configure_cagra_build(h) || !configure_cagra_degrees(h, n) ||
         cuvsCagraIndexCreate(&h->idx) != CUVS_SUCCESS ||
         cuvsCagraBuild(h->res, h->ip, &dataset, h->idx) != CUVS_SUCCESS ||
