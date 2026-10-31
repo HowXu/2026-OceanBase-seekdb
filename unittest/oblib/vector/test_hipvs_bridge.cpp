@@ -270,6 +270,10 @@ int main()
   assert(seekdb_cuvs_serialize(h, "mock.snapshot") == 0);
   assert(!cagra_include_dataset);
   seekdb_cuvs_free(h); assert(live == 0 && buffers.empty());
+  std::vector<float> larger_base(300 * 4);
+  h = seekdb_cuvs_build(larger_base.data(), 300, 4);
+  assert(h && cagra_last_intermediate_degree == 144);
+  seekdb_cuvs_free(h); assert(live == 0 && buffers.empty());
   h = seekdb_cuvs_deserialize_with_base("mock.snapshot", base.data(), 256, 4);
   assert(h && from_args_calls == 1);
   assert(seekdb_cuvs_search(h, base.data(), 2, 3, ids, nullptr) == 0);

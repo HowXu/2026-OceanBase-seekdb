@@ -123,7 +123,7 @@ static int configure_cagra_build(sk_cuvs_index* h)
 
 static int configure_cagra_degrees(sk_cuvs_index* h, long n)
 {
-  uint32_t graph = 128, intermediate = n > 256 ? 256 : (uint32_t)n - 1;
+  uint32_t graph = 128, intermediate = n > 256 ? 144 : (uint32_t)n - 1;
   if (!parse_uint_override("SEEKDB_CUVS_CAGRA_GRAPH_DEGREE", graph, &graph) ||
       !parse_uint_override("SEEKDB_CUVS_CAGRA_INTERMEDIATE_DEGREE", intermediate, &intermediate) ||
       graph >= intermediate || (uint64_t)intermediate >= (uint64_t)n) {
@@ -202,7 +202,7 @@ void* seekdb_cuvs_build(const float* base, long n, long dim)
     h->ip->metric = L2Expanded;
     h->ip->build_algo = NN_DESCENT;
     h->ip->graph_degree = 128;
-    h->ip->intermediate_graph_degree = n > 256 ? 256 : (size_t)n - 1;
+    h->ip->intermediate_graph_degree = n > 256 ? 144 : (size_t)n - 1;
     h->ip->nn_descent_niter = 100;
     if (!configure_cagra_build(h) || !configure_cagra_degrees(h, n) ||
         cuvsCagraIndexCreate(&h->idx) != CUVS_SUCCESS ||
