@@ -457,7 +457,8 @@ class ObserverServer:
         self.sampler = ResourceSampler(self.process.pid)
         self.sampler.start()
         try:
-            deadline = time.monotonic() + 180
+            deadline = time.monotonic() + 600
+            last_error = None
             while time.monotonic() < deadline:
                 if self.process.poll() is not None:
                     raise RuntimeError(f"observer exited with {self.process.returncode}: {config.base_dir}")
@@ -467,9 +468,10 @@ class ObserverServer:
                         cursor.execute("SELECT 1", expected_rows=1)
                     connection.close()
                     return self
-                except Exception:
+                except Exception as exc:
+                    last_error = f"{type(exc).__name__}: {exc}"
                     time.sleep(1)
-            raise RuntimeError(f"observer readiness timeout: {config.base_dir}")
+            raise RuntimeError(f"observer readiness timeout: {config.base_dir}; last_error={last_error}")
         except Exception:
             self.stop()
             raise
