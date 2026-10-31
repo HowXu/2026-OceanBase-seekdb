@@ -1,0 +1,466 @@
+{
+  "status": "BASELINE_COMPLETE",
+  "revision": "634888d9b037153fa143d2c913ba4b25503e1d62",
+  "role": "baseline",
+  "round_count": 4,
+  "datasets": [
+    "gaussian250k-d128",
+    "gaussian250k-d256"
+  ],
+  "measurement": "DDL + first Top-10 query; 4096 independent SQL queries for each Top-10/100; FP32 + L2",
+  "data_note": "Deterministic normalized synthetic gaussian data, not official SIFT250K or Hidden250K",
+  "source_reports": [
+    "/work/evals/v5-four-20261031-063937",
+    "/work/evals/v5-d256-replacement-20261031-070228"
+  ],
+  "discarded": [
+    {
+      "dataset": "gaussian250k-d256",
+      "round": 3,
+      "source": "/work/evals/v5-four-20261031-063937",
+      "reason": "8193 GPU serves and zero fallback, but missing built=true GPU snapshot evidence; excluded rather than weakening gates"
+    }
+  ],
+  "reference_v5": {
+    "gaussian250k-d128": {
+      "ready_seconds": 23.0,
+      "qps": {
+        "10": 147.0,
+        "100": 143.0
+      },
+      "recall": {
+        "10": 1.0,
+        "100": 1.0
+      }
+    },
+    "gaussian250k-d256": {
+      "ready_seconds": 30.0,
+      "qps": {
+        "10": 87.0,
+        "100": 85.0
+      },
+      "recall": {
+        "10": 0.985,
+        "100": 0.914
+      }
+    }
+  },
+  "reference_v5_plus_10_percent": {
+    "gaussian250k-d128": {
+      "ready_seconds": 20.909090909090907,
+      "qps": {
+        "10": 161.70000000000002,
+        "100": 157.3
+      },
+      "recall": {
+        "10": 1.0,
+        "100": 1.0
+      }
+    },
+    "gaussian250k-d256": {
+      "ready_seconds": 27.27272727272727,
+      "qps": {
+        "10": 95.7,
+        "100": 93.50000000000001
+      },
+      "recall": {
+        "10": 0.985,
+        "100": 0.914
+      }
+    }
+  },
+  "runs": [
+    {
+      "role": "baseline",
+      "observer": "/root/worker-v5/build_eval/src/observer/seekdb",
+      "observer_sha256": "d3f78804ce1adb97ba3e926b503b0fe6b69a3b2a90f77abab7a4fc3c5ab72910",
+      "bridge_sha256": "030b36246e3fc4e92743e432d00979f7a729fdf36fb8b6ff482b75fb008e9da6",
+      "port": 2982,
+      "create_seconds": 51.24759434349835,
+      "first_query_seconds": 0.040332064032554626,
+      "ready_seconds": 51.287926407530904,
+      "qps": {
+        "10": 130.41685369949295,
+        "100": 116.374444036724
+      },
+      "recall": {
+        "10": 0.991748046875,
+        "100": 0.97116455078125
+      },
+      "latency": {
+        "10": {
+          "p50_ms": 7.683588191866875,
+          "p95_ms": 8.15056636929512,
+          "p99_ms": 8.476753346621992
+        },
+        "100": {
+          "p50_ms": 8.584623225033283,
+          "p95_ms": 9.028173517435789,
+          "p99_ms": 9.341404866427185
+        }
+      },
+      "evidence": {
+        "passed": true,
+        "gpu_serves": 8193,
+        "gpu_snapshot_builds": 1,
+        "cpu_fallbacks": 0
+      },
+      "resources": {
+        "samples": 95,
+        "errors": [],
+        "peak_rss_bytes": 3112603648,
+        "peak_vram_bytes": 734203904,
+        "peak_gpu_percent": 100
+      },
+      "dataset": "gaussian250k-d128",
+      "round": 0
+    },
+    {
+      "role": "baseline",
+      "observer": "/root/worker-v5/build_eval/src/observer/seekdb",
+      "observer_sha256": "d3f78804ce1adb97ba3e926b503b0fe6b69a3b2a90f77abab7a4fc3c5ab72910",
+      "bridge_sha256": "030b36246e3fc4e92743e432d00979f7a729fdf36fb8b6ff482b75fb008e9da6",
+      "port": 2982,
+      "create_seconds": 50.70988827198744,
+      "first_query_seconds": 0.03790375217795372,
+      "ready_seconds": 50.74779202416539,
+      "qps": {
+        "10": 129.08889012856875,
+        "100": 116.40342972174824
+      },
+      "recall": {
+        "10": 0.9916015625,
+        "100": 0.97104248046875
+      },
+      "latency": {
+        "10": {
+          "p50_ms": 7.699395529925823,
+          "p95_ms": 8.19418765604496,
+          "p99_ms": 8.523459173738958
+        },
+        "100": {
+          "p50_ms": 8.581668138504028,
+          "p95_ms": 9.043789003044367,
+          "p99_ms": 9.32282991707325
+        }
+      },
+      "evidence": {
+        "passed": true,
+        "gpu_serves": 8193,
+        "gpu_snapshot_builds": 1,
+        "cpu_fallbacks": 0
+      },
+      "resources": {
+        "samples": 94,
+        "errors": [],
+        "peak_rss_bytes": 3094896640,
+        "peak_vram_bytes": 734208000,
+        "peak_gpu_percent": 100
+      },
+      "dataset": "gaussian250k-d128",
+      "round": 1
+    },
+    {
+      "role": "baseline",
+      "observer": "/root/worker-v5/build_eval/src/observer/seekdb",
+      "observer_sha256": "d3f78804ce1adb97ba3e926b503b0fe6b69a3b2a90f77abab7a4fc3c5ab72910",
+      "bridge_sha256": "030b36246e3fc4e92743e432d00979f7a729fdf36fb8b6ff482b75fb008e9da6",
+      "port": 2982,
+      "create_seconds": 50.710344484075904,
+      "first_query_seconds": 0.037782637402415276,
+      "ready_seconds": 50.74812712147832,
+      "qps": {
+        "10": 130.48127274052555,
+        "100": 119.54100417864626
+      },
+      "recall": {
+        "10": 0.9918701171875,
+        "100": 0.97111572265625
+      },
+      "latency": {
+        "10": {
+          "p50_ms": 7.643252611160278,
+          "p95_ms": 8.039647247642279,
+          "p99_ms": 8.39874241501093
+        },
+        "100": {
+          "p50_ms": 8.399932645261288,
+          "p95_ms": 8.86612106114626,
+          "p99_ms": 9.150007925927639
+        }
+      },
+      "evidence": {
+        "passed": true,
+        "gpu_serves": 8193,
+        "gpu_snapshot_builds": 1,
+        "cpu_fallbacks": 0
+      },
+      "resources": {
+        "samples": 93,
+        "errors": [],
+        "peak_rss_bytes": 3110346752,
+        "peak_vram_bytes": 734208000,
+        "peak_gpu_percent": 100
+      },
+      "dataset": "gaussian250k-d128",
+      "round": 2
+    },
+    {
+      "role": "baseline",
+      "observer": "/root/worker-v5/build_eval/src/observer/seekdb",
+      "observer_sha256": "d3f78804ce1adb97ba3e926b503b0fe6b69a3b2a90f77abab7a4fc3c5ab72910",
+      "bridge_sha256": "030b36246e3fc4e92743e432d00979f7a729fdf36fb8b6ff482b75fb008e9da6",
+      "port": 2982,
+      "create_seconds": 53.036347983404994,
+      "first_query_seconds": 0.03760678134858608,
+      "ready_seconds": 53.07395476475358,
+      "qps": {
+        "10": 131.12811208950242,
+        "100": 119.89048094719254
+      },
+      "recall": {
+        "10": 0.991845703125,
+        "100": 0.97111328125
+      },
+      "latency": {
+        "10": {
+          "p50_ms": 7.641995325684547,
+          "p95_ms": 8.03492171689868,
+          "p99_ms": 8.361791633069515
+        },
+        "100": {
+          "p50_ms": 8.361703716218472,
+          "p95_ms": 8.849253877997398,
+          "p99_ms": 9.177867695689203
+        }
+      },
+      "evidence": {
+        "passed": true,
+        "gpu_serves": 8193,
+        "gpu_snapshot_builds": 1,
+        "cpu_fallbacks": 0
+      },
+      "resources": {
+        "samples": 93,
+        "errors": [],
+        "peak_rss_bytes": 3323568128,
+        "peak_vram_bytes": 734212096,
+        "peak_gpu_percent": 100
+      },
+      "dataset": "gaussian250k-d128",
+      "round": 3
+    },
+    {
+      "role": "baseline",
+      "observer": "/root/worker-v5/build_eval/src/observer/seekdb",
+      "observer_sha256": "d3f78804ce1adb97ba3e926b503b0fe6b69a3b2a90f77abab7a4fc3c5ab72910",
+      "bridge_sha256": "030b36246e3fc4e92743e432d00979f7a729fdf36fb8b6ff482b75fb008e9da6",
+      "port": 2982,
+      "create_seconds": 61.12526884302497,
+      "first_query_seconds": 0.04223320446908474,
+      "ready_seconds": 61.167502047494054,
+      "qps": {
+        "10": 109.18230520424778,
+        "100": 100.52248349434151
+      },
+      "recall": {
+        "10": 0.9231201171875,
+        "100": 0.86037109375
+      },
+      "latency": {
+        "10": {
+          "p50_ms": 9.198633022606373,
+          "p95_ms": 9.609064552932978,
+          "p99_ms": 9.853907488286497
+        },
+        "100": {
+          "p50_ms": 9.900564327836037,
+          "p95_ms": 10.403758846223354,
+          "p99_ms": 10.738504491746426
+        }
+      },
+      "evidence": {
+        "passed": true,
+        "gpu_serves": 8193,
+        "gpu_snapshot_builds": 1,
+        "cpu_fallbacks": 0
+      },
+      "resources": {
+        "samples": 115,
+        "errors": [],
+        "peak_rss_bytes": 3464773632,
+        "peak_vram_bytes": 862400512,
+        "peak_gpu_percent": 100
+      },
+      "dataset": "gaussian250k-d256",
+      "round": 0
+    },
+    {
+      "role": "baseline",
+      "observer": "/root/worker-v5/build_eval/src/observer/seekdb",
+      "observer_sha256": "d3f78804ce1adb97ba3e926b503b0fe6b69a3b2a90f77abab7a4fc3c5ab72910",
+      "bridge_sha256": "030b36246e3fc4e92743e432d00979f7a729fdf36fb8b6ff482b75fb008e9da6",
+      "port": 2982,
+      "create_seconds": 56.58728985488415,
+      "first_query_seconds": 0.04337268881499767,
+      "ready_seconds": 56.630662543699145,
+      "qps": {
+        "10": 106.65881413519632,
+        "100": 98.46118535025253
+      },
+      "recall": {
+        "10": 0.92255859375,
+        "100": 0.8605859375
+      },
+      "latency": {
+        "10": {
+          "p50_ms": 9.425736032426357,
+          "p95_ms": 9.862375911325216,
+          "p99_ms": 10.241010412573816
+        },
+        "100": {
+          "p50_ms": 10.076475329697132,
+          "p95_ms": 10.639254003763199,
+          "p99_ms": 10.980237927287819
+        }
+      },
+      "evidence": {
+        "passed": true,
+        "gpu_serves": 8193,
+        "gpu_snapshot_builds": 1,
+        "cpu_fallbacks": 0
+      },
+      "resources": {
+        "samples": 116,
+        "errors": [],
+        "peak_rss_bytes": 3377807360,
+        "peak_vram_bytes": 862388224,
+        "peak_gpu_percent": 100
+      },
+      "dataset": "gaussian250k-d256",
+      "round": 1
+    },
+    {
+      "role": "baseline",
+      "observer": "/root/worker-v5/build_eval/src/observer/seekdb",
+      "observer_sha256": "d3f78804ce1adb97ba3e926b503b0fe6b69a3b2a90f77abab7a4fc3c5ab72910",
+      "bridge_sha256": "030b36246e3fc4e92743e432d00979f7a729fdf36fb8b6ff482b75fb008e9da6",
+      "port": 2982,
+      "create_seconds": 60.70006246864796,
+      "first_query_seconds": 0.040161896497011185,
+      "ready_seconds": 60.74022436514497,
+      "qps": {
+        "10": 107.24390864221819,
+        "100": 99.69228335307092
+      },
+      "recall": {
+        "10": 0.9216064453125,
+        "100": 0.86033447265625
+      },
+      "latency": {
+        "10": {
+          "p50_ms": 9.384091012179852,
+          "p95_ms": 9.77915059775114,
+          "p99_ms": 10.05970146507025
+        },
+        "100": {
+          "p50_ms": 9.967762045562267,
+          "p95_ms": 10.589048732072115,
+          "p99_ms": 10.88780201971531
+        }
+      },
+      "evidence": {
+        "passed": true,
+        "gpu_serves": 8193,
+        "gpu_snapshot_builds": 1,
+        "cpu_fallbacks": 0
+      },
+      "resources": {
+        "samples": 116,
+        "errors": [],
+        "peak_rss_bytes": 3402215424,
+        "peak_vram_bytes": 862412800,
+        "peak_gpu_percent": 100
+      },
+      "dataset": "gaussian250k-d256",
+      "round": 2
+    },
+    {
+      "role": "baseline",
+      "observer": "/root/worker-v5/build_eval/src/observer/seekdb",
+      "observer_sha256": "d3f78804ce1adb97ba3e926b503b0fe6b69a3b2a90f77abab7a4fc3c5ab72910",
+      "bridge_sha256": "030b36246e3fc4e92743e432d00979f7a729fdf36fb8b6ff482b75fb008e9da6",
+      "port": 2982,
+      "create_seconds": 54.783966394141316,
+      "first_query_seconds": 0.04115406796336174,
+      "ready_seconds": 54.82512046210468,
+      "qps": {
+        "10": 106.6268080189693,
+        "100": 97.95290558364286
+      },
+      "recall": {
+        "10": 0.9234375,
+        "100": 0.86046630859375
+      },
+      "latency": {
+        "10": {
+          "p50_ms": 9.415893815457821,
+          "p95_ms": 9.842789731919765,
+          "p99_ms": 10.217817965894938
+        },
+        "100": {
+          "p50_ms": 10.075309313833714,
+          "p95_ms": 10.61469642445445,
+          "p99_ms": 11.015356797724962
+        }
+      },
+      "evidence": {
+        "passed": true,
+        "gpu_serves": 8193,
+        "gpu_snapshot_builds": 1,
+        "cpu_fallbacks": 0
+      },
+      "resources": {
+        "samples": 115,
+        "errors": [],
+        "peak_rss_bytes": 3446996992,
+        "peak_vram_bytes": 862388224,
+        "peak_gpu_percent": 100
+      },
+      "dataset": "gaussian250k-d256",
+      "round": 3,
+      "source_round": 0,
+      "replacement_for": "Evidence-incomplete gaussian250k-d256 round 3 in v5-four-20261031-063937"
+    }
+  ],
+  "averages": [
+    {
+      "dataset": "gaussian250k-d128",
+      "ready_seconds": 51.46445007948205,
+      "create_seconds": 51.42604377074167,
+      "first_query_seconds": 0.038406308740377426,
+      "qps": {
+        "10": 130.27878216452243,
+        "100": 118.05233972107776
+      },
+      "recall": {
+        "10": 0.9917663574218749,
+        "100": 0.9711090087890625
+      }
+    },
+    {
+      "dataset": "gaussian250k-d256",
+      "ready_seconds": 58.34087735461071,
+      "create_seconds": 58.2991468901746,
+      "first_query_seconds": 0.041730464436113834,
+      "qps": {
+        "10": 107.4279590001579,
+        "100": 99.15721444532696
+      },
+      "recall": {
+        "10": 0.9226806640625,
+        "100": 0.8604394531249999
+      }
+    }
+  ]
+}
