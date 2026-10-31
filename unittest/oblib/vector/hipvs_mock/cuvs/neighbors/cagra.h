@@ -3,6 +3,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+typedef int cuvsDistanceType;
 enum { L2Expanded, NN_DESCENT, NO_FILTER };
 typedef struct {
   int metric; size_t intermediate_graph_degree, graph_degree;

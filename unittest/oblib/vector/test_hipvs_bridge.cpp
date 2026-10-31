@@ -1,6 +1,7 @@
 // Exercise the real bridge against a queued, failure-injectable C API test double.
 #include "seekdb_cuvs_bridge.h"
 #include <cuvs/neighbors/cagra.h>
+#include <cuvs/neighbors/brute_force.h>
 #include <algorithm>
 #include <cassert>
 #include <climits>
@@ -15,10 +16,13 @@ struct Resource { std::vector<std::function<void()>> pending; };
 struct Index { int64_t n = 0, dim = 0; std::vector<float> base; };
 static Index saved;
 static int calls, fail_at, live;
+static int bf_builds, bf_searches, bf_saves, bf_loads;
+static const void* bf_base_ptr;
 static std::set<void*> buffers;
 static bool fail() { return ++calls == fail_at; }
 static Resource* resource(cuvsResources_t r) { return reinterpret_cast<Resource*>(r); }
 static Index* index(cuvsCagraIndex_t i) { return static_cast<Index*>(i->data); }
+static Index* bf_index(cuvsBruteForceIndex_t i) { return reinterpret_cast<Index*>(i->addr); }
 extern "C" {
 const char* cuvsGetLastErrorText() { return "injected failure"; }
 cuvsError_t cuvsResourcesCreate(cuvsResources_t* r) {
@@ -118,6 +122,59 @@ cuvsError_t cuvsCagraIndexGetSize(cuvsCagraIndex_t i, int64_t* n) {
 cuvsError_t cuvsCagraIndexGetDims(cuvsCagraIndex_t i, int64_t* dim) {
   if (fail()) return CUVS_ERROR; *dim = index(i)->dim; return CUVS_SUCCESS;
 }
+cuvsError_t cuvsBruteForceIndexCreate(cuvsBruteForceIndex_t* out) {
+  if (fail()) return CUVS_ERROR;
+  *out = new cuvsBruteForceIndex{reinterpret_cast<uintptr_t>(new Index), {}}; ++live; return CUVS_SUCCESS;
+}
+cuvsError_t cuvsBruteForceIndexDestroy(cuvsBruteForceIndex_t i) {
+  delete bf_index(i); delete i; --live; return CUVS_SUCCESS;
+}
+cuvsError_t cuvsBruteForceBuild(cuvsResources_t r, DLManagedTensor* t, cuvsDistanceType metric,
+                                float, cuvsBruteForceIndex_t i) {
+  if (fail()) return CUVS_ERROR;
+  assert(metric == L2Expanded);
+  assert(t->dl_tensor.device.device_type == kDLCUDA && t->dl_tensor.device.device_id == 3);
+  bf_base_ptr = t->dl_tensor.data;
+  int64_t n = t->dl_tensor.shape[0], dim = t->dl_tensor.shape[1];
+  auto data = static_cast<float*>(t->dl_tensor.data);
+  resource(r)->pending.push_back([=] { bf_index(i)->n = n; bf_index(i)->dim = dim;
+    bf_index(i)->base.assign(data, data + n * dim); });
+  ++bf_builds; return CUVS_SUCCESS;
+}
+cuvsError_t cuvsBruteForceSearch(cuvsResources_t r, cuvsBruteForceIndex_t i,
+    DLManagedTensor* q, DLManagedTensor* ids, DLManagedTensor* dist, cuvsFilter) {
+  if (fail()) return CUVS_ERROR;
+  assert(ids->dl_tensor.dtype.code == kDLInt && ids->dl_tensor.dtype.bits == 64);
+  auto query = static_cast<float*>(q->dl_tensor.data);
+  auto output = static_cast<int64_t*>(ids->dl_tensor.data);
+  auto distances = static_cast<float*>(dist->dl_tensor.data);
+  auto nq = q->dl_tensor.shape[0], k = ids->dl_tensor.shape[1];
+  resource(r)->pending.push_back([=] {
+    for (int64_t row = 0; row < nq; ++row) {
+      std::vector<std::pair<float, unsigned>> all;
+      for (int64_t b = 0; b < bf_index(i)->n; ++b) {
+        float d = 0;
+        for (int64_t col = 0; col < bf_index(i)->dim; ++col) {
+          float delta = query[row * bf_index(i)->dim + col] - bf_index(i)->base[b * bf_index(i)->dim + col];
+          d += delta * delta;
+        }
+        all.emplace_back(d, b);
+      }
+      std::sort(all.begin(), all.end());
+      for (int64_t col = 0; col < k; ++col) {
+        distances[row*k+col] = all[col].first; output[row*k+col] = all[col].second;
+      }
+    }
+  });
+  ++bf_searches; return CUVS_SUCCESS;
+}
+cuvsError_t cuvsBruteForceSerialize(cuvsResources_t, const char*, cuvsBruteForceIndex_t i) {
+  if (fail()) return CUVS_ERROR; saved = *bf_index(i); ++bf_saves; return CUVS_SUCCESS;
+}
+cuvsError_t cuvsBruteForceDeserialize(cuvsResources_t r, const char*, cuvsBruteForceIndex_t i) {
+  if (fail()) return CUVS_ERROR;
+  resource(r)->pending.push_back([=] { *bf_index(i) = saved; }); ++bf_loads; return CUVS_SUCCESS;
+}
 }
 
 int main()
@@ -174,5 +231,20 @@ int main()
     assert(!seekdb_cuvs_deserialize("mock.snapshot", 256, 4));
     assert(live == 0 && buffers.empty()); ++cases;
   }
+  assert(setenv("SEEKDB_CUVS_ALGO", "brute_force", 1) == 0);
+  fail_at = 0; calls = 0; h = seekdb_cuvs_build(base.data(), 256, 4); assert(h && bf_builds == 1);
+  assert(buffers.count(const_cast<void*>(bf_base_ptr)) == 1);
+  assert(seekdb_cuvs_search(h, base.data(), 2, 3, ids, distances) == 0 && bf_searches == 1);
+  assert(ids[0] == 0 && ids[3] == 1 && distances[0] == 0);
+  assert(seekdb_cuvs_serialize(h, "mock.snapshot") == 0 && bf_saves == 1);
+  seekdb_cuvs_free(h); assert(live == 0);
+  assert(buffers.count(const_cast<void*>(bf_base_ptr)) == 0);
+  h = seekdb_cuvs_deserialize("mock.snapshot", 256, 4); assert(h && bf_loads == 1);
+  assert(seekdb_cuvs_search(h, base.data(), 2, 3, ids, distances) == 0);
+  seekdb_cuvs_free(h); assert(live == 0 && buffers.empty());
+  assert(setenv("SEEKDB_CUVS_ALGO", "invalid", 1) == 0);
+  assert(!seekdb_cuvs_build(base.data(), 256, 4));
+  assert(unsetenv("SEEKDB_CUVS_ALGO") == 0);
+  cases += 2;
   std::printf("PASS bridge contract and fault-injection cases=%d (mock SDK; no GPU performance claim)\n", cases);
 }
