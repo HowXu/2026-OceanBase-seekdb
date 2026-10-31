@@ -116,6 +116,7 @@ def dataset_specs(mode):
     if mode != "full":
         raise ValueError(f"unknown dataset mode: {mode}")
     return [
+        DatasetSpec("siftlike250k-d128", 250_000, 128, 4096, "siftlike", 20261109),
         DatasetSpec("gaussian250k-d128", 250_000, 128, 4096, "gaussian", 20261101),
         DatasetSpec("clustered250k-d128", 250_000, 128, 4096, "clustered", 20261102),
         DatasetSpec("gaussian250k-d256", 250_000, 256, 4096, "gaussian", 20261103),
@@ -131,7 +132,112 @@ def normalize(rows):
     return rows
 
 
-def generate_arrays(spec):
+def siftlike_descriptor(patch):
+    """Build a single-scale 4x4x8 SIFT-like descriptor without OpenCV."""
+    if patch.shape != (32, 32) or not np.isfinite(patch).all():
+        return None
+    patch = np.asarray(patch, dtype=np.float32)
+    kernel = np.asarray([1, 4, 6, 4, 1], dtype=np.float32) / 16.0
+    padded = np.pad(patch, 2, mode="reflect")
+    smoothed = sum(kernel[i] * padded[i:i + 32, 2:34] for i in range(5))
+    padded = np.pad(smoothed, ((2, 2), (0, 0)), mode="reflect")
+    smoothed = sum(kernel[i] * padded[i:i + 32, :] for i in range(5))
+    gy, gx = np.gradient(smoothed)
+    magnitude = np.hypot(gx, gy)
+    if float(np.sqrt(np.mean(magnitude * magnitude))) < 0.01:
+        return None
+    coordinates = np.arange(32, dtype=np.float32) - 15.5
+    yy, xx = np.meshgrid(coordinates, coordinates, indexing="ij")
+    weight = np.exp(-(xx * xx + yy * yy) / (2.0 * 8.0 * 8.0)).astype(np.float32)
+    directions = np.floor((np.arctan2(gy, gx) % (2.0 * np.pi)) * (8.0 / (2.0 * np.pi))).astype(np.int32)
+    cells = []
+    for bin_index in range(8):
+        weighted = magnitude * weight * (directions == bin_index)
+        cells.append(weighted.reshape(4, 8, 4, 8).sum(axis=(1, 3)))
+    descriptor = np.stack(cells, axis=-1).reshape(-1).astype(np.float32)
+    norm = float(np.linalg.norm(descriptor))
+    if norm <= 1e-12:
+        return None
+    descriptor /= norm
+    descriptor = np.minimum(descriptor, 0.2)
+    norm = float(np.linalg.norm(descriptor))
+    if norm <= 1e-12:
+        return None
+    descriptor /= norm
+    return descriptor.astype(np.float32)
+
+
+def siftlike_arrays(spec, images_root, metadata=None):
+    """Sample base and held-out query descriptors from real image patches."""
+    from PIL import Image
+
+    rng = np.random.default_rng(spec.seed)
+    images = []
+    source_hash = hashlib.sha256()
+    for path in sorted(Path(images_root).rglob("*")):
+        if not path.is_file():
+            continue
+        try:
+            with Image.open(path) as source:
+                if source.width < 128 or source.height < 128:
+                    continue
+                gray = np.asarray(source.convert("L"), dtype=np.float32) / 255.0
+                images.append(gray)
+                source_hash.update(file_sha256(path).encode("ascii"))
+        except (OSError, ValueError):
+            continue
+    if not images:
+        raise RuntimeError(f"no eligible SIFT-like source images: {images_root}")
+    if metadata is not None:
+        metadata.update({"generator": "real-image-siftlike-v1", "source_images": len(images),
+                         "source_images_sha256": source_hash.hexdigest()})
+
+    def random_patch(image_index=None):
+        image_index = int(rng.integers(len(images))) if image_index is None else image_index
+        image = images[image_index]
+        size = int(rng.choice(np.asarray([32, 48, 64, 96])))
+        x = int(rng.integers(image.shape[1] - size + 1))
+        y = int(rng.integers(image.shape[0] - size + 1))
+        return image_index, x, y, size
+
+    def extract(metadata):
+        image_index, x, y, size = metadata
+        image = images[image_index]
+        patch = Image.fromarray(image[y:y + size, x:x + size]).resize(
+            (32, 32), Image.Resampling.BILINEAR)
+        return siftlike_descriptor(np.asarray(patch, dtype=np.float32))
+
+    base = np.empty((spec.rows, 128), dtype=np.float32)
+    metadata = []
+    while len(metadata) < spec.rows:
+        patch_metadata = random_patch()
+        descriptor = extract(patch_metadata)
+        if descriptor is not None:
+            base[len(metadata)] = descriptor
+            metadata.append(patch_metadata)
+
+    queries = np.empty((spec.nq, 128), dtype=np.float32)
+    related = spec.nq * 7 // 10
+    for row in range(spec.nq):
+        while True:
+            if row < related:
+                image_index, x, y, size = metadata[int(rng.integers(len(metadata)))]
+                image = images[image_index]
+                center_x, center_y = x + size / 2.0, y + size / 2.0
+                size = int(np.clip(round(size * rng.uniform(0.9, 1.1)), 32, 96))
+                x = int(np.clip(round(center_x - size / 2.0 + rng.integers(-3, 4)), 0, image.shape[1] - size))
+                y = int(np.clip(round(center_y - size / 2.0 + rng.integers(-3, 4)), 0, image.shape[0] - size))
+                patch_metadata = (image_index, x, y, size)
+            else:
+                patch_metadata = random_patch()
+            descriptor = extract(patch_metadata)
+            if descriptor is not None:
+                queries[row] = descriptor
+                break
+    return base, queries
+
+
+def generate_arrays(spec, metadata=None):
     rng = np.random.default_rng(spec.seed)
     if spec.distribution == "gaussian":
         base = normalize(rng.standard_normal((spec.rows, spec.dim), dtype=np.float32))
@@ -156,6 +262,8 @@ def generate_arrays(spec):
         queries[ordinary:boundary] = (left + right) * 0.5
         queries[ordinary:boundary] += rng.normal(0, 0.02, (boundary - ordinary, spec.dim))
         queries[boundary:] = rng.normal(0, 1, (spec.nq - boundary, spec.dim)) + 0.35
+    elif spec.distribution == "siftlike":
+        base, queries = siftlike_arrays(spec, Path.home() / "Pictures", metadata)
     else:
         raise ValueError(f"unknown distribution: {spec.distribution}")
     return base.astype(np.float32), normalize(queries).astype(np.float32)
@@ -201,9 +309,10 @@ def load_or_create_dataset(spec, cache_dir):
     if directory.exists() and any(directory.iterdir()):
         raise RuntimeError(f"incomplete dataset cache: {directory}")
     directory.mkdir(parents=True, exist_ok=True)
-    base, queries = generate_arrays(spec)
+    generation_metadata = {}
+    base, queries = generate_arrays(spec, generation_metadata)
     truth = exact_topk(base, queries, 100)
-    manifest = {"version": 1, "spec": dataclasses.asdict(spec)}
+    manifest = {"version": 1, "spec": dataclasses.asdict(spec), **generation_metadata}
     arrays = {"base": base, "queries": queries, "truth": truth}
     for name, array in arrays.items():
         np.save(paths[name], array, allow_pickle=False)
@@ -263,7 +372,8 @@ def gpu_evidence(trace, log):
 
 
 def dataset_kind(name):
-    return {"gaussian250k-d128": "sift", "gaussian250k-d256": "hidden"}.get(name, "local")
+    return {"gaussian250k-d128": "sift", "siftlike250k-d128": "sift",
+            "gaussian250k-d256": "hidden"}.get(name, "local")
 
 
 def observer_command(config):

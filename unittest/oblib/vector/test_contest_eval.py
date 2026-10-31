@@ -74,8 +74,10 @@ class DatasetTest(unittest.TestCase):
         self.assertIn((250000, 256), shapes)
         self.assertIn((250000, 384), shapes)
         self.assertNotIn(768, {s.dim for s in specs})
-        self.assertEqual(len(specs), 7)
+        self.assertEqual(len(specs), 8)
         self.assertIn((1000000, 128), shapes)
+        self.assertIn(contest_eval.DatasetSpec(
+            "siftlike250k-d128", 250000, 128, 4096, "siftlike", 20261109), specs)
         self.assertIn((1000000, 256), shapes)
         self.assertTrue(all(s.nq == 4096 for s in specs))
 
@@ -83,6 +85,36 @@ class DatasetTest(unittest.TestCase):
         base = np.array([[0, 0], [1, 0], [-1, 0], [3, 0]], dtype=np.float32)
         queries = np.array([[0, 0]], dtype=np.float32)
         np.testing.assert_array_equal(contest_eval.exact_topk(base, queries, 3, 2), [[0, 1, 2]])
+
+    def test_siftlike_descriptor_is_nonnegative_normalized_and_deterministic(self):
+        patch = np.tile(np.linspace(0, 1, 32, dtype=np.float32), (32, 1))
+        descriptor = contest_eval.siftlike_descriptor(patch)
+        self.assertEqual(descriptor.shape, (128,))
+        self.assertEqual(descriptor.dtype, np.float32)
+        self.assertTrue(np.all(descriptor >= 0))
+        self.assertAlmostEqual(float(np.linalg.norm(descriptor)), 1.0, places=5)
+        np.testing.assert_array_equal(descriptor, contest_eval.siftlike_descriptor(patch))
+        self.assertIsNone(contest_eval.siftlike_descriptor(np.zeros((32, 32), dtype=np.float32)))
+
+    def test_siftlike_generation_uses_real_images_deterministically(self):
+        from PIL import Image
+        image = np.zeros((128, 128), dtype=np.uint8)
+        image[:, 32:96] = np.arange(128, dtype=np.uint8)[None, 32:96]
+        Image.fromarray(image).save(self.cache_dir / "gradient.png")
+        spec = contest_eval.DatasetSpec("tiny-sift", 16, 128, 8, "siftlike", 7)
+        first_base, first_queries = contest_eval.siftlike_arrays(spec, self.cache_dir)
+        second_base, second_queries = contest_eval.siftlike_arrays(spec, self.cache_dir)
+        metadata = {}
+        contest_eval.siftlike_arrays(spec, self.cache_dir, metadata)
+        self.assertEqual(metadata["source_images"], 1)
+        self.assertEqual(len(metadata["source_images_sha256"]), 64)
+        self.assertEqual(metadata["generator"], "real-image-siftlike-v1")
+        self.assertEqual(first_base.shape, (16, 128))
+        self.assertEqual(first_queries.shape, (8, 128))
+        self.assertEqual(first_base.dtype, np.float32)
+        self.assertTrue(np.all(np.isfinite(first_base)) and np.all(first_base >= 0))
+        np.testing.assert_array_equal(first_base, second_base)
+        np.testing.assert_array_equal(first_queries, second_queries)
 
     def test_regeneration_is_deterministic_and_detects_bad_cache(self):
         spec = contest_eval.DatasetSpec("tiny", 256, 4, 16, "clustered", 7)
@@ -188,6 +220,7 @@ class RunnerContractTest(unittest.TestCase):
 
     def test_only_official_shaped_sets_get_official_thresholds(self):
         self.assertEqual(contest_eval.dataset_kind("gaussian250k-d128"), "sift")
+        self.assertEqual(contest_eval.dataset_kind("siftlike250k-d128"), "sift")
         self.assertEqual(contest_eval.dataset_kind("gaussian250k-d256"), "hidden")
         self.assertEqual(contest_eval.dataset_kind("clustered250k-d256"), "local")
 
