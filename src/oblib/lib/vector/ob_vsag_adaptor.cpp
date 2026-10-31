@@ -138,6 +138,7 @@ static inline void ob_vsag_trace(const char *fn, const void *h, long a, long b) 
   if (tf == nullptr) { return; }
   std::lock_guard<std::mutex> guard(g_ob_vsag_trace_mu);
   ::fprintf(tf, "%-14s handle=%p a=%ld b=%ld\n", fn, h, a, b);
+  if (::strcmp(fn, "cuvs_serve") == 0) { ::fflush(tf); }
 #else
   (void)fn; (void)h; (void)a; (void)b;
 #endif
