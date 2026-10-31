@@ -25,6 +25,7 @@ int   seekdb_cuvs_search(void* handle, const float* query, long nq, long topk,
                          unsigned int* out_ids, float* out_dist);
 void  seekdb_cuvs_free(void* handle);
 int seekdb_cuvs_serialize(void* handle, const char* filename);
+int seekdb_cuvs_raw_snapshot(void* handle);
 void* seekdb_cuvs_deserialize(const char* filename, long n, long dim);
 #ifdef __cplusplus
 }

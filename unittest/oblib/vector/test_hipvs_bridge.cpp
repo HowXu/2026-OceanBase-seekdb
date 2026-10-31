@@ -281,6 +281,7 @@ int main()
   assert(!seekdb_cuvs_build(base.data(), LONG_MAX, 4));
   assert(calls == 0);
   void* h = seekdb_cuvs_build(base.data(), 256, 4); assert(h);
+  assert(seekdb_cuvs_raw_snapshot(nullptr) == 0 && seekdb_cuvs_raw_snapshot(h) == 0);
   int build_calls = calls;
   const int cagra_after_build = rmm_allocs;
   check_query_resource_reuse(h, base.data(), cagra_after_build);
@@ -331,6 +332,7 @@ int main()
   }
   assert(setenv("SEEKDB_CUVS_ALGO", "brute_force", 1) == 0);
   fail_at = 0; calls = 0; h = seekdb_cuvs_build(base.data(), 256, 4); assert(h && bf_builds == 1);
+  assert(seekdb_cuvs_raw_snapshot(h) == 1);
   const int bf_after_build = rmm_allocs;
   assert(buffers.count(const_cast<void*>(bf_base_ptr)) == 1);
   check_query_resource_reuse(h, base.data(), bf_after_build);
@@ -350,6 +352,7 @@ int main()
   assert(setenv("SEEKDB_CUVS_ALGO", "ivf_flat", 1) == 0);
   fail_at = 0; calls = 0; h = seekdb_cuvs_build(base.data(), 256, 4);
   assert(h && ivf_builds == 1 && ivf_lists == 2 && ivf_iters == 10 && ivf_train_fraction == 0.25);
+  assert(seekdb_cuvs_raw_snapshot(h) == 0);
   const int ivf_after_build = rmm_allocs;
   check_query_resource_reuse(h, base.data(), ivf_after_build);
   assert(ivf_search_param_creates == 1);

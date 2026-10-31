@@ -56,14 +56,20 @@ main = r'''
 #include <sstream>
 #include <vector>
 #include <cstdio>
+#include <cstring>
 #ifdef OB_BUILD_CUVS
+static bool raw_snapshot_mode = false;
+static int build_calls = 0, serialize_calls = 0, deserialize_calls = 0;
 extern "C" {
-void* seekdb_cuvs_build(const float*, long, long) { return nullptr; }
+void* seekdb_cuvs_build(const float*, long, long) {
+  ++build_calls; return raw_snapshot_mode ? reinterpret_cast<void*>(1) : nullptr;
+}
 int seekdb_cuvs_search(void*, const float*, long, long, unsigned*, float*) { return 1; }
 void seekdb_cuvs_free(void*) {}
 int seekdb_cuvs_cagra_knn(const float*,long,long,const float*,long,long,unsigned*) { return 1; }
-int seekdb_cuvs_serialize(void*,const char*) { return 1; }
-void* seekdb_cuvs_deserialize(const char*,long,long) { return nullptr; }
+int seekdb_cuvs_serialize(void*,const char*) { ++serialize_calls; return 1; }
+void* seekdb_cuvs_deserialize(const char*,long,long) { ++deserialize_calls; return nullptr; }
+int seekdb_cuvs_raw_snapshot(void* handle) { return raw_snapshot_mode && handle != nullptr ? 1 : 0; }
 }
 #endif
 struct Allocator : vsag::Allocator {
@@ -119,6 +125,34 @@ int main() {
  assert(obvsag::knn_search(handler,data.data(),dim,10,dist,found_ids,found,100,false,extra)==0);
  assert(found==10 && found_ids[0]==ids[0]);
  allocator.Deallocate((void*)dist);allocator.Deallocate((void*)found_ids);
+ assert(obvsag::delete_index(handler)==0);
+ raw_snapshot_mode=true;
+ assert(obvsag::create_index(handler,obvsag::HNSW_TYPE,"float32","l2",dim,16,100,100,&allocator)==0);
+ obvsag::mark_cuvs_index(handler);
+ assert(obvsag::add_index(handler,data.data(),ids.data(),dim,n)==0);
+ std::stringstream raw_stream(std::ios::in|std::ios::out|std::ios::binary);
+ assert(obvsag::fserialize(handler,raw_stream)==0);
+ const std::string raw=raw_stream.str();
+ uint64_t raw_graph_bytes=UINT64_MAX;
+ std::memcpy(&raw_graph_bytes,raw.data()+8,sizeof(raw_graph_bytes));
+ assert(raw.substr(0,8)=="OBCUVS02" && raw_graph_bytes==0);
+ assert(raw.size()==32+n*sizeof(int64_t)+n*dim*sizeof(float));
+ assert(serialize_calls==0);
+ assert(obvsag::delete_index(handler)==0);
+ const int builds_before_raw_load=build_calls, loads_before_raw_load=deserialize_calls;
+ assert(obvsag::create_index(handler,obvsag::HNSW_TYPE,"float32","l2",dim,16,100,100,&allocator)==0);
+ raw_stream.seekg(0);assert(obvsag::fdeserialize(handler,raw_stream)==0);
+ assert(build_calls==builds_before_raw_load+1 && deserialize_calls==loads_before_raw_load);
+ assert(obvsag::get_index_number(handler,count)==0 && count==n);
+ assert(obvsag::delete_index(handler)==0);
+ std::string truncated_raw=raw;truncated_raw.pop_back();std::stringstream bad_raw(truncated_raw);
+ assert(obvsag::create_index(handler,obvsag::HNSW_TYPE,"float32","l2",dim,16,100,100,&allocator)==0);
+ assert(obvsag::fdeserialize(handler,bad_raw)!=0);assert(obvsag::delete_index(handler)==0);
+ raw_snapshot_mode=false;
+ std::stringstream cpu_raw(raw);
+ assert(obvsag::create_index(handler,obvsag::HNSW_TYPE,"float32","l2",dim,16,100,100,&allocator)==0);
+ assert(obvsag::fdeserialize(handler,cpu_raw)==0);
+ assert(obvsag::get_index_number(handler,count)==0 && count==n);
  assert(obvsag::delete_index(handler)==0);
 #endif
  puts("PASS actual adaptor + VSAG snapshot recovery, query, insertion, CPU serialization and truncation checks");

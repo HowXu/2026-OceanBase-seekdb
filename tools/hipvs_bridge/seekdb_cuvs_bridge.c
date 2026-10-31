@@ -287,6 +287,12 @@ done:
   return rc;
 }
 
+int seekdb_cuvs_raw_snapshot(void* handle)
+{
+  sk_cuvs_index* h = (sk_cuvs_index*)handle;
+  return h && h->algorithm == SK_BRUTE_FORCE ? 1 : 0;
+}
+
 int seekdb_cuvs_serialize(void* handle, const char* filename)
 {
   sk_cuvs_index* h = (sk_cuvs_index*)handle;
