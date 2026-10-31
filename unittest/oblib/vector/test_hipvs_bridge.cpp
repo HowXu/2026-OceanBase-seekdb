@@ -227,6 +227,7 @@ static void check_query_resource_reuse(void* h, const float* query, int after_bu
   std::vector<unsigned> out10(10), out100(100);
   std::vector<float> dist10(10), dist100(100);
   assert(seekdb_cuvs_search(h, query, 1, 10, out10.data(), dist10.data()) == 0);
+  assert(cagra_last_search_algo == MULTI_CTA);
   assert(rmm_allocs == after_build + 3);
   assert(seekdb_cuvs_search(h, query, 1, 10, out10.data(), dist10.data()) == 0);
   assert(rmm_allocs == after_build + 3);

@@ -142,7 +142,7 @@ static int configure_cagra_search(sk_cuvs_index* h)
   const char* algorithm = getenv("SEEKDB_CUVS_CAGRA_SEARCH_ALGO");
   if (!parse_uint_override("SEEKDB_CUVS_CAGRA_ITOPK", itopk, &itopk) ||
       !parse_uint_override("SEEKDB_CUVS_CAGRA_SEARCH_WIDTH", width, &width)) return 0;
-  h->cagra_search_algo = -1;
+  h->cagra_search_algo = MULTI_CTA;
   if (algorithm && algorithm[0]) {
     if (strcmp(algorithm, "single") == 0) h->cagra_search_algo = SINGLE_CTA;
     else if (strcmp(algorithm, "multi") == 0) h->cagra_search_algo = MULTI_CTA;
