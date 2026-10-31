@@ -522,6 +522,8 @@ def write_base_tsv(spec, data, cache_dir):
 def load_data(connection, spec, data, cache_dir):
     tsv = write_base_tsv(spec, data, cache_dir)
     with connection.cursor() as cursor:
+        cursor.execute("CREATE DATABASE contest_eval")
+        cursor.execute("USE contest_eval")
         cursor.execute(f"CREATE TABLE items (id BIGINT PRIMARY KEY, v VECTOR({spec.dim}))")
         escaped = str(tsv).replace("'", "''")
         cursor.execute(f"LOAD DATA LOCAL INFILE '{escaped}' INTO TABLE items "
