@@ -1,4 +1,5 @@
 /* seekdb <-> hipVS bridge. Keep all ROCm state behind the C ABI. */
+#include "seekdb_omp_config.h"
 #include "seekdb_cuvs_bridge.h"
 #include <cuvs/core/c_api.h>
 #include <cuvs/neighbors/cagra.h>

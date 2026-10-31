@@ -230,6 +230,13 @@ The tuning archive is historical and must not be used as the submission profile.
 
 ## Offline checks
 
+The linked bridge sets `OMP_NUM_THREADS` from a finite cgroup-v2 CPU quota
+when the process has no explicit setting and its affinity exposes more CPUs
+than the quota. This runs before application OpenMP regions initialize their
+defaults and also covers the host threads created internally by hipVS. Existing
+settings, including an empty setting, remain untouched; absent or unlimited
+quotas retain the runtime defaults. It does not change ANN parameters.
+
 The fixed-parameter hot path reuses a 32 MiB-stack worker for sequential GPU
 operations. A busy worker falls back to the existing dedicated-thread path, so
 an unrelated build is not forced to queue behind it. Search workspaces and
@@ -253,6 +260,7 @@ comparison.
 
 ```bash
 bash unittest/oblib/vector/run_hipvs_bridge_tests.sh
+bash unittest/oblib/vector/run_hipvs_omp_tests.sh
 python3 unittest/oblib/vector/test_hipvs_benchmark.py
 # Requires an installed VSAG SDK (SEEKDB_DEPS can override the deps prefix):
 python3 unittest/oblib/vector/run_hipvs_adaptor_component.py
