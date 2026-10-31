@@ -224,9 +224,9 @@ static int configure_ivf_pq(sk_cuvs_index* h, long n, long dim)
       (dim <= 64 ? 32 : (dim <= 128 ? 64 : (dim <= 192 ? 96 : (uint32_t)((dim / 2 + 127) / 128 * 128))));
     build->codebook_kind = PER_SUBSPACE;
     search->n_probes = (uint32_t)lround(sqrt((double)build->n_lists) / 20 + 4);
-    search->lut_dtype = CUDA_R_16F;
-    search->internal_distance_dtype = CUDA_R_16F;
-    search->coarse_search_dtype = CUDA_R_16F;
+    search->lut_dtype = HIP_R_16F;
+    search->internal_distance_dtype = HIP_R_16F;
+    search->coarse_search_dtype = HIP_R_16F;
     search->max_internal_batch_size = 128 * 1024;
     params->refinement_rate = 1;
   }

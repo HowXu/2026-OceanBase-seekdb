@@ -14,7 +14,7 @@ typedef struct {
 } cuvsIvfPqIndexParams;
 typedef cuvsIvfPqIndexParams* cuvsIvfPqIndexParams_t;
 typedef int cudaDataType_t;
-enum { CUDA_R_16F = 2 };
+enum { CUDA_R_16F = 2, HIP_R_16F = 2 };
 typedef struct {
   uint32_t n_probes;
   cudaDataType_t lut_dtype, internal_distance_dtype, coarse_search_dtype;
