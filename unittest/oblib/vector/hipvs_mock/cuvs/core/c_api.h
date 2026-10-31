@@ -12,7 +12,7 @@ typedef void* cudaStream_t;
 typedef enum { cudaSuccess, cudaErrorUnknown } cudaError_t;
 typedef enum { cudaMemcpyHostToDevice, cudaMemcpyDeviceToHost } cudaMemcpyKind;
 typedef enum { kDLCPU = 1, kDLCUDA = 2 } DLDeviceType;
-enum { kDLUInt = 1, kDLFloat = 2 };
+enum { kDLUInt = 1, kDLFloat = 2, kDLInt = 0 };
 typedef struct { DLDeviceType device_type; int device_id; } DLDevice;
 typedef struct { uint8_t code, bits; uint16_t lanes; } DLDataType;
 typedef struct {
