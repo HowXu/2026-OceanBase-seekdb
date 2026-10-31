@@ -81,7 +81,8 @@ struct Allocator : vsag::Allocator {
 
 int main(int argc, char **) {
   using namespace oceanbase::common;
-  assert(setenv("SEEKDB_CUVS_QUERY_WORKER", argc > 1 ? "0" : "1", 1) == 0);
+  if (argc > 1) assert(setenv("SEEKDB_CUVS_QUERY_WORKER", "0", 1) == 0);
+  else assert(unsetenv("SEEKDB_CUVS_QUERY_WORKER") == 0);
   Allocator allocator;
   constexpr long n = 256, dim = 4;
   std::vector<float> base(n * dim);

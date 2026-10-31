@@ -222,7 +222,7 @@ static bool ob_cuvs_run_dedicated(void *(*function)(void *), void *argument) {
 static bool ob_cuvs_run_big_stack(void *(*function)(void *), void *argument) {
   static const bool use_worker = [] {
     const char *value = getenv("SEEKDB_CUVS_QUERY_WORKER");
-    return value != nullptr && strcmp(value, "1") == 0;
+    return value == nullptr || strcmp(value, "1") == 0;
   }();
   if (use_worker) {
     static CuvsLargeStackWorker worker;
