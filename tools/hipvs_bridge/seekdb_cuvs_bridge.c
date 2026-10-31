@@ -18,6 +18,13 @@ typedef struct {
   cuvsBruteForceIndex_t bf;
   cuvsIvfFlatIndexParams_t ivf_ip;
   cuvsIvfFlatIndex_t ivf;
+  cuvsCagraSearchParams_t sp;
+  cuvsIvfFlatSearchParams_t ivf_sp;
+  float* qd;
+  unsigned int* nd;
+  float* dd;
+  int64_t* wide_ids;
+  size_t query_capacity, neighbor_capacity, distance_capacity, wide_capacity;
   sk_algorithm algorithm;
   long n, dim;
   int device;
@@ -31,6 +38,18 @@ static int matrix_bytes(long rows, long cols, size_t width, size_t* bytes)
   if (rows <= 0 || cols <= 0 || (size_t)rows > SIZE_MAX / width / (size_t)cols) return 0;
   *bytes = (size_t)rows * (size_t)cols * width;
   return 1;
+}
+
+static int grow_device_buffer(cuvsResources_t res, void** pointer,
+                              size_t* capacity, size_t required)
+{
+  void* replacement = NULL;
+  if (required <= *capacity) return 0;
+  if (cuvsRMMAlloc(res, &replacement, required) != CUVS_SUCCESS) return 1;
+  if (*pointer) cuvsRMMFree(res, *pointer, *capacity);
+  *pointer = replacement;
+  *capacity = required;
+  return 0;
 }
 
 static void log_error(const char* operation)
@@ -118,7 +137,13 @@ void seekdb_cuvs_free(void* handle)
   if (h->ivf) cuvsIvfFlatIndexDestroy(h->ivf);
   if (h->ip) cuvsCagraIndexParamsDestroy(h->ip);
   if (h->ivf_ip) cuvsIvfFlatIndexParamsDestroy(h->ivf_ip);
+  if (h->sp) cuvsCagraSearchParamsDestroy(h->sp);
+  if (h->ivf_sp) cuvsIvfFlatSearchParamsDestroy(h->ivf_sp);
+  if (h->qd) cuvsRMMFree(h->res, h->qd, h->query_capacity);
+  if (h->nd) cuvsRMMFree(h->res, h->nd, h->neighbor_capacity);
+  if (h->dd) cuvsRMMFree(h->res, h->dd, h->distance_capacity);
   if (h->device_base) cuvsRMMFree(h->res, h->device_base, h->device_bytes);
+  free(h->wide_ids);
   cuvsResourcesDestroy(h->res);
   free(h);
 }
@@ -195,11 +220,6 @@ int seekdb_cuvs_search(void* handle, const float* query, long nq, long topk,
 {
   sk_cuvs_index* h = (sk_cuvs_index*)handle;
   size_t query_bytes = 0, id_bytes = 0, distance_bytes = 0;
-  float *qd = NULL, *dd = NULL;
-  unsigned int* nd = NULL;
-  int64_t* wide_ids = NULL;
-  cuvsCagraSearchParams_t sp = NULL;
-  cuvsIvfFlatSearchParams_t ivf_sp = NULL;
   cudaStream_t stream;
   int rc = 1;
   int64_t qs[2] = {nq, h ? h->dim : 0}, rs[2] = {nq, topk};
@@ -210,62 +230,60 @@ int seekdb_cuvs_search(void* handle, const float* query, long nq, long topk,
       !matrix_bytes(nq, topk, h->algorithm == SK_CAGRA ? sizeof(unsigned int) : sizeof(int64_t),
                     &id_bytes) ||
       !matrix_bytes(nq, topk, sizeof(float), &distance_bytes)) return rc;
-  if (h->algorithm != SK_CAGRA) {
-    wide_ids = (int64_t*)malloc(id_bytes);
-    if (!wide_ids) goto done;
+  if (h->algorithm != SK_CAGRA && id_bytes > h->wide_capacity) {
+    int64_t* replacement = (int64_t*)realloc(h->wide_ids, id_bytes);
+    if (!replacement) goto done;
+    h->wide_ids = replacement;
+    h->wide_capacity = id_bytes;
   }
   if (cuvsStreamGet(h->res, &stream) != CUVS_SUCCESS ||
-      cuvsRMMAlloc(h->res, (void**)&qd, query_bytes) != CUVS_SUCCESS ||
-      cuvsRMMAlloc(h->res, (void**)&nd, id_bytes) != CUVS_SUCCESS ||
-      cuvsRMMAlloc(h->res, (void**)&dd, distance_bytes) != CUVS_SUCCESS) goto done;
-  if (h->algorithm == SK_CAGRA && cuvsCagraSearchParamsCreate(&sp) != CUVS_SUCCESS) goto done;
-  if (h->algorithm == SK_IVF_FLAT && cuvsIvfFlatSearchParamsCreate(&ivf_sp) != CUVS_SUCCESS) goto done;
-  qt = matrix(qd, qs, kDLCUDA, h->device, kDLFloat);
-  nt = matrix(nd, rs, kDLCUDA, h->device, h->algorithm == SK_CAGRA ? kDLUInt : kDLInt);
+      grow_device_buffer(h->res, (void**)&h->qd, &h->query_capacity, query_bytes) != 0 ||
+      grow_device_buffer(h->res, (void**)&h->nd, &h->neighbor_capacity, id_bytes) != 0 ||
+      grow_device_buffer(h->res, (void**)&h->dd, &h->distance_capacity, distance_bytes) != 0) goto done;
+  if (h->algorithm == SK_CAGRA && !h->sp &&
+      cuvsCagraSearchParamsCreate(&h->sp) != CUVS_SUCCESS) goto done;
+  if (h->algorithm == SK_IVF_FLAT && !h->ivf_sp &&
+      cuvsIvfFlatSearchParamsCreate(&h->ivf_sp) != CUVS_SUCCESS) goto done;
+  qt = matrix(h->qd, qs, kDLCUDA, h->device, kDLFloat);
+  nt = matrix(h->nd, rs, kDLCUDA, h->device, h->algorithm == SK_CAGRA ? kDLUInt : kDLInt);
   if (h->algorithm != SK_CAGRA) nt.dl_tensor.dtype.bits = 64;
-  dt = matrix(dd, rs, kDLCUDA, h->device, kDLFloat);
+  dt = matrix(h->dd, rs, kDLCUDA, h->device, kDLFloat);
   filter.type = NO_FILTER;
   if (h->algorithm == SK_CAGRA) {
-    sp->itopk_size = (size_t)topk * 4;
+    h->sp->itopk_size = (size_t)topk * 4;
     /* High-dimensional data needs a wider retained frontier to maintain recall.
      * Keep the established 512-candidate path for dimensions up to 256. */
-    if (sp->itopk_size < (h->dim > 256 ? 1024UL : 512UL)) {
-      sp->itopk_size = h->dim > 256 ? 1024 : 512;
+    if (h->sp->itopk_size < (h->dim > 256 ? 1024UL : 512UL)) {
+      h->sp->itopk_size = h->dim > 256 ? 1024 : 512;
     }
-    sp->itopk_size = (sp->itopk_size + 31) / 32 * 32;
+    h->sp->itopk_size = (h->sp->itopk_size + 31) / 32 * 32;
     /* hipVS SINGLE_CTA rejects frontiers larger than 512. */
-    if (sp->itopk_size > 512) sp->algo = MULTI_CTA;
-    sp->search_width = 4;
+    if (h->sp->itopk_size > 512) h->sp->algo = MULTI_CTA;
+    h->sp->search_width = 4;
   } else if (h->algorithm == SK_IVF_FLAT) {
-    ivf_sp->n_probes = h->ivf_n_probes;
+    h->ivf_sp->n_probes = h->ivf_n_probes;
   }
   /* Copies and search must use the same resource stream. A default-stream
    * copy does not order work submitted to a nonblocking resource stream. */
-  if (cudaMemcpyAsync(qd, query, query_bytes, cudaMemcpyHostToDevice, stream) != cudaSuccess) goto done;
+  if (cudaMemcpyAsync(h->qd, query, query_bytes, cudaMemcpyHostToDevice, stream) != cudaSuccess) goto done;
   if ((h->algorithm == SK_CAGRA &&
-       cuvsCagraSearch(h->res, sp, h->idx, &qt, &nt, &dt, filter) != CUVS_SUCCESS) ||
+       cuvsCagraSearch(h->res, h->sp, h->idx, &qt, &nt, &dt, filter) != CUVS_SUCCESS) ||
       (h->algorithm == SK_BRUTE_FORCE &&
        cuvsBruteForceSearch(h->res, h->bf, &qt, &nt, &dt, filter) != CUVS_SUCCESS) ||
       (h->algorithm == SK_IVF_FLAT &&
-       cuvsIvfFlatSearch(h->res, ivf_sp, h->ivf, &qt, &nt, &dt, filter) != CUVS_SUCCESS)) goto done;
-  if (cudaMemcpyAsync(h->algorithm == SK_CAGRA ? (void*)out_ids : (void*)wide_ids,
-                      nd, id_bytes, cudaMemcpyDeviceToHost, stream) != cudaSuccess ||
-      (out_dist && cudaMemcpyAsync(out_dist, dd, distance_bytes,
+       cuvsIvfFlatSearch(h->res, h->ivf_sp, h->ivf, &qt, &nt, &dt, filter) != CUVS_SUCCESS)) goto done;
+  if (cudaMemcpyAsync(h->algorithm == SK_CAGRA ? (void*)out_ids : (void*)h->wide_ids,
+                      h->nd, id_bytes, cudaMemcpyDeviceToHost, stream) != cudaSuccess ||
+      (out_dist && cudaMemcpyAsync(out_dist, h->dd, distance_bytes,
                                   cudaMemcpyDeviceToHost, stream) != cudaSuccess)) goto done;
   rc = cuvsStreamSync(h->res) == CUVS_SUCCESS ? 0 : 1;
-  if (rc == 0 && wide_ids) {
-    for (int64_t i = 0; i < nq * topk; ++i) out_ids[i] = (unsigned int)wide_ids[i];
+  if (rc == 0 && h->wide_ids) {
+    for (int64_t i = 0; i < nq * topk; ++i) out_ids[i] = (unsigned int)h->wide_ids[i];
   }
 done:
   if (rc) log_error("search");
-  /* Drain before releasing buffers, including partially enqueued failures. */
+  /* Drain before a later search, handle destruction or fallback uses the stream. */
   if (rc && cuvsStreamSync(h->res) != CUVS_SUCCESS) rc = 1;
-  if (sp) cuvsCagraSearchParamsDestroy(sp);
-  if (ivf_sp) cuvsIvfFlatSearchParamsDestroy(ivf_sp);
-  if (dd) cuvsRMMFree(h->res, dd, distance_bytes);
-  if (nd) cuvsRMMFree(h->res, nd, id_bytes);
-  if (qd) cuvsRMMFree(h->res, qd, query_bytes);
-  free(wide_ids);
   return rc;
 }
 
