@@ -115,6 +115,7 @@ class DatasetTest(unittest.TestCase):
         wide_base, wide_queries = contest_eval.siftlike_arrays(wide_spec, self.cache_dir)
         self.assertEqual(wide_base.shape, (8, 256))
         self.assertEqual(wide_queries.shape, (4, 256))
+        self.assertTrue(np.allclose(np.linalg.norm(wide_base, axis=1), 1.0, atol=1e-5))
         self.assertEqual(first_base.shape, (16, 128))
         self.assertEqual(first_queries.shape, (8, 128))
         self.assertEqual(first_base.dtype, np.float32)

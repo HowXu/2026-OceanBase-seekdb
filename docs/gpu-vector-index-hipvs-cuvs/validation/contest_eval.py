@@ -244,7 +244,7 @@ def siftlike_arrays(spec, images_root, metadata=None):
                 if descriptor is not None:
                     queries[row, block * 128:(block + 1) * 128] = descriptor
                     break
-    return base, queries
+    return normalize(base), normalize(queries)
 
 
 def generate_arrays(spec, metadata=None):
