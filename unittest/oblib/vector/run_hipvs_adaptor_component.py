@@ -179,3 +179,16 @@ for enabled in (False, True):
     subprocess.run(command, check=True, env=env)
     print('running component variant GPU_ENABLED=', enabled, flush=True)
     subprocess.run([str(binary)], check=True, env=env)
+
+hotpath = out / 'adaptor_hotpath'
+command = [os.environ.get('CXX', 'g++'), '-std=c++20', '-g', '-O1', '-fsanitize=address,undefined', '-fno-omit-frame-pointer',
+           '-I'+str(stubs), '-I'+str(root / 'src/oblib'), '-I'+str(deps / 'include'),
+           str(root / 'src/oblib/lib/vector/ob_vsag_adaptor.cpp'),
+           str(root / 'unittest/oblib/vector/test_hipvs_adaptor_hotpath.cpp'),
+           '-L'+str(libdir), '-lvsag', '-lpthread', '-fopenmp', '-DOB_BUILD_CUVS',
+           '-Wl,--wrap=pthread_create', '-o', str(hotpath)]
+subprocess.run(command, check=True, env=env)
+print('running hotpath with cached worker', flush=True)
+subprocess.run([str(hotpath)], check=True, env=env)
+print('running hotpath with per-query threads', flush=True)
+subprocess.run([str(hotpath), '--legacy'], check=True, env=env)
