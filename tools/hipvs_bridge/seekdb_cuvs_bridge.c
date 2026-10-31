@@ -215,6 +215,7 @@ static int configure_ivf_pq(sk_cuvs_index* h, long n, long dim)
     cuvsIvfPqIndexParams_t build = params->ivf_pq_build_params;
     cuvsIvfPqSearchParams_t search = params->ivf_pq_search_params;
     build->metric = L2Expanded;
+    build->add_data_on_build = true;
     build->n_lists = (uint32_t)(n > 2000 ? n / 2000 : 1);
     build->kmeans_n_iters = 10;
     const double min_fraction = fmin(1.0, 32.0 * build->n_lists / n);
@@ -228,6 +229,7 @@ static int configure_ivf_pq(sk_cuvs_index* h, long n, long dim)
     search->internal_distance_dtype = HIP_R_16F;
     search->coarse_search_dtype = HIP_R_16F;
     search->max_internal_batch_size = 128 * 1024;
+    search->preferred_shmem_carveout = 0;
     params->refinement_rate = 1;
   }
   if (!params->ivf_pq_build_params || !params->ivf_pq_search_params) return 0;

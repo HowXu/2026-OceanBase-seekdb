@@ -6,6 +6,7 @@ extern "C" {
 enum codebook_gen { PER_SUBSPACE = 0, PER_CLUSTER = 1 };
 typedef struct {
   int metric;
+  bool add_data_on_build;
   uint32_t n_lists, kmeans_n_iters;
   double kmeans_trainset_fraction;
   uint32_t pq_bits, pq_dim;
@@ -19,6 +20,7 @@ typedef struct {
   uint32_t n_probes;
   cudaDataType_t lut_dtype, internal_distance_dtype, coarse_search_dtype;
   uint32_t max_internal_batch_size;
+  double preferred_shmem_carveout;
 } cuvsIvfPqSearchParams;
 typedef cuvsIvfPqSearchParams* cuvsIvfPqSearchParams_t;
 cuvsError_t cuvsIvfPqIndexParamsCreate(cuvsIvfPqIndexParams_t*);
