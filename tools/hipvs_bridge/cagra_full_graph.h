@@ -14,6 +14,10 @@ int seekdb_full_graph_candidates(const float* device_base, long n, long dim,
                                  unsigned int* device_ids, float* device_distances,
                                  hipStream_t stream);
 
+int seekdb_nn_descent_candidates(const float* device_base, long n, long dim,
+                                 unsigned int* device_ids, float* device_distances,
+                                 int iterations, hipStream_t stream);
+
 #ifdef __cplusplus
 }
 #endif
