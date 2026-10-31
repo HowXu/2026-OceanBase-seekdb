@@ -360,7 +360,8 @@ class MysqlCli:
 
 
 def connect_mysql(config, timeout=7200):
-    command = [os.environ.get("MYSQL_BIN", "mysql"), "--protocol=TCP", "-h127.0.0.1",
+    command = ["stdbuf", "-oL", "-eL", os.environ.get("MYSQL_BIN", "mysql"),
+               "--protocol=TCP", "-h127.0.0.1",
                f"-P{config.port}", "-uroot", "-ANB", "--raw", "--local-infile=1",
                "--connect-timeout=10"]
     env = dict(os.environ)
