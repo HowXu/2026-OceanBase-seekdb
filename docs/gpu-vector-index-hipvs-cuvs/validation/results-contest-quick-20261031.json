@@ -1,0 +1,354 @@
+{
+  "status": "QUICK_PASS",
+  "mode": "quick",
+  "round_count": 2,
+  "config": {
+    "baseline_revision": "634888d9b037153fa143d2c913ba4b25503e1d62",
+    "candidate_revision": "db35f433193305dcc386e0e62dabd36f39e50c2d",
+    "baseline_observer": "/root/worker-v5/build_eval/src/observer/seekdb",
+    "candidate_observer": "/root/worker/build_eval/src/observer/seekdb",
+    "baseline_bridge": "/work/eval-bin/v5/libseekdb_cuvs_bridge.so",
+    "candidate_bridge": "/work/eval-bin/candidate/libseekdb_cuvs_bridge.so"
+  },
+  "datasets": [
+    {
+      "name": "quick10k-d128",
+      "rows": 10000,
+      "dim": 128,
+      "nq": 4096,
+      "distribution": "gaussian",
+      "seed": 20261031
+    }
+  ],
+  "rounds": [
+    {
+      "dataset": "quick10k-d128",
+      "round": 0,
+      "order": [
+        "baseline",
+        "candidate"
+      ],
+      "baseline": {
+        "role": "baseline",
+        "observer": "/root/worker-v5/build_eval/src/observer/seekdb",
+        "observer_sha256": "7e92350f855e7a6b30a953e581d601ff95de92bc7b2584a8250ecf1b0af140cc",
+        "bridge_sha256": "030b36246e3fc4e92743e432d00979f7a729fdf36fb8b6ff482b75fb008e9da6",
+        "port": 2982,
+        "create_seconds": 6.55973017308861,
+        "first_query_seconds": 0.03995922696776688,
+        "ready_seconds": 6.599689400056377,
+        "qps": {
+          "10": 147.45891034990586,
+          "100": 135.07966412895797
+        },
+        "recall": {
+          "10": 1.0,
+          "100": 0.99999755859375
+        },
+        "latency": {
+          "10": {
+            "p50_ms": 6.72276847762987,
+            "p95_ms": 7.262557977810502,
+            "p99_ms": 7.570780935930089
+          },
+          "100": {
+            "p50_ms": 7.2785274824127555,
+            "p95_ms": 7.958315982250497,
+            "p99_ms": 8.233094960451128
+          }
+        },
+        "evidence": {
+          "passed": true,
+          "gpu_serves": 8193,
+          "gpu_snapshot_builds": 1,
+          "cpu_fallbacks": 0
+        },
+        "resources": {
+          "samples": 58,
+          "errors": [],
+          "peak_rss_bytes": 865435648,
+          "peak_vram_bytes": 484171776,
+          "peak_gpu_percent": 53
+        }
+      },
+      "candidate": {
+        "role": "candidate",
+        "observer": "/root/worker/build_eval/src/observer/seekdb",
+        "observer_sha256": "fca7ec6bd3cdfccc2f068f1c94d94fe89b67326c8846a759abdd18aa0868abd6",
+        "bridge_sha256": "39a3a017ce9c84859b83567aa4077d2485d1c4048fddbaa04ffea022bbdff0db",
+        "port": 2982,
+        "create_seconds": 1.9436541609466076,
+        "first_query_seconds": 0.02040609496179968,
+        "ready_seconds": 1.9640602559084073,
+        "qps": {
+          "10": 233.4069339348511,
+          "100": 206.88192828578718
+        },
+        "recall": {
+          "10": 1.0,
+          "100": 0.9999951171875
+        },
+        "latency": {
+          "10": {
+            "p50_ms": 4.241276998072863,
+            "p95_ms": 4.741720273159444,
+            "p99_ms": 4.986536951037125
+          },
+          "100": {
+            "p50_ms": 4.750951484311372,
+            "p95_ms": 5.3277086990419775,
+            "p99_ms": 5.604988057166338
+          }
+        },
+        "evidence": {
+          "passed": true,
+          "gpu_serves": 8193,
+          "gpu_snapshot_builds": 1,
+          "cpu_fallbacks": 0
+        },
+        "resources": {
+          "samples": 37,
+          "errors": [],
+          "peak_rss_bytes": 886964224,
+          "peak_vram_bytes": 474894336,
+          "peak_gpu_percent": 25
+        }
+      },
+      "comparison": {
+        "build_speedup": 3.3602275593138162,
+        "recall": {
+          "10": 1.0,
+          "100": 0.9999951171875
+        },
+        "baseline_recall": {
+          "10": 1.0,
+          "100": 0.99999755859375
+        },
+        "recall_delta": {
+          "10": 0.0,
+          "100": 2.4414062499422684e-06
+        },
+        "query_qps_ratio": {
+          "10": 1.5828608347979707,
+          "100": 1.5315549503312427
+        },
+        "query_speedup": 1.5569965790650522
+      },
+      "resources": {
+        "baseline_vram_bytes": 484171776,
+        "candidate_vram_bytes": 474894336,
+        "candidate_rss_bytes": 886964224
+      },
+      "gates": [
+        {
+          "name": "recall@10_baseline_delta",
+          "passed": true,
+          "actual": 0.0,
+          "limit": 0.005
+        },
+        {
+          "name": "query_regression@10",
+          "passed": true,
+          "actual": 1.5828608347979707,
+          "limit": 0.9
+        },
+        {
+          "name": "recall@100_baseline_delta",
+          "passed": true,
+          "actual": 2.4414062499422684e-06,
+          "limit": 0.005
+        },
+        {
+          "name": "query_regression@100",
+          "passed": true,
+          "actual": 1.5315549503312427,
+          "limit": 0.9
+        },
+        {
+          "name": "relative_vram_limit",
+          "passed": true,
+          "actual": 474894336,
+          "limit": 605214720.0
+        },
+        {
+          "name": "physical_vram_limit",
+          "passed": true,
+          "actual": 474894336,
+          "limit": 48318382080
+        },
+        {
+          "name": "host_memory_limit",
+          "passed": true,
+          "actual": 886964224,
+          "limit": 103079215104
+        }
+      ],
+      "passed": true
+    },
+    {
+      "dataset": "quick10k-d128",
+      "round": 1,
+      "order": [
+        "candidate",
+        "baseline"
+      ],
+      "baseline": {
+        "role": "baseline",
+        "observer": "/root/worker-v5/build_eval/src/observer/seekdb",
+        "observer_sha256": "7e92350f855e7a6b30a953e581d601ff95de92bc7b2584a8250ecf1b0af140cc",
+        "bridge_sha256": "030b36246e3fc4e92743e432d00979f7a729fdf36fb8b6ff482b75fb008e9da6",
+        "port": 2982,
+        "create_seconds": 8.064280165010132,
+        "first_query_seconds": 0.037005127989687026,
+        "ready_seconds": 8.101285292999819,
+        "qps": {
+          "10": 147.24665377091316,
+          "100": 136.94725373674027
+        },
+        "recall": {
+          "10": 1.0,
+          "100": 0.99999755859375
+        },
+        "latency": {
+          "10": {
+            "p50_ms": 6.7603299976326525,
+            "p95_ms": 7.259567501023412,
+            "p99_ms": 7.491941552143544
+          },
+          "100": {
+            "p50_ms": 7.204289955552667,
+            "p95_ms": 7.835208700271323,
+            "p99_ms": 8.152251475257804
+          }
+        },
+        "evidence": {
+          "passed": true,
+          "gpu_serves": 8193,
+          "gpu_snapshot_builds": 1,
+          "cpu_fallbacks": 0
+        },
+        "resources": {
+          "samples": 57,
+          "errors": [],
+          "peak_rss_bytes": 861585408,
+          "peak_vram_bytes": 484179968,
+          "peak_gpu_percent": 53
+        }
+      },
+      "candidate": {
+        "role": "candidate",
+        "observer": "/root/worker/build_eval/src/observer/seekdb",
+        "observer_sha256": "fca7ec6bd3cdfccc2f068f1c94d94fe89b67326c8846a759abdd18aa0868abd6",
+        "bridge_sha256": "39a3a017ce9c84859b83567aa4077d2485d1c4048fddbaa04ffea022bbdff0db",
+        "port": 2982,
+        "create_seconds": 1.8464643800398335,
+        "first_query_seconds": 0.022600249969400465,
+        "ready_seconds": 1.869064630009234,
+        "qps": {
+          "10": 235.10720281050536,
+          "100": 205.250050847931
+        },
+        "recall": {
+          "10": 1.0,
+          "100": 0.9999951171875
+        },
+        "latency": {
+          "10": {
+            "p50_ms": 4.211056977510452,
+            "p95_ms": 4.695344599895179,
+            "p99_ms": 5.042394559131935
+          },
+          "100": {
+            "p50_ms": 4.80534095549956,
+            "p95_ms": 5.3561574895866215,
+            "p99_ms": 5.650646501453593
+          }
+        },
+        "evidence": {
+          "passed": true,
+          "gpu_serves": 8193,
+          "gpu_snapshot_builds": 1,
+          "cpu_fallbacks": 0
+        },
+        "resources": {
+          "samples": 37,
+          "errors": [],
+          "peak_rss_bytes": 868446208,
+          "peak_vram_bytes": 474882048,
+          "peak_gpu_percent": 25
+        }
+      },
+      "comparison": {
+        "build_speedup": 4.3344061852798506,
+        "recall": {
+          "10": 1.0,
+          "100": 0.9999951171875
+        },
+        "baseline_recall": {
+          "10": 1.0,
+          "100": 0.99999755859375
+        },
+        "recall_delta": {
+          "10": 0.0,
+          "100": 2.4414062499422684e-06
+        },
+        "query_qps_ratio": {
+          "10": 1.5966896142596623,
+          "100": 1.4987525872004137
+        },
+        "query_speedup": 1.546946246747992
+      },
+      "resources": {
+        "baseline_vram_bytes": 484179968,
+        "candidate_vram_bytes": 474882048,
+        "candidate_rss_bytes": 868446208
+      },
+      "gates": [
+        {
+          "name": "recall@10_baseline_delta",
+          "passed": true,
+          "actual": 0.0,
+          "limit": 0.005
+        },
+        {
+          "name": "query_regression@10",
+          "passed": true,
+          "actual": 1.5966896142596623,
+          "limit": 0.9
+        },
+        {
+          "name": "recall@100_baseline_delta",
+          "passed": true,
+          "actual": 2.4414062499422684e-06,
+          "limit": 0.005
+        },
+        {
+          "name": "query_regression@100",
+          "passed": true,
+          "actual": 1.4987525872004137,
+          "limit": 0.9
+        },
+        {
+          "name": "relative_vram_limit",
+          "passed": true,
+          "actual": 474882048,
+          "limit": 605224960.0
+        },
+        {
+          "name": "physical_vram_limit",
+          "passed": true,
+          "actual": 474882048,
+          "limit": 48318382080
+        },
+        {
+          "name": "host_memory_limit",
+          "passed": true,
+          "actual": 868446208,
+          "limit": 103079215104
+        }
+      ],
+      "passed": true
+    }
+  ],
+  "errors": []
+}
