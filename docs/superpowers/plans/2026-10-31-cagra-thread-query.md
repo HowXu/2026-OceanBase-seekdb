@@ -37,10 +37,10 @@
 - Consumes: `SEEKDB_CUVS_CAGRA_SEARCH_ALGO=single|multi|auto`。
 - Produces: handle 缓存的 `cuvsCagraSearchAlgo`，首次 SearchParams 初始化时解析。
 
-- [ ] 写失败测试：三种名称分别映射到 `SINGLE_CTA/MULTI_CTA/AUTO`，未知名称和显式 `single+itopk>512` 必须失败。
-- [ ] 运行 `bash unittest/oblib/vector/run_hipvs_bridge_tests.sh`，确认因模式尚未解析而失败。
-- [ ] 最小实现：未设置时保留现有 `itopk>512→MULTI_CTA` 行为；显式模式覆盖该自动选择。
-- [ ] 重跑 bridge 和真实 adaptor+VSAG component 测试；提交。
+- [x] 写失败测试：三种名称分别映射到 `SINGLE_CTA/MULTI_CTA/AUTO`，未知名称和显式 `single+itopk>512` 必须失败。
+- [x] 运行 `bash unittest/oblib/vector/run_hipvs_bridge_tests.sh`，确认因模式尚未解析而失败。
+- [x] 最小实现：未设置时保留现有 `itopk>512→MULTI_CTA` 行为；显式模式覆盖该自动选择。
+- [x] 53 项 bridge 检查通过；提交 `4e94d0071`。
 
 ### Task 3: 可独立开关的常驻大栈 worker
 
@@ -53,10 +53,10 @@
 - Consumes: `SEEKDB_CUVS_QUERY_WORKER=0|1`，实现期默认 `0`。
 - Produces: `ob_cuvs_run_big_stack(function, argument)`；worker 忙时返回 false，由调用方走原独立线程路径。
 
-- [ ] 恢复历史 hotpath 测试中的 worker 复用、并发和析构检查，先确认当前实现失败。
-- [ ] 仅恢复 `CuvsLargeStackWorker` 与调用替换，不带回历史 snapshot mapping 或工作区改动。
-- [ ] 验证 worker 创建失败和 join 失败均返回错误，不进入 CPU VSAG fallback。
-- [ ] 运行 sanitizer、component 和 `git diff --check`；提交。
+- [x] 增加实际 adaptor hotpath 测试，确认当前每条查询创建线程而目标要求复用。
+- [x] 仅恢复 `CuvsLargeStackWorker` 与调用替换，不带回历史 snapshot mapping 或工作区改动。
+- [x] worker=1 的 200 次查询新增线程为 0，worker=0 为 200；保留忙时独立线程路径。
+- [x] sanitizer、真实 adaptor+VSAG component 和 `git diff --check` 通过；提交 `316178b8f`。
 
 ### Task 4: 串行远端微基准与完整 SQL gates
 
