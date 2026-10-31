@@ -51,6 +51,18 @@ seekdb_cuvs_serialize
 seekdb_cuvs_deserialize
 ```
 
+### Contest algorithm experiments
+
+The bridge also exposes two experimental backends through the same ABI. Set
+`SEEKDB_CUVS_ALGO=brute_force` for exact GPU Top-K, or
+`SEEKDB_CUVS_ALGO=ivf_flat` for float32 inverted-list search. Leaving the
+variable unset (or setting it to `cagra`) preserves the existing CAGRA path.
+IVF-Flat defaults to `min(512, max(1, n/128))` lists and probes 32 lists (or
+all lists when fewer exist). `SEEKDB_CUVS_IVF_N_LISTS` and
+`SEEKDB_CUVS_IVF_N_PROBES` override those values for calibration. Use the same
+algorithm environment when serializing and reloading a snapshot; the OBCUVS02
+header does not record the experimental algorithm tag.
+
 Build seekdb with the resulting library:
 
 ```bash
