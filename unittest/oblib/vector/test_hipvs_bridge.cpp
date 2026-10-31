@@ -68,6 +68,9 @@ cuvsError_t cuvsCagraBuild(cuvsResources_t r, cuvsCagraIndexParams_t p, DLManage
   assert(!t->manager_ctx && !t->deleter && !t->dl_tensor.strides);
   assert(p->metric == L2Expanded && p->graph_degree < p->intermediate_graph_degree);
   int64_t n = t->dl_tensor.shape[0], dim = t->dl_tensor.shape[1];
+  // The supplied task branch fixes these build parameters.
+  assert(p->graph_degree == 128 && p->nn_descent_niter == 100);
+  assert(p->intermediate_graph_degree == (n > 256 ? 256u : static_cast<size_t>(n) - 1));
   assert(p->intermediate_graph_degree < static_cast<size_t>(n));
   auto data = static_cast<float*>(t->dl_tensor.data);
   resource(r)->pending.push_back([=] { index(i)->n = n; index(i)->dim = dim;
@@ -84,7 +87,7 @@ cuvsError_t cuvsCagraSearch(cuvsResources_t r, cuvsCagraSearchParams_t p, cuvsCa
   auto distances = static_cast<float*>(dist->dl_tensor.data);
   auto nq = q->dl_tensor.shape[0], k = ids->dl_tensor.shape[1];
   assert(p->itopk_size % 32 == 0 && p->itopk_size >= static_cast<size_t>(k));
-  assert(p->itopk_size >= (index(i)->dim > 256 ? 4096u : 2048u));
+  assert(p->itopk_size >= (index(i)->dim > 256 ? 1024u : 512u));
   assert(p->itopk_size <= 512 || p->algo == MULTI_CTA);
   resource(r)->pending.push_back([=] {
     for (int64_t row = 0; row < nq; ++row) {

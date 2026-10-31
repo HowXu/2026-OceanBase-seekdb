@@ -72,11 +72,11 @@ void* seekdb_cuvs_build(const float* base, long n, long dim)
       cuvsCagraIndexParamsCreate(&h->ip) != CUVS_SUCCESS) goto fail;
   h->ip->metric = L2Expanded;
   h->ip->build_algo = NN_DESCENT;
-  /* Spend less time constructing a dense graph; compensate with a wider
-   * query frontier. Validated on 128/384-D data at >=95% Recall@10/100. */
-  h->ip->graph_degree = 32;
-  h->ip->intermediate_graph_degree = 64;
-  h->ip->nn_descent_niter = 6;
+  /* Frozen input-branch construction parameters. Do not reduce graph
+   * degree or iterations to obtain a faster build benchmark. */
+  h->ip->graph_degree = 128;
+  h->ip->intermediate_graph_degree = n > 256 ? 256 : (size_t)n - 1;
+  h->ip->nn_descent_niter = 100;
   if (cuvsCagraIndexCreate(&h->idx) != CUVS_SUCCESS ||
       cuvsCagraBuild(h->res, h->ip, &dataset, h->idx) != CUVS_SUCCESS ||
       cuvsStreamSync(h->res) != CUVS_SUCCESS) goto fail;
@@ -114,10 +114,10 @@ int seekdb_cuvs_search(void* handle, const float* query, long nq, long topk,
   nt = matrix(nd, rs, kDLCUDA, h->device, kDLUInt);
   dt = matrix(dd, rs, kDLCUDA, h->device, kDLFloat);
   sp->itopk_size = (size_t)topk * 4;
-  /* The sparse, short-build graph trades a wider retained query frontier
-   * for lower construction cost. High dimensions need twice the frontier. */
-  if (sp->itopk_size < (h->dim > 256 ? 4096UL : 2048UL)) {
-    sp->itopk_size = h->dim > 256 ? 4096 : 2048;
+  /* High-dimensional data needs a wider retained frontier to maintain recall.
+   * Keep the established 512-candidate path for dimensions up to 256. */
+  if (sp->itopk_size < (h->dim > 256 ? 1024UL : 512UL)) {
+    sp->itopk_size = h->dim > 256 ? 1024 : 512;
   }
   sp->itopk_size = (sp->itopk_size + 31) / 32 * 32;
   /* hipVS SINGLE_CTA rejects frontiers larger than 512. */
