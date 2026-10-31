@@ -1,21 +1,14 @@
 #pragma once
 #include <cuvs/core/c_api.h>
-#include <cuvs/neighbors/ivf_pq.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
 typedef int cuvsDistanceType;
 enum { L2Expanded, NO_FILTER };
 enum cuvsCagraGraphBuildAlgo { AUTO_SELECT, IVF_PQ, NN_DESCENT, ITERATIVE_CAGRA_SEARCH };
-typedef struct cuvsIvfPqParams {
-  cuvsIvfPqIndexParams_t ivf_pq_build_params;
-  cuvsIvfPqSearchParams_t ivf_pq_search_params;
-  float refinement_rate;
-}* cuvsIvfPqParams_t;
 typedef struct {
   int metric; size_t intermediate_graph_degree, graph_degree;
   int build_algo; size_t nn_descent_niter;
-  cuvsIvfPqParams_t graph_build_params;
 } cuvsCagraIndexParams;
 typedef cuvsCagraIndexParams* cuvsCagraIndexParams_t;
 enum cuvsCagraSearchAlgo { SINGLE_CTA, MULTI_CTA, MULTI_KERNEL, AUTO };

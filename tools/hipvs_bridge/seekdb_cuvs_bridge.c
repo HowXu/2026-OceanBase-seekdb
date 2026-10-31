@@ -8,7 +8,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
 
 typedef enum { SK_CAGRA, SK_BRUTE_FORCE } sk_algorithm;
 typedef struct {
@@ -18,7 +17,6 @@ typedef struct {
   cuvsCagraIndex_t graph_owner;
   cuvsBruteForceIndex_t bf;
   cuvsCagraSearchParams_t sp;
-  cuvsIvfPqParams_t ivf_params;
   float* qd;
   unsigned int* nd;
   float* dd;
@@ -171,11 +169,6 @@ void seekdb_cuvs_free(void* handle)
   if (h->idx) cuvsCagraIndexDestroy(h->idx);
   if (h->graph_owner) cuvsCagraIndexDestroy(h->graph_owner);
   if (h->bf) cuvsBruteForceIndexDestroy(h->bf);
-  if (h->ivf_params) {
-    if (h->ivf_params->ivf_pq_build_params) cuvsIvfPqIndexParamsDestroy(h->ivf_params->ivf_pq_build_params);
-    if (h->ivf_params->ivf_pq_search_params) cuvsIvfPqSearchParamsDestroy(h->ivf_params->ivf_pq_search_params);
-    free(h->ivf_params);
-  }
   if (h->ip) cuvsCagraIndexParamsDestroy(h->ip);
   if (h->sp) cuvsCagraSearchParamsDestroy(h->sp);
   if (h->qd) cuvsRMMFree(h->res, h->qd, h->query_capacity);
@@ -185,62 +178,6 @@ void seekdb_cuvs_free(void* handle)
   free(h->wide_ids);
   cuvsResourcesDestroy(h->res);
   free(h);
-}
-
-static int parse_float_override(const char* name, float fallback, float* value)
-{
-  const char* text = getenv(name);
-  char* end = NULL;
-  float parsed;
-  if (!text || !text[0]) { *value = fallback; return 1; }
-  parsed = strtof(text, &end);
-  if (!end || *end || !isfinite(parsed) || parsed <= 0) {
-    fprintf(stderr, "[seekdb_cuvs] invalid %s: %s\n", name, text);
-    return 0;
-  }
-  *value = parsed;
-  return 1;
-}
-
-static int configure_ivf_pq(sk_cuvs_index* h, long n, long dim)
-{
-  cuvsIvfPqParams_t params = h->ip->graph_build_params;
-  if (!params) {
-    params = (cuvsIvfPqParams_t)calloc(1, sizeof(*params));
-    if (!params) return 0;
-    h->ivf_params = params;
-    h->ip->graph_build_params = params;
-    if (cuvsIvfPqIndexParamsCreate(&params->ivf_pq_build_params) != CUVS_SUCCESS ||
-        cuvsIvfPqSearchParamsCreate(&params->ivf_pq_search_params) != CUVS_SUCCESS) return 0;
-    cuvsIvfPqIndexParams_t build = params->ivf_pq_build_params;
-    cuvsIvfPqSearchParams_t search = params->ivf_pq_search_params;
-    build->metric = L2Expanded;
-    build->add_data_on_build = true;
-    build->n_lists = (uint32_t)(n > 2000 ? n / 2000 : 1);
-    build->kmeans_n_iters = 10;
-    const double min_fraction = fmin(1.0, 32.0 * build->n_lists / n);
-    build->kmeans_trainset_fraction = fmax(min_fraction, fmin(1.0, 1.0 / sqrt(n * 1e-5)));
-    build->pq_bits = dim <= 32 ? 8 : 4;
-    build->pq_dim = dim <= 32 ? (dim < 16 ? dim : 16) :
-      (dim <= 64 ? 32 : (dim <= 128 ? 64 : (dim <= 192 ? 96 : (uint32_t)((dim / 2 + 127) / 128 * 128))));
-    build->codebook_kind = PER_SUBSPACE;
-    search->n_probes = (uint32_t)lround(sqrt((double)build->n_lists) / 20 + 4);
-    search->lut_dtype = HIP_R_16F;
-    search->internal_distance_dtype = HIP_R_16F;
-    search->coarse_search_dtype = HIP_R_16F;
-    search->max_internal_batch_size = 128 * 1024;
-    search->preferred_shmem_carveout = 0;
-    params->refinement_rate = 1;
-  }
-  if (!params->ivf_pq_build_params || !params->ivf_pq_search_params) return 0;
-  const char* conservative = getenv("SEEKDB_CUVS_CAGRA_IVF_CONSERVATIVE");
-  params->ivf_pq_build_params->conservative_memory_allocation =
-      !(conservative && strcmp(conservative, "0") == 0);
-  return parse_uint_override("SEEKDB_CUVS_CAGRA_IVF_NPROBES",
-                             params->ivf_pq_search_params->n_probes,
-                             &params->ivf_pq_search_params->n_probes) &&
-         parse_float_override("SEEKDB_CUVS_CAGRA_IVF_REFINEMENT",
-                              params->refinement_rate, &params->refinement_rate);
 }
 
 void* seekdb_cuvs_build(const float* base, long n, long dim)
@@ -268,21 +205,9 @@ void* seekdb_cuvs_build(const float* base, long n, long dim)
     h->ip->intermediate_graph_degree = n > 256 ? 256 : (size_t)n - 1;
     h->ip->nn_descent_niter = 100;
     if (!configure_cagra_build(h) || !configure_cagra_degrees(h, n) ||
-        (h->ip->build_algo == IVF_PQ && !configure_ivf_pq(h, n, dim))) goto fail;
-    if (h->ip->build_algo == IVF_PQ) {
-      if (cuvsStreamGet(h->res, &stream) != CUVS_SUCCESS ||
-          cuvsRMMAlloc(h->res, (void**)&device_base, bytes) != CUVS_SUCCESS ||
-          cudaMemcpyAsync(device_base, base, bytes, cudaMemcpyHostToDevice, stream) != cudaSuccess) goto fail;
-      dataset = matrix(device_base, shape, kDLCUDA, h->device, kDLFloat);
-    }
-    if (cuvsCagraIndexCreate(&h->idx) != CUVS_SUCCESS ||
+        cuvsCagraIndexCreate(&h->idx) != CUVS_SUCCESS ||
         cuvsCagraBuild(h->res, h->ip, &dataset, h->idx) != CUVS_SUCCESS ||
         cuvsStreamSync(h->res) != CUVS_SUCCESS) goto fail;
-    if (h->ip->build_algo == IVF_PQ) {
-      h->device_base = device_base;
-      h->device_bytes = bytes;
-      device_base = NULL;
-    }
   } else {
     if (cuvsStreamGet(h->res, &stream) != CUVS_SUCCESS ||
         cuvsRMMAlloc(h->res, (void**)&device_base, bytes) != CUVS_SUCCESS ||
