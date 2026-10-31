@@ -1,0 +1,460 @@
+{
+  "status": "EXPERIMENTAL_NONCOMPLIANT_CAGRA_SEARCH_REQUIRED",
+  "compliance": {
+    "passed": false,
+    "reason": "Default candidate calls cuvsBruteForceSearch, while contest rules require fixed hipVS/cuVS CAGRA Search."
+  },
+  "candidate_revision": "190e254ce76732b9c2bee0311577da4906b8ec41",
+  "branch": "hipvs-exact-ivf-contest",
+  "algorithm_environment": "SEEKDB_CUVS_ALGO explicitly unset; default BruteForce path",
+  "data_note": "Deterministic normalized synthetic gaussian data; not official SIFT250K or Hidden250K",
+  "candidate": {
+    "status": "COMPLETE",
+    "revision": "190e254ce76732b9c2bee0311577da4906b8ec41",
+    "role": "candidate",
+    "round_count": 4,
+    "runs": [
+      {
+        "role": "candidate",
+        "observer": "/root/worker/build_eval/src/observer/seekdb",
+        "observer_sha256": "8a7503e0da5fa160001afa703e45ad9ff85c95ed29b3b38dabac54a5cb0313c4",
+        "bridge_sha256": "bf08476327bfabace7dc472723d6f683a5ee60b88e82fed42c3f1603493347d8",
+        "port": 2982,
+        "create_seconds": 6.360136974602938,
+        "first_query_seconds": 0.04310833290219307,
+        "ready_seconds": 6.403245307505131,
+        "qps": {
+          "10": 223.2258016519995,
+          "100": 186.41001614453882
+        },
+        "recall": {
+          "10": 1.0,
+          "100": 1.0
+        },
+        "latency": {
+          "10": {
+            "p50_ms": 4.5065004378557205,
+            "p95_ms": 4.90367878228426,
+            "p99_ms": 5.363320838660002
+          },
+          "100": {
+            "p50_ms": 5.322976037859917,
+            "p95_ms": 5.7725184597074986,
+            "p99_ms": 6.203818321228031
+          }
+        },
+        "evidence": {
+          "passed": true,
+          "gpu_serves": 8193,
+          "gpu_snapshot_builds": 1,
+          "cpu_fallbacks": 0
+        },
+        "resources": {
+          "samples": 52,
+          "errors": [],
+          "peak_rss_bytes": 1910259712,
+          "peak_vram_bytes": 569491456,
+          "peak_gpu_percent": 25
+        },
+        "dataset": "gaussian250k-d128",
+        "round": 0
+      },
+      {
+        "role": "candidate",
+        "observer": "/root/worker/build_eval/src/observer/seekdb",
+        "observer_sha256": "8a7503e0da5fa160001afa703e45ad9ff85c95ed29b3b38dabac54a5cb0313c4",
+        "bridge_sha256": "bf08476327bfabace7dc472723d6f683a5ee60b88e82fed42c3f1603493347d8",
+        "port": 2982,
+        "create_seconds": 6.350824339315295,
+        "first_query_seconds": 0.04299342446029186,
+        "ready_seconds": 6.393817763775587,
+        "qps": {
+          "10": 223.70577030126245,
+          "100": 185.61597565055993
+        },
+        "recall": {
+          "10": 1.0,
+          "100": 1.0
+        },
+        "latency": {
+          "10": {
+            "p50_ms": 4.483634606003761,
+            "p95_ms": 4.840618465095758,
+            "p99_ms": 5.274722632020712
+          },
+          "100": {
+            "p50_ms": 5.340613424777985,
+            "p95_ms": 5.7361493818461895,
+            "p99_ms": 6.048345100134611
+          }
+        },
+        "evidence": {
+          "passed": true,
+          "gpu_serves": 8193,
+          "gpu_snapshot_builds": 1,
+          "cpu_fallbacks": 0
+        },
+        "resources": {
+          "samples": 51,
+          "errors": [],
+          "peak_rss_bytes": 1882951680,
+          "peak_vram_bytes": 569483264,
+          "peak_gpu_percent": 24
+        },
+        "dataset": "gaussian250k-d128",
+        "round": 1
+      },
+      {
+        "role": "candidate",
+        "observer": "/root/worker/build_eval/src/observer/seekdb",
+        "observer_sha256": "8a7503e0da5fa160001afa703e45ad9ff85c95ed29b3b38dabac54a5cb0313c4",
+        "bridge_sha256": "bf08476327bfabace7dc472723d6f683a5ee60b88e82fed42c3f1603493347d8",
+        "port": 2982,
+        "create_seconds": 6.444589801132679,
+        "first_query_seconds": 0.04129474423825741,
+        "ready_seconds": 6.485884545370936,
+        "qps": {
+          "10": 221.96383137516978,
+          "100": 185.76039721758787
+        },
+        "recall": {
+          "10": 1.0,
+          "100": 1.0
+        },
+        "latency": {
+          "10": {
+            "p50_ms": 4.545524716377258,
+            "p95_ms": 4.857589490711689,
+            "p99_ms": 5.180496629327538
+          },
+          "100": {
+            "p50_ms": 5.348843522369862,
+            "p95_ms": 5.778798367828131,
+            "p99_ms": 6.16669086739421
+          }
+        },
+        "evidence": {
+          "passed": true,
+          "gpu_serves": 8193,
+          "gpu_snapshot_builds": 1,
+          "cpu_fallbacks": 0
+        },
+        "resources": {
+          "samples": 51,
+          "errors": [],
+          "peak_rss_bytes": 1842761728,
+          "peak_vram_bytes": 569487360,
+          "peak_gpu_percent": 24
+        },
+        "dataset": "gaussian250k-d128",
+        "round": 2
+      },
+      {
+        "role": "candidate",
+        "observer": "/root/worker/build_eval/src/observer/seekdb",
+        "observer_sha256": "8a7503e0da5fa160001afa703e45ad9ff85c95ed29b3b38dabac54a5cb0313c4",
+        "bridge_sha256": "bf08476327bfabace7dc472723d6f683a5ee60b88e82fed42c3f1603493347d8",
+        "port": 2982,
+        "create_seconds": 6.350390486419201,
+        "first_query_seconds": 0.0458242055028677,
+        "ready_seconds": 6.396214691922069,
+        "qps": {
+          "10": 221.18430387483764,
+          "100": 185.89927698773684
+        },
+        "recall": {
+          "10": 1.0,
+          "100": 1.0
+        },
+        "latency": {
+          "10": {
+            "p50_ms": 4.534156061708927,
+            "p95_ms": 4.879365675151348,
+            "p99_ms": 5.2246893756091595
+          },
+          "100": {
+            "p50_ms": 5.355793051421642,
+            "p95_ms": 5.7480549439787865,
+            "p99_ms": 6.168855912983418
+          }
+        },
+        "evidence": {
+          "passed": true,
+          "gpu_serves": 8193,
+          "gpu_snapshot_builds": 1,
+          "cpu_fallbacks": 0
+        },
+        "resources": {
+          "samples": 51,
+          "errors": [],
+          "peak_rss_bytes": 1837232128,
+          "peak_vram_bytes": 569483264,
+          "peak_gpu_percent": 24
+        },
+        "dataset": "gaussian250k-d128",
+        "round": 3
+      },
+      {
+        "role": "candidate",
+        "observer": "/root/worker/build_eval/src/observer/seekdb",
+        "observer_sha256": "8a7503e0da5fa160001afa703e45ad9ff85c95ed29b3b38dabac54a5cb0313c4",
+        "bridge_sha256": "bf08476327bfabace7dc472723d6f683a5ee60b88e82fed42c3f1603493347d8",
+        "port": 2982,
+        "create_seconds": 7.873653510585427,
+        "first_query_seconds": 0.04657760076224804,
+        "ready_seconds": 7.920231111347675,
+        "qps": {
+          "10": 201.66730160078453,
+          "100": 160.91001674251459
+        },
+        "recall": {
+          "10": 1.0,
+          "100": 0.99999755859375
+        },
+        "latency": {
+          "10": {
+            "p50_ms": 4.947712644934654,
+            "p95_ms": 5.3650992922484875,
+            "p99_ms": 5.819385591894392
+          },
+          "100": {
+            "p50_ms": 6.134949624538422,
+            "p95_ms": 6.5527502447366714,
+            "p99_ms": 6.872977688908578
+          }
+        },
+        "evidence": {
+          "passed": true,
+          "gpu_serves": 8193,
+          "gpu_snapshot_builds": 1,
+          "cpu_fallbacks": 0
+        },
+        "resources": {
+          "samples": 61,
+          "errors": [],
+          "peak_rss_bytes": 2087362560,
+          "peak_vram_bytes": 697655296,
+          "peak_gpu_percent": 40
+        },
+        "dataset": "gaussian250k-d256",
+        "round": 0
+      },
+      {
+        "role": "candidate",
+        "observer": "/root/worker/build_eval/src/observer/seekdb",
+        "observer_sha256": "8a7503e0da5fa160001afa703e45ad9ff85c95ed29b3b38dabac54a5cb0313c4",
+        "bridge_sha256": "bf08476327bfabace7dc472723d6f683a5ee60b88e82fed42c3f1603493347d8",
+        "port": 2982,
+        "create_seconds": 7.876179909333587,
+        "first_query_seconds": 0.045306796208024025,
+        "ready_seconds": 7.921486705541611,
+        "qps": {
+          "10": 202.53932211431365,
+          "100": 161.22451767912335
+        },
+        "recall": {
+          "10": 1.0,
+          "100": 0.99999755859375
+        },
+        "latency": {
+          "10": {
+            "p50_ms": 4.911641590297222,
+            "p95_ms": 5.350237712264061,
+            "p99_ms": 5.791477672755718
+          },
+          "100": {
+            "p50_ms": 6.122463382780552,
+            "p95_ms": 6.558209657669067,
+            "p99_ms": 6.955915596336131
+          }
+        },
+        "evidence": {
+          "passed": true,
+          "gpu_serves": 8193,
+          "gpu_snapshot_builds": 1,
+          "cpu_fallbacks": 0
+        },
+        "resources": {
+          "samples": 61,
+          "errors": [],
+          "peak_rss_bytes": 2111688704,
+          "peak_vram_bytes": 697663488,
+          "peak_gpu_percent": 32
+        },
+        "dataset": "gaussian250k-d256",
+        "round": 1
+      },
+      {
+        "role": "candidate",
+        "observer": "/root/worker/build_eval/src/observer/seekdb",
+        "observer_sha256": "8a7503e0da5fa160001afa703e45ad9ff85c95ed29b3b38dabac54a5cb0313c4",
+        "bridge_sha256": "bf08476327bfabace7dc472723d6f683a5ee60b88e82fed42c3f1603493347d8",
+        "port": 2982,
+        "create_seconds": 7.874346852302551,
+        "first_query_seconds": 0.04354296065866947,
+        "ready_seconds": 7.917889812961221,
+        "qps": {
+          "10": 200.95416017406617,
+          "100": 158.92962984273143
+        },
+        "recall": {
+          "10": 1.0,
+          "100": 0.99999755859375
+        },
+        "latency": {
+          "10": {
+            "p50_ms": 4.954195581376553,
+            "p95_ms": 5.3864093497395515,
+            "p99_ms": 5.961186159402132
+          },
+          "100": {
+            "p50_ms": 6.210247986018658,
+            "p95_ms": 6.616244558244944,
+            "p99_ms": 7.173782959580425
+          }
+        },
+        "evidence": {
+          "passed": true,
+          "gpu_serves": 8193,
+          "gpu_snapshot_builds": 1,
+          "cpu_fallbacks": 0
+        },
+        "resources": {
+          "samples": 61,
+          "errors": [],
+          "peak_rss_bytes": 2085560320,
+          "peak_vram_bytes": 697663488,
+          "peak_gpu_percent": 31
+        },
+        "dataset": "gaussian250k-d256",
+        "round": 2
+      },
+      {
+        "role": "candidate",
+        "observer": "/root/worker/build_eval/src/observer/seekdb",
+        "observer_sha256": "8a7503e0da5fa160001afa703e45ad9ff85c95ed29b3b38dabac54a5cb0313c4",
+        "bridge_sha256": "bf08476327bfabace7dc472723d6f683a5ee60b88e82fed42c3f1603493347d8",
+        "port": 2982,
+        "create_seconds": 7.8635916747152805,
+        "first_query_seconds": 0.04600117169320583,
+        "ready_seconds": 7.909592846408486,
+        "qps": {
+          "10": 210.95130832605483,
+          "100": 171.0508521556729
+        },
+        "recall": {
+          "10": 1.0,
+          "100": 0.99999755859375
+        },
+        "latency": {
+          "10": {
+            "p50_ms": 4.710845649242401,
+            "p95_ms": 5.143245216459036,
+            "p99_ms": 5.599873792380095
+          },
+          "100": {
+            "p50_ms": 5.799817852675915,
+            "p95_ms": 6.27081049606204,
+            "p99_ms": 6.67476570233703
+          }
+        },
+        "evidence": {
+          "passed": true,
+          "gpu_serves": 8193,
+          "gpu_snapshot_builds": 1,
+          "cpu_fallbacks": 0
+        },
+        "resources": {
+          "samples": 59,
+          "errors": [],
+          "peak_rss_bytes": 2094845952,
+          "peak_vram_bytes": 697651200,
+          "peak_gpu_percent": 30
+        },
+        "dataset": "gaussian250k-d256",
+        "round": 3
+      }
+    ],
+    "averages": [
+      {
+        "dataset": "gaussian250k-d128",
+        "ready_seconds": 6.419790577143431,
+        "qps": {
+          "10": 222.51992680081733,
+          "100": 185.92141650010586
+        },
+        "recall": {
+          "10": 1.0,
+          "100": 1.0
+        }
+      },
+      {
+        "dataset": "gaussian250k-d256",
+        "ready_seconds": 7.917300119064748,
+        "qps": {
+          "10": 204.0280230538048,
+          "100": 163.02875410501056
+        },
+        "recall": {
+          "10": 1.0,
+          "100": 0.99999755859375
+        }
+      }
+    ],
+    "errors": []
+  },
+  "comparisons": [
+    {
+      "dataset": "gaussian250k-d128",
+      "vs_archived_remote_v5": {
+        "build_speedup": 8.01653098509357,
+        "qps_ratio": {
+          "10": 1.7080289138703206,
+          "100": 1.574906663767803
+        },
+        "recall_delta": {
+          "10": -0.008233642578125089,
+          "100": -0.028890991210937522
+        }
+      },
+      "vs_reference_v5_plus_10_percent": {
+        "build_speedup": 3.256973986586752,
+        "qps_ratio": {
+          "10": 1.3761281805863779,
+          "100": 1.181954332486369
+        },
+        "recall_delta": {
+          "10": 0.0,
+          "100": 0.0
+        }
+      }
+    },
+    {
+      "dataset": "gaussian250k-d256",
+      "vs_archived_remote_v5": {
+        "build_speedup": 7.368784368060861,
+        "qps_ratio": {
+          "10": 1.8992078501045049,
+          "100": 1.6441441504480838
+        },
+        "recall_delta": {
+          "10": -0.07731933593749996,
+          "100": -0.13955810546875003
+        }
+      },
+      "vs_reference_v5_plus_10_percent": {
+        "build_speedup": 3.4447004487116666,
+        "qps_ratio": {
+          "10": 2.1319542638851074,
+          "100": 1.7436230385562626
+        },
+        "recall_delta": {
+          "10": -0.015000000000000013,
+          "100": -0.08599755859374991
+        }
+      }
+    }
+  ],
+  "baseline_archive": "docs/gpu-vector-index-hipvs-cuvs/validation/results-contest-v5-four-20261031.json",
+  "remote_report": "/work/evals/head-default-four-20261031-070633"
+}
