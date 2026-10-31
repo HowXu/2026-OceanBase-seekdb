@@ -1,0 +1,221 @@
+{
+  "status": "COMPLETE",
+  "revision": "634888d9b037153fa143d2c913ba4b25503e1d62",
+  "role": "baseline",
+  "round_count": 4,
+  "runs": [
+    {
+      "role": "baseline",
+      "observer": "/root/worker-v5/build_eval/src/observer/seekdb",
+      "observer_sha256": "d3f78804ce1adb97ba3e926b503b0fe6b69a3b2a90f77abab7a4fc3c5ab72910",
+      "bridge_sha256": "030b36246e3fc4e92743e432d00979f7a729fdf36fb8b6ff482b75fb008e9da6",
+      "port": 2982,
+      "create_seconds": 58.38899137638509,
+      "first_query_seconds": 0.04023754969239235,
+      "ready_seconds": 58.429228926077485,
+      "qps": {
+        "10": 118.82549189559387,
+        "100": 108.05269765296846
+      },
+      "recall": {
+        "10": 0.999951171875,
+        "100": 0.9999462890625
+      },
+      "latency": {
+        "10": {
+          "p50_ms": 8.400644175708294,
+          "p95_ms": 8.992367889732122,
+          "p99_ms": 9.414012916386127
+        },
+        "100": {
+          "p50_ms": 9.172526188194752,
+          "p95_ms": 9.829039219766855,
+          "p99_ms": 10.201190225780014
+        }
+      },
+      "evidence": {
+        "passed": true,
+        "gpu_serves": 8193,
+        "gpu_snapshot_builds": 1,
+        "cpu_fallbacks": 0
+      },
+      "resources": {
+        "samples": 129,
+        "errors": [],
+        "peak_rss_bytes": 3355557888,
+        "peak_vram_bytes": 862392320,
+        "peak_gpu_percent": 100
+      },
+      "dataset": "imagelike250k-d256",
+      "round": 0
+    },
+    {
+      "role": "baseline",
+      "observer": "/root/worker-v5/build_eval/src/observer/seekdb",
+      "observer_sha256": "d3f78804ce1adb97ba3e926b503b0fe6b69a3b2a90f77abab7a4fc3c5ab72910",
+      "bridge_sha256": "030b36246e3fc4e92743e432d00979f7a729fdf36fb8b6ff482b75fb008e9da6",
+      "port": 2982,
+      "create_seconds": 59.15642688050866,
+      "first_query_seconds": 0.03406326659023762,
+      "ready_seconds": 59.1904901470989,
+      "qps": {
+        "10": 116.79363967595843,
+        "100": 107.97780730386845
+      },
+      "recall": {
+        "10": 0.9999755859375,
+        "100": 0.9999658203125
+      },
+      "latency": {
+        "10": {
+          "p50_ms": 8.487707003951073,
+          "p95_ms": 9.049360640347004,
+          "p99_ms": 9.414897300302982
+        },
+        "100": {
+          "p50_ms": 9.259606711566448,
+          "p95_ms": 9.816736914217472,
+          "p99_ms": 10.110679827630522
+        }
+      },
+      "evidence": {
+        "passed": true,
+        "gpu_serves": 8193,
+        "gpu_snapshot_builds": 1,
+        "cpu_fallbacks": 0
+      },
+      "resources": {
+        "samples": 107,
+        "errors": [],
+        "peak_rss_bytes": 3422085120,
+        "peak_vram_bytes": 862392320,
+        "peak_gpu_percent": 100
+      },
+      "dataset": "imagelike250k-d256",
+      "round": 1
+    },
+    {
+      "role": "baseline",
+      "observer": "/root/worker-v5/build_eval/src/observer/seekdb",
+      "observer_sha256": "d3f78804ce1adb97ba3e926b503b0fe6b69a3b2a90f77abab7a4fc3c5ab72910",
+      "bridge_sha256": "030b36246e3fc4e92743e432d00979f7a729fdf36fb8b6ff482b75fb008e9da6",
+      "port": 2982,
+      "create_seconds": 59.31090100854635,
+      "first_query_seconds": 0.03541318699717522,
+      "ready_seconds": 59.34631419554353,
+      "qps": {
+        "10": 117.60990203923672,
+        "100": 107.97322375545306
+      },
+      "recall": {
+        "10": 0.999951171875,
+        "100": 0.99994384765625
+      },
+      "latency": {
+        "10": {
+          "p50_ms": 8.520997129380703,
+          "p95_ms": 9.039842523634434,
+          "p99_ms": 9.29108588024974
+        },
+        "100": {
+          "p50_ms": 9.253832511603832,
+          "p95_ms": 9.872534777969122,
+          "p99_ms": 10.157634317874908
+        }
+      },
+      "evidence": {
+        "passed": true,
+        "gpu_serves": 8193,
+        "gpu_snapshot_builds": 1,
+        "cpu_fallbacks": 0
+      },
+      "resources": {
+        "samples": 107,
+        "errors": [],
+        "peak_rss_bytes": 3402002432,
+        "peak_vram_bytes": 862388224,
+        "peak_gpu_percent": 100
+      },
+      "dataset": "imagelike250k-d256",
+      "round": 2
+    },
+    {
+      "role": "baseline",
+      "observer": "/root/worker-v5/build_eval/src/observer/seekdb",
+      "observer_sha256": "d3f78804ce1adb97ba3e926b503b0fe6b69a3b2a90f77abab7a4fc3c5ab72910",
+      "bridge_sha256": "030b36246e3fc4e92743e432d00979f7a729fdf36fb8b6ff482b75fb008e9da6",
+      "port": 2982,
+      "create_seconds": 59.37743961811066,
+      "first_query_seconds": 0.040002359077334404,
+      "ready_seconds": 59.41744197718799,
+      "qps": {
+        "10": 117.48411479794326,
+        "100": 107.59899489061428
+      },
+      "recall": {
+        "10": 0.999951171875,
+        "100": 0.9999462890625
+      },
+      "latency": {
+        "10": {
+          "p50_ms": 8.52096639573574,
+          "p95_ms": 9.042125195264816,
+          "p99_ms": 9.373051207512619
+        },
+        "100": {
+          "p50_ms": 9.302271530032158,
+          "p95_ms": 9.851234499365091,
+          "p99_ms": 10.095472540706398
+        }
+      },
+      "evidence": {
+        "passed": true,
+        "gpu_serves": 8193,
+        "gpu_snapshot_builds": 1,
+        "cpu_fallbacks": 0
+      },
+      "resources": {
+        "samples": 107,
+        "errors": [],
+        "peak_rss_bytes": 3388764160,
+        "peak_vram_bytes": 862384128,
+        "peak_gpu_percent": 100
+      },
+      "dataset": "imagelike250k-d256",
+      "round": 3
+    }
+  ],
+  "averages": [
+    {
+      "dataset": "imagelike250k-d256",
+      "ready_seconds": 59.095868811476976,
+      "qps": {
+        "10": 117.67828710218308,
+        "100": 107.90068090072606
+      },
+      "recall": {
+        "10": 0.9999572753906251,
+        "100": 0.9999505615234375
+      }
+    }
+  ],
+  "errors": [],
+  "baseline_revision": "634888d9b037153fa143d2c913ba4b25503e1d62",
+  "dataset_manifest": {
+    "version": 1,
+    "spec": {
+      "name": "imagelike250k-d256",
+      "rows": 250000,
+      "dim": 256,
+      "nq": 4096,
+      "distribution": "siftlike",
+      "seed": 20261110
+    },
+    "generator": "real-image-siftlike-v1",
+    "source_images": 174,
+    "source_images_sha256": "693fe6f28f292e303677bcd12d2c7f596232381dc1dabf855a42f0d030d1feb1",
+    "base_sha256": "af59aedd047eaba356e59d7fffe3c1b432fd353c80fa55712a1bb7d32385476f",
+    "queries_sha256": "6c2a425a70ce2b470dc72c044b96636eee258ef51b2728a1f45de23c7af6b1e3",
+    "truth_sha256": "1e17691eee8cf85992acaabaea27b559d369bab0ec7f3b09edce7a22cad40ccb"
+  }
+}
