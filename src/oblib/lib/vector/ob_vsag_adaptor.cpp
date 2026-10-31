@@ -32,6 +32,7 @@
 #include <cstdio>
 #include <cstring>
 #include <pthread.h>
+#include <dlfcn.h>
 extern "C" void omp_set_num_threads(int);
 #include "vsag/vsag.h"
 #include "vsag/errors.h"
@@ -232,7 +233,13 @@ static bool ob_cuvs_run_big_stack(void *(*function)(void *), void *argument) {
 }
 
 static void ob_cuvs_set_build_threads() {
+  using KmpSetDefaults = void (*)(const char *);
+  static const KmpSetDefaults set_defaults =
+      reinterpret_cast<KmpSetDefaults>(dlsym(RTLD_DEFAULT, "kmp_set_defaults"));
   const char *configured = getenv("OMP_NUM_THREADS");
+  if (configured == nullptr && set_defaults != nullptr) {
+    set_defaults("OMP_NUM_THREADS=8");
+  }
   const long threads = configured != nullptr ? strtol(configured, nullptr, 10) : 8;
   omp_set_num_threads(threads > 0 ? static_cast<int>(threads) : 8);
 }

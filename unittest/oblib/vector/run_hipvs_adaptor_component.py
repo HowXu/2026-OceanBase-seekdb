@@ -186,7 +186,7 @@ command = [os.environ.get('CXX', 'g++'), '-std=c++20', '-g', '-O1', '-fsanitize=
            str(root / 'src/oblib/lib/vector/ob_vsag_adaptor.cpp'),
            str(root / 'unittest/oblib/vector/test_hipvs_adaptor_hotpath.cpp'),
            '-L'+str(libdir), '-lvsag', '-lpthread', '-fopenmp', '-DOB_BUILD_CUVS',
-           '-Wl,--wrap=pthread_create', '-Wl,--wrap=omp_set_num_threads', '-o', str(hotpath)]
+           '-rdynamic', '-Wl,--wrap=pthread_create', '-Wl,--wrap=omp_set_num_threads', '-o', str(hotpath)]
 subprocess.run(command, check=True, env=env)
 print('running hotpath with cached worker', flush=True)
 subprocess.run([str(hotpath)], check=True, env=env)
