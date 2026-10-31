@@ -121,7 +121,6 @@ def dataset_specs(mode):
         DatasetSpec("gaussian250k-d256", 250_000, 256, 4096, "gaussian", 20261103),
         DatasetSpec("clustered250k-d256", 250_000, 256, 4096, "clustered", 20261104),
         DatasetSpec("gaussian250k-d384", 250_000, 384, 4096, "gaussian", 20261105),
-        DatasetSpec("gaussian250k-d768", 250_000, 768, 4096, "gaussian", 20261106),
         DatasetSpec("clustered1m-d128", 1_000_000, 128, 4096, "clustered", 20261107),
         DatasetSpec("clustered1m-d256", 1_000_000, 256, 4096, "clustered", 20261108),
     ]
