@@ -32,7 +32,7 @@
 #include <cstdio>
 #include <cstring>
 #include <pthread.h>
-#include <omp.h>
+extern "C" void omp_set_num_threads(int);
 #include "vsag/vsag.h"
 #include "vsag/errors.h"
 #include "vsag/dataset.h"
