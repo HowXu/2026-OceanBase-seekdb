@@ -83,6 +83,7 @@ PYTHONDONTWRITEBYTECODE=1 /opt/venv/bin/python \
 PYTHONDONTWRITEBYTECODE=1 /opt/venv/bin/python \
   unittest/oblib/vector/test_hipvs_benchmark.py -v
 bash unittest/oblib/vector/run_hipvs_bridge_tests.sh
+python3 unittest/oblib/vector/run_hipvs_adaptor_component.py
 ```
 
 ## Experimental algorithms
@@ -94,6 +95,12 @@ with exact GPU search, start the evaluator with
 `SEEKDB_CUVS_IVF_N_PROBES` overrides calibrate list count and query effort.
 The evaluator passes these variables to the candidate observer. Keep the
 algorithm and IVF settings unchanged across snapshot serialization and reload.
+New BruteForce snapshots use `graph_bytes=0` and rebuild from the single outer
+base copy; they are not promised to load in older binaries. Query buffers and
+search parameters are retained per handle until index destruction. Offline
+mock/component checks validate these contracts but do not measure GPU speedup.
+Repeat the paired GPU evaluation and require the usual Recall, QPS, trace and
+resource gates before accepting either optimization.
 
 ## Quick paired evaluation
 

@@ -48,6 +48,7 @@ seekdb_cuvs_search
 seekdb_cuvs_free
 seekdb_cuvs_cagra_knn
 seekdb_cuvs_serialize
+seekdb_cuvs_raw_snapshot
 seekdb_cuvs_deserialize
 ```
 
@@ -61,7 +62,13 @@ IVF-Flat defaults to `min(512, max(1, n/128))` lists and probes 32 lists (or
 all lists when fewer exist). `SEEKDB_CUVS_IVF_N_LISTS` and
 `SEEKDB_CUVS_IVF_N_PROBES` override those values for calibration. Use the same
 algorithm environment when serializing and reloading a snapshot; the OBCUVS02
-header does not record the experimental algorithm tag.
+header does not record the experimental algorithm tag. New BruteForce snapshots
+store IDs and the base vectors only once, use `graph_bytes=0`, and rebuild the
+GPU index on load; older binaries are not guaranteed to read this experimental
+form. CAGRA, IVF-Flat and older nonzero-graph snapshots retain the graph path.
+Each index handle also reuses its query/output buffers and search parameters,
+releasing them when the handle is destroyed. These changes require real GPU A/B
+validation before any performance benefit is claimed.
 
 Build seekdb with the resulting library:
 
