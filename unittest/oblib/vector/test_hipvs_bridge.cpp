@@ -11,12 +11,14 @@
 #include <cstring>
 #include <functional>
 #include <set>
+#include <thread>
 #include <vector>
 
 struct Resource { std::vector<std::function<void()>> pending; };
 struct Index { int64_t n = 0, dim = 0; std::vector<float> base; };
 static Index saved;
 static int calls, fail_at, live;
+static int device_allocations, search_param_allocations;
 static int bf_builds, bf_searches, bf_saves, bf_loads;
 static const void* bf_base_ptr;
 static int ivf_builds, ivf_searches, ivf_saves, ivf_loads;
@@ -50,7 +52,7 @@ cuvsError_t cuvsStreamSync(cuvsResources_t r) {
 }
 cuvsError_t cuvsRMMAlloc(cuvsResources_t, void** p, size_t bytes) {
   if (fail()) return CUVS_ERROR;
-  *p = std::malloc(bytes); assert(*p); buffers.insert(*p); return CUVS_SUCCESS;
+  *p = std::malloc(bytes); assert(*p); buffers.insert(*p); ++device_allocations; return CUVS_SUCCESS;
 }
 cuvsError_t cuvsRMMFree(cuvsResources_t r, void* p, size_t) {
   assert(resource(r)->pending.empty()); assert(buffers.erase(p)); std::free(p); return CUVS_SUCCESS;
@@ -65,7 +67,7 @@ cuvsError_t cuvsCagraIndexParamsCreate(cuvsCagraIndexParams_t* p) {
 }
 cuvsError_t cuvsCagraIndexParamsDestroy(cuvsCagraIndexParams_t p) { delete p; --live; return CUVS_SUCCESS; }
 cuvsError_t cuvsCagraSearchParamsCreate(cuvsCagraSearchParams_t* p) {
-  if (fail()) return CUVS_ERROR; *p = new cuvsCagraSearchParams{}; ++live; return CUVS_SUCCESS;
+  if (fail()) return CUVS_ERROR; *p = new cuvsCagraSearchParams{}; ++live; ++search_param_allocations; return CUVS_SUCCESS;
 }
 cuvsError_t cuvsCagraSearchParamsDestroy(cuvsCagraSearchParams_t p) { delete p; --live; return CUVS_SUCCESS; }
 cuvsError_t cuvsCagraIndexCreate(cuvsCagraIndex_t* p) {
@@ -98,6 +100,7 @@ cuvsError_t cuvsCagraSearch(cuvsResources_t r, cuvsCagraSearchParams_t p, cuvsCa
   assert(p->itopk_size % 32 == 0 && p->itopk_size >= static_cast<size_t>(k));
   assert(p->itopk_size >= (index(i)->dim > 256 ? 1024u : 512u));
   assert(p->itopk_size <= 512 || p->algo == MULTI_CTA);
+  assert(p->itopk_size > 512 || p->algo == SINGLE_CTA);
   resource(r)->pending.push_back([=] {
     for (int64_t row = 0; row < nq; ++row) {
       std::vector<std::pair<float, unsigned>> all;
@@ -190,7 +193,7 @@ cuvsError_t cuvsIvfFlatIndexParamsDestroy(cuvsIvfFlatIndexParams_t p) {
   delete p; --live; return CUVS_SUCCESS;
 }
 cuvsError_t cuvsIvfFlatSearchParamsCreate(cuvsIvfFlatSearchParams_t* p) {
-  if (fail()) return CUVS_ERROR; *p = new cuvsIvfFlatSearchParams{}; ++live; return CUVS_SUCCESS;
+  if (fail()) return CUVS_ERROR; *p = new cuvsIvfFlatSearchParams{}; ++live; ++search_param_allocations; return CUVS_SUCCESS;
 }
 cuvsError_t cuvsIvfFlatSearchParamsDestroy(cuvsIvfFlatSearchParams_t p) {
   delete p; --live; return CUVS_SUCCESS;
@@ -267,6 +270,42 @@ int main()
   int build_calls = calls;
   assert(seekdb_cuvs_search(h, base.data(), 2, 3, ids, distances) == 0);
   assert(ids[0] == 0 && ids[3] == 1 && distances[0] == 0 && distances[3] == 0);
+  int warmed_allocations = device_allocations, warmed_params = search_param_allocations;
+  for (int repeat = 0; repeat < 50; ++repeat) {
+    assert(seekdb_cuvs_search(h, base.data(), 2, 3, ids, distances) == 0);
+    assert(ids[0] == 0 && ids[3] == 1);
+  }
+  assert(device_allocations == warmed_allocations && search_param_allocations == warmed_params);
+  std::vector<unsigned> larger_ids(129);
+  std::vector<float> larger_distances(129);
+  assert(seekdb_cuvs_search(h, base.data(), 1, 129, larger_ids.data(), larger_distances.data()) == 0);
+  assert(larger_ids.front() == 0 && larger_ids.back() == 128);
+  assert(seekdb_cuvs_search(h, base.data(), 2, 3, ids, distances) == 0);
+  assert(search_param_allocations == warmed_params);
+  assert(device_allocations == warmed_allocations + 2);
+  std::thread first([&] {
+    for (int row = 0; row < 20; ++row) {
+      unsigned result = 999; float distance = -1;
+      assert(seekdb_cuvs_search(h, base.data() + row * 4, 1, 1, &result, &distance) == 0);
+      assert(result == static_cast<unsigned>(row) && distance == 0);
+    }
+  });
+  std::thread second([&] {
+    for (int row = 20; row < 40; ++row) {
+      unsigned result = 999; float distance = -1;
+      assert(seekdb_cuvs_search(h, base.data() + row * 4, 1, 1, &result, &distance) == 0);
+      assert(result == static_cast<unsigned>(row) && distance == 0);
+    }
+  });
+  first.join(); second.join();
+  std::vector<unsigned> grown_ids(9);
+  std::vector<float> grown_distances(9);
+  calls = 0; fail_at = 2; // Fail allocation while growing an existing workspace.
+  assert(seekdb_cuvs_search(h, base.data(), 3, 3, grown_ids.data(), grown_distances.data()) != 0);
+  assert(live == 3 && buffers.empty());
+  fail_at = 0;
+  assert(seekdb_cuvs_search(h, base.data(), 3, 3, grown_ids.data(), grown_distances.data()) == 0);
+  assert(grown_ids[0] == 0 && grown_ids[3] == 1 && grown_ids[6] == 2);
   int before = calls;
   assert(seekdb_cuvs_search(h, base.data(), 1, 257, ids, distances) != 0);
   assert(seekdb_cuvs_search(h, base.data(), -1, 3, ids, distances) != 0);
@@ -285,7 +324,7 @@ int main()
   assert(seekdb_cuvs_search(h, wide_base.data(), 2, 3, ids, distances) == 0);
   assert(ids[0] == 0 && ids[3] == 1);
   seekdb_cuvs_free(h); assert(live == 0 && buffers.empty());
-  int cases = 13;
+  int cases = 17;
   for (int point = 1; point <= build_calls; ++point) {
     calls = 0; fail_at = point;
     h = seekdb_cuvs_build(base.data(), 256, 4); assert(!h);
@@ -294,12 +333,19 @@ int main()
   calls = 0; fail_at = 0; h = seekdb_cuvs_build(base.data(), 256, 4); assert(h);
   calls = 0; assert(seekdb_cuvs_search(h, base.data(), 2, 3, ids, distances) == 0);
   int search_calls = calls;
+  seekdb_cuvs_free(h); assert(live == 0 && buffers.empty());
   for (int point = 1; point <= search_calls; ++point) {
+    calls = 0; fail_at = 0;
+    h = seekdb_cuvs_build(base.data(), 256, 4); assert(h);
     calls = 0; fail_at = point;
     assert(seekdb_cuvs_search(h, base.data(), 2, 3, ids, distances) != 0);
-    assert(live == 3 && buffers.empty()); ++cases;
+    assert(live == 3 && buffers.empty());
+    fail_at = 0;
+    assert(seekdb_cuvs_search(h, base.data(), 2, 3, ids, distances) == 0);
+    assert(ids[0] == 0 && ids[3] == 1);
+    seekdb_cuvs_free(h); assert(live == 0 && buffers.empty()); ++cases;
   }
-  fail_at = 0; seekdb_cuvs_free(h); assert(live == 0);
+  fail_at = 0;
   calls = 0; h = seekdb_cuvs_deserialize("mock.snapshot", 256, 4); assert(h);
   int load_calls = calls; seekdb_cuvs_free(h);
   for (int point = 1; point <= load_calls; ++point) {
@@ -312,6 +358,12 @@ int main()
   assert(buffers.count(const_cast<void*>(bf_base_ptr)) == 1);
   assert(seekdb_cuvs_search(h, base.data(), 2, 3, ids, distances) == 0 && bf_searches == 1);
   assert(ids[0] == 0 && ids[3] == 1 && distances[0] == 0);
+  warmed_allocations = device_allocations;
+  for (int repeat = 0; repeat < 5; ++repeat) {
+    assert(seekdb_cuvs_search(h, base.data(), 2, 3, ids, distances) == 0);
+    assert(ids[0] == 0 && ids[3] == 1);
+  }
+  assert(device_allocations == warmed_allocations);
   assert(seekdb_cuvs_serialize(h, "mock.snapshot") == 0 && bf_saves == 1);
   seekdb_cuvs_free(h); assert(live == 0);
   assert(buffers.count(const_cast<void*>(bf_base_ptr)) == 0);
@@ -328,6 +380,12 @@ int main()
   assert(h && ivf_builds == 1 && ivf_lists == 2 && ivf_iters == 10 && ivf_train_fraction == 0.25);
   assert(seekdb_cuvs_search(h, base.data(), 2, 3, ids, distances) == 0);
   assert(ivf_searches == 1 && ivf_probes == 2 && ids[0] == 0 && ids[3] == 1);
+  warmed_allocations = device_allocations; warmed_params = search_param_allocations;
+  for (int repeat = 0; repeat < 5; ++repeat) {
+    assert(seekdb_cuvs_search(h, base.data(), 2, 3, ids, distances) == 0);
+    assert(ids[0] == 0 && ids[3] == 1 && ivf_probes == 2);
+  }
+  assert(device_allocations == warmed_allocations && search_param_allocations == warmed_params);
   assert(seekdb_cuvs_serialize(h, "mock.snapshot") == 0 && ivf_saves == 1);
   seekdb_cuvs_free(h); assert(live == 0);
   h = seekdb_cuvs_deserialize("mock.snapshot", 256, 4); assert(h && ivf_loads == 1);

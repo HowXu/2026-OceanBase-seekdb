@@ -5,7 +5,7 @@ OUT=$(mktemp -d)
 trap 'rm -rf "$OUT"' EXIT
 TEST_DIR=$ROOT/unittest/oblib/vector
 BRIDGE_DIR=$ROOT/tools/hipvs_bridge
-FLAGS=(-g -O1 -fno-omit-frame-pointer -fsanitize=address,undefined
+FLAGS=(-g -O1 -pthread -fno-omit-frame-pointer -fsanitize=address,undefined
        -I"$TEST_DIR/hipvs_mock" -I"$BRIDGE_DIR")
 "${CC:-cc}" -std=c11 "${FLAGS[@]}" -Wall -Wextra -Werror \
   -c "$BRIDGE_DIR/seekdb_cuvs_bridge.c" -o "$OUT/bridge.o"

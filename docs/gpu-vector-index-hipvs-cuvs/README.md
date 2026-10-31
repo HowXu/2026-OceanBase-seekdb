@@ -230,6 +230,27 @@ The tuning archive is historical and must not be used as the submission profile.
 
 ## Offline checks
 
+The fixed-parameter hot path reuses a 32 MiB-stack worker for sequential GPU
+operations. A busy worker falls back to the existing dedicated-thread path, so
+an unrelated build is not forced to queue behind it. Search workspaces and
+parameters are reused per bridge handle; calls on one handle are serialized,
+results are synchronized before return, and an error releases the workspace
+before a retry. Switching Top-K restores the original CAGRA search mode before
+applying the existing frontier rules.
+
+Snapshot output maps the SDK's temporary file read-only in at most 8 MiB windows
+to bound file-backed RSS. If mapping is unavailable, a bounded 1 MiB copy path
+continues from the first unmapped byte. The OBCUVS02 layout and opaque SDK payload are unchanged; CPU
+recovery and existing readers remain supported. This reduces copies and stream
+calls, not the vector count, precision, graph degree or iteration count.
+
+These changes have offline contract/component coverage. They have no new GPU
+or official-platform speedup measurement yet. The user-reported official result
+`build=0.989x, query=1.031x, gates=pass` predates this update and must not be
+presented as its result. The paired contest evaluator compares against the
+GPU-capable V5 implementation; historical CPU-versus-GPU speedups are a different
+comparison.
+
 ```bash
 bash unittest/oblib/vector/run_hipvs_bridge_tests.sh
 python3 unittest/oblib/vector/test_hipvs_benchmark.py

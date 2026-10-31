@@ -144,3 +144,18 @@ for enabled in (False, True):
     subprocess.run(command, check=True, env=env)
     print('running component variant GPU_ENABLED=', enabled, flush=True)
     subprocess.run([str(binary)], check=True, env=env)
+
+# Exercise the successful GPU-adaptor route without hardware: the bridge stand-in
+# computes exact tiny results, while the real adaptor handles threading and I/O.
+binary = out / 'adaptor_hotpath'
+command = [os.environ.get('CXX', 'g++'), '-std=c++20', '-g', '-O1',
+           '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-DOB_BUILD_CUVS',
+           '-I'+str(stubs), '-I'+str(root / 'src/oblib'), '-I'+str(deps / 'include'),
+           str(root / 'src/oblib/lib/vector/ob_vsag_adaptor.cpp'),
+           str(root / 'unittest/oblib/vector/test_hipvs_adaptor_hotpath.cpp'),
+           '-L'+str(libdir), '-lvsag', '-lpthread', '-fopenmp',
+           '-Wl,--wrap=pthread_create', '-Wl,--wrap=mmap', '-Wl,--wrap=munmap',
+           '-o', str(binary)]
+subprocess.run(command, check=True, env=env)
+for arguments in ([], ['fail-first-worker-create']):
+    subprocess.run([str(binary), *arguments], check=True, env=env, timeout=90)
