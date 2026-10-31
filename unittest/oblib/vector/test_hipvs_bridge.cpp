@@ -84,7 +84,7 @@ cuvsError_t cuvsCagraSearch(cuvsResources_t r, cuvsCagraSearchParams_t p, cuvsCa
   auto distances = static_cast<float*>(dist->dl_tensor.data);
   auto nq = q->dl_tensor.shape[0], k = ids->dl_tensor.shape[1];
   assert(p->itopk_size % 32 == 0 && p->itopk_size >= static_cast<size_t>(k));
-  assert(p->itopk_size >= (index(i)->dim > 256 ? 4096u : 2048u));
+  assert(p->itopk_size >= (index(i)->dim > 256 ? 1024u : 512u));
   assert(p->itopk_size <= 512 || p->algo == MULTI_CTA);
   resource(r)->pending.push_back([=] {
     for (int64_t row = 0; row < nq; ++row) {

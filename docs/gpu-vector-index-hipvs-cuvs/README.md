@@ -162,8 +162,8 @@ labels its output as having no GPU measurement. Run sizes 10K, 100K and 1M at
 dimensions 128/384/768 as hardware memory permits; keep complete raw results.
 
 This compares VSAG HNSW with CAGRA in seekdb's HNSW SQL route. It does **not**
-convert CAGRA into a VSAG HNSW graph. CAGRA uses graph degree 32, intermediate
-degree 64 and 6 NN-Descent iterations; VSAG uses
+convert CAGRA into a VSAG HNSW graph. CAGRA uses graph degree 128, intermediate
+degree 256 (255 for 256 input rows) and 100 NN-Descent iterations; VSAG uses
 `m=16,ef_construction=200` by default (the example raises `m` to 32). The algorithms have different graph parameters, so
 assess build time together with recall and first-ready time. Query batch
 throughput is a separate metric and must not be reported as index-build speedup.
@@ -179,14 +179,11 @@ plateaus even at high query effort, calibrate graph quality before measuring.
 The example uses `m=32`; report the chosen graph parameters with every speedup.
 Compare DDL time independently of first-query time.
 
-The competition build profile uses a sparse graph (32 final / 64 intermediate
-edges) and six NN-Descent iterations. It retains at least 2048 query candidates,
-or 4096 above 256 dimensions, and uses `MULTI_CTA` (the default `SINGLE_CTA`
-supports at most 512). This trades query search effort for lower construction
-cost; measure recall and query latency together with build time. It was selected
-using actual 100K x 128/384 GPU builds, independent query sets and Top-10/100
-quality checks. This is a measured profile, not an assertion that hidden official
-tests have passed; no official test script was available.
+For dimensions above 256 the bridge retains at least 1024 search candidates and
+selects `MULTI_CTA`: hipVS's default `SINGLE_CTA` path supports at most 512.
+The same mode switch applies whenever Top-K requires more than 512 retained
+candidates. Construction parameters and the existing 128-dimensional path are
+unchanged.
 
 ## Validation on AMD hardware (2026-10-30)
 
