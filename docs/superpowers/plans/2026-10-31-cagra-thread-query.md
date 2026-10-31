@@ -64,10 +64,10 @@
 - Remote: `/work/run-cagra-thread-query-sweep.sh`
 - Results: `/work/evals/cagra-{omp8,omp16,omp24,single,multi,auto,worker}-*`
 
-- [ ] 等当前 d256/构图 sweep 完成后同步已验证源码；构建 bridge 和 `build_eval`，严格 `-j48`。
-- [ ] 固定构图参数，依次运行 OMP=8/16/24、single/multi/auto、worker=1；脚本识别 zombie，禁止 GPU 并发。
-- [ ] 每轮传 `--baseline /work/evals/v5-siftlike-four-20261031-073857/summary.json`，保存逐轮 gates。
-- [ ] 任何 Recall、QPS 或资源门禁失败即淘汰；不以 `COMPLETE` 代替通过。
+- [x] 串行构建 bridge 和 `build_eval`，严格 `-j48`；修复 zombie 等待和重复实例问题。
+- [x] 完成 OMP=4/6/8/16/24、single/multi/auto、worker=1 对照，OMP=8 最优。
+- [x] 每轮传冻结 V5 基线并保存完整 gates；显式 MULTI_CTA 和常驻 worker 均独立通过。
+- [x] ITERATIVE、短 niter 和 IVF_PQ 的失败轮次不计为通过；跨分布 Recall 与资源失败均淘汰。
 
 ### Task 5: 组合优胜项并筛选构图
 
@@ -75,7 +75,7 @@
 - Modify only when a winner is measured: `tools/hipvs_bridge/seekdb_cuvs_bridge.c`
 - Modify only when worker wins: `src/oblib/lib/vector/ob_vsag_adaptor.cpp`
 
-- [ ] 将优胜搜索模式和 worker 固化为默认值，删除实验必需性；OpenMP 若有效则在不改赛题启动命令的成品初始化中设置并验证。
-- [ ] 测 niter=50/25、intermediate_degree=192、ITERATIVE 和 IVF_PQ 构图；保留最终 degree=128。
-- [ ] 对最优组合在 d128/d256 各跑四轮完整 gates，并与冻结 V5 和增强 10% 外部参考比较。
-- [ ] 构建 3×、查询 1.5×且有安全余量后停止；否则才提交自定义全 GPU 建图的新设计评审。
+- [x] 固化 MULTI_CTA、常驻 worker 和 OpenMP=8；用 `kmp_set_defaults` 覆盖内部 std::thread，零配置实测 ready=22.8830s。
+- [x] 完成 niter=50/25/12、intermediate=192、ITERATIVE 和 IVF_PQ 筛选；高斯 Recall 证明应保留 niter=100 和 degree=128/256。
+- [ ] 对固定组合在 d128/d256 各跑四轮完整 gates，并与冻结 V5 和增强 10% 外部参考比较。
+- [ ] 查询已越过 1.5×封顶线；原生构图尚未达到综合构建 3×，自定义全 GPU 建图必须另行设计评审，不在本计划直接实施。
