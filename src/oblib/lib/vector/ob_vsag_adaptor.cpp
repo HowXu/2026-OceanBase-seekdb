@@ -128,15 +128,16 @@ static std::mutex g_ob_vsag_trace_mu;
 // a no-op in normal builds (no file I/O on the hot path).
 static inline void ob_vsag_trace(const char *fn, const void *h, long a, long b) {
 #ifdef OB_BUILD_CUVS_TRACE
-  const char *e = ::getenv("OB_VSAG_TRACE");
-  if (e == nullptr || e[0] != '1') { return; }
-  const char *path = ::getenv("OB_VSAG_TRACE_FILE");
-  if (path == nullptr) { path = "/tmp/obvsag_trace.log"; }
-  std::lock_guard<std::mutex> guard(g_ob_vsag_trace_mu);
-  FILE *tf = ::fopen(path, "a");
+  static FILE *tf = [] {
+    const char *e = ::getenv("OB_VSAG_TRACE");
+    if (e == nullptr || e[0] != '1') { return static_cast<FILE *>(nullptr); }
+    const char *path = ::getenv("OB_VSAG_TRACE_FILE");
+    if (path == nullptr) { path = "/tmp/obvsag_trace.log"; }
+    return ::fopen(path, "a");
+  }();
   if (tf == nullptr) { return; }
+  std::lock_guard<std::mutex> guard(g_ob_vsag_trace_mu);
   ::fprintf(tf, "%-14s handle=%p a=%ld b=%ld\n", fn, h, a, b);
-  ::fclose(tf);
 #else
   (void)fn; (void)h; (void)a; (void)b;
 #endif
