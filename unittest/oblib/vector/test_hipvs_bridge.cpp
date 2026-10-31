@@ -324,13 +324,17 @@ int main()
   fail_at = 0; h = seekdb_cuvs_build(base.data(), 256, 4);
   assert(h && cagra_last_niter == 25 && cagra_last_build_algo == ITERATIVE_CAGRA_SEARCH);
   seekdb_cuvs_free(h);
+  assert(setenv("SEEKDB_CUVS_CAGRA_BUILD_ALGO", "ivf_pq", 1) == 0);
+  h = seekdb_cuvs_build(base.data(), 256, 4);
+  assert(h && cagra_last_build_algo == IVF_PQ);
+  seekdb_cuvs_free(h);
   assert(setenv("SEEKDB_CUVS_CAGRA_NN_NITER", "0", 1) == 0);
   assert(!seekdb_cuvs_build(base.data(), 256, 4));
   assert(setenv("SEEKDB_CUVS_CAGRA_BUILD_ALGO", "invalid", 1) == 0);
   assert(!seekdb_cuvs_build(base.data(), 256, 4));
   assert(unsetenv("SEEKDB_CUVS_CAGRA_NN_NITER") == 0);
   assert(unsetenv("SEEKDB_CUVS_CAGRA_BUILD_ALGO") == 0);
-  cases += 3;
+  cases += 4;
   assert(setenv("SEEKDB_CUVS_CAGRA_BUILD_ALGO", "nn_descent", 1) == 0);
   assert(setenv("SEEKDB_CUVS_CAGRA_NN_NITER", "50", 1) == 0);
   assert(setenv("SEEKDB_CUVS_CAGRA_GRAPH_DEGREE", "64", 1) == 0);

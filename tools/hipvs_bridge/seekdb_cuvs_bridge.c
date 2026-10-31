@@ -110,6 +110,8 @@ static int configure_cagra_build(sk_cuvs_index* h)
     h->ip->build_algo = NN_DESCENT;
   } else if (strcmp(algorithm, "iterative") == 0) {
     h->ip->build_algo = ITERATIVE_CAGRA_SEARCH;
+  } else if (strcmp(algorithm, "ivf_pq") == 0) {
+    h->ip->build_algo = IVF_PQ;
   } else {
     fprintf(stderr, "[seekdb_cuvs] unknown CAGRA build algorithm: %s\n", algorithm);
     return 0;
