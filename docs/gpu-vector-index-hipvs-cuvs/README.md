@@ -175,7 +175,7 @@ dimensions 128/384/768 as hardware memory permits; keep complete raw results.
 
 This compares VSAG HNSW with CAGRA in seekdb's HNSW SQL route. It does **not**
 convert CAGRA into a VSAG HNSW graph. CAGRA uses graph degree 128, intermediate
-degree 256 (255 for 256 input rows) and 100 NN-Descent iterations; VSAG uses
+degree 256 (255 at the 256-row boundary) and 100 NN-Descent iterations; VSAG uses
 `m=16,ef_construction=200` by default (the example raises `m` to 32). The algorithms have different graph parameters, so
 assess build time together with recall and first-ready time. Query batch
 throughput is a separate metric and must not be reported as index-build speedup.
@@ -191,11 +191,15 @@ plateaus even at high query effort, calibrate graph quality before measuring.
 The example uses `m=32`; report the chosen graph parameters with every speedup.
 Compare DDL time independently of first-query time.
 
-For dimensions above 256 the bridge retains at least 1024 search candidates and
-selects `MULTI_CTA`: hipVS's default `SINGLE_CTA` path supports at most 512.
-The same mode switch applies whenever Top-K requires more than 512 retained
-candidates. Construction parameters and the existing 128-dimensional path are
-unchanged.
+The input branch's GPU construction parameters are fixed at graph degree 128,
+intermediate degree 256 and 100 NN-Descent iterations. The 256-row boundary uses
+255 intermediate neighbors because hipVS requires the degree to be smaller than
+the dataset. Do not reduce these parameters to obtain a build-speed claim.
+The bridge contract tests assert the actual values passed to the hipVS C API.
+
+Queries retain at least 512 candidates, or 1024 above 256 dimensions, and select
+`MULTI_CTA` whenever the retained frontier exceeds the default `SINGLE_CTA`
+limit of 512. These are the search settings from before the sparse experiment.
 
 ## Validation on AMD hardware (2026-10-30)
 
@@ -206,27 +210,23 @@ vectors and **9.34x** for 100K x 128 vectors, with both backends above 95% Recal
 CPU parameters were `m=16` and `m=32` respectively; both used
 `ef_construction=200` and session `ob_hnsw_ef_search=16000`.
 
-For 100K x 384 vectors, CPU calibration selected `m=64,ef_construction=200`
-with session `ob_hnsw_ef_search=16000`. Recall@10 reached
-97.6% on the original 100 queries and 97.7% on 100 additional
-queries (seed 20261031). Parameters were frozen before three fresh, alternating
-CPU/GPU build pairs. Median DDL time was **323.468s CPU / 4.646s GPU**, or
-**69.63x**; every CPU trial reached at least 97.6% and every
-GPU trial at least 96.7% Recall@10. The high-dimensional GPU path uses 4096
-retained candidates with `MULTI_CTA`. All three dataset groups now pass the
-95% quality gate. The earlier `m=32` CPU result (86.5%) remains excluded.
+For 100K x 384 vectors, CPU calibration at `m=64,ef_construction=200`
+and session `ob_hnsw_ef_search=16000` reached 97.6% Recall@10 on the original
+100 queries and 97.7% on 100 additional queries. This CPU profile was explicitly
+calibrated to exceed the 95% gate; it is recorded independently of GPU settings.
 
-No separate compiler was observed in the process samples.
-Resource samples, CPU quota throttling deltas, every formal trial and component
-hashes are recorded in
+**Correction on 2026-10-31:** the later sparse-GPU experiment changed construction
+parameters to 32/64 edges and six iterations. Its **69.63x claim is withdrawn**
+from the accepted contest/fixed-parameter results, despite passing the synthetic
+recall checks. The original 128/256/100 construction parameters and pre-sparse
+search settings have been restored. A fresh 384-D comparison with these settings
+has not run: the previously supplied remote SSH connection is closed.
+
+No official test harness has been supplied or run. Current accepted results and
+the historical, explicitly withdrawn experiment are recorded in
+[`validation/results-20261030.json`](validation/results-20261030.json) and
 [`validation/results-384-20261030.json`](validation/results-384-20261030.json).
-The 128-D speedups above are historical measurements of the earlier dense build
-profile (128/256 edges, 100 iterations); the 384-D run uses the new 32/64-edge,
-six-iteration profile. Native GPU parameter calibration and additional query
-validation are in
-[`validation/gpu-tuning-20261030.json`](validation/gpu-tuning-20261030.json).
-The combined record is
-[`validation/results-20261030.json`](validation/results-20261030.json).
+The tuning archive is historical and must not be used as the submission profile.
 
 ## Offline checks
 

@@ -77,6 +77,9 @@ cuvsError_t cuvsCagraBuild(cuvsResources_t r, cuvsCagraIndexParams_t p, DLManage
   assert(!t->manager_ctx && !t->deleter && !t->dl_tensor.strides);
   assert(p->metric == L2Expanded && p->graph_degree < p->intermediate_graph_degree);
   int64_t n = t->dl_tensor.shape[0], dim = t->dl_tensor.shape[1];
+  // The supplied task branch fixes these build parameters.
+  assert(p->graph_degree == 128 && p->nn_descent_niter == 100);
+  assert(p->intermediate_graph_degree == (n > 256 ? 256u : static_cast<size_t>(n) - 1));
   assert(p->intermediate_graph_degree < static_cast<size_t>(n));
   auto data = static_cast<float*>(t->dl_tensor.data);
   resource(r)->pending.push_back([=] { index(i)->n = n; index(i)->dim = dim;

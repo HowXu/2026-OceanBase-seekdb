@@ -1,14 +1,7 @@
 {
-  "status": "COMPLETE",
+  "status": "HISTORICAL_EXPERIMENT_NOT_APPROVED_FOR_FIXED_PARAMETERS",
   "kind": "GPU_BUILD_PARAMETER_CALIBRATION_NOT_FORMAL_SQL_SPEEDUP",
   "baseline_source_revision": "8f30f4fdcdfa1c46d3ce18fdb87fd7d54ac768b5",
-  "selected_configuration": {
-    "graph_degree": 32,
-    "intermediate_graph_degree": 64,
-    "nn_descent_niter": 6,
-    "itopk_minimum": 4096,
-    "search_mode": "MULTI_CTA"
-  },
   "rounds": [
     {
       "kind": "REAL_GPU_PARAMETER_CALIBRATION_NOT_SQL_SPEEDUP",
@@ -1726,5 +1719,24 @@
     ],
     "kind": "COMPILED_PRODUCTION_BRIDGE_GPU_REGRESSION"
   },
-  "timing_note": "Native build calibration timings exclude seekdb SQL loading, snapshot and DDL work. Formal SQL speedups are reported separately."
+  "timing_note": "Native build calibration timings exclude seekdb SQL loading, snapshot and DDL work. Formal SQL speedups are reported separately.",
+  "withdrawal": {
+    "date": "2026-10-31",
+    "reason": "The 32/64-edge, 6-iteration experiment changed the supplied construction parameters. Its 69.63x result is withdrawn from accepted contest/fixed-parameter performance claims.",
+    "required_build_parameters": {
+      "graph_degree": 128,
+      "intermediate_graph_degree": 256,
+      "nn_descent_niter": 100
+    },
+    "replacement_measurement_status": "NOT_RUN_REMOTE_SSH_CONNECTION_CLOSED",
+    "official_test_status": "NOT_RUN_NO_OFFICIAL_HARNESS"
+  },
+  "historical_selected_configuration": {
+    "graph_degree": 32,
+    "intermediate_graph_degree": 64,
+    "nn_descent_niter": 6,
+    "itopk_minimum": 4096,
+    "search_mode": "MULTI_CTA"
+  },
+  "selected_configuration": null
 }
