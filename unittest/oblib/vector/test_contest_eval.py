@@ -74,8 +74,10 @@ class DatasetTest(unittest.TestCase):
         self.assertIn((250000, 256), shapes)
         self.assertIn((250000, 384), shapes)
         self.assertNotIn(768, {s.dim for s in specs})
-        self.assertEqual(len(specs), 8)
+        self.assertEqual(len(specs), 9)
         self.assertIn((1000000, 128), shapes)
+        self.assertIn(contest_eval.DatasetSpec(
+            "imagelike250k-d256", 250000, 256, 4096, "siftlike", 20261110), specs)
         self.assertIn(contest_eval.DatasetSpec(
             "siftlike250k-d128", 250000, 128, 4096, "siftlike", 20261109), specs)
         self.assertIn((1000000, 256), shapes)
@@ -109,6 +111,10 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(metadata["source_images"], 1)
         self.assertEqual(len(metadata["source_images_sha256"]), 64)
         self.assertEqual(metadata["generator"], "real-image-siftlike-v1")
+        wide_spec = contest_eval.DatasetSpec("tiny-wide", 8, 256, 4, "siftlike", 9)
+        wide_base, wide_queries = contest_eval.siftlike_arrays(wide_spec, self.cache_dir)
+        self.assertEqual(wide_base.shape, (8, 256))
+        self.assertEqual(wide_queries.shape, (4, 256))
         self.assertEqual(first_base.shape, (16, 128))
         self.assertEqual(first_queries.shape, (8, 128))
         self.assertEqual(first_base.dtype, np.float32)
@@ -222,6 +228,7 @@ class RunnerContractTest(unittest.TestCase):
         self.assertEqual(contest_eval.dataset_kind("gaussian250k-d128"), "sift")
         self.assertEqual(contest_eval.dataset_kind("siftlike250k-d128"), "sift")
         self.assertEqual(contest_eval.dataset_kind("gaussian250k-d256"), "hidden")
+        self.assertEqual(contest_eval.dataset_kind("imagelike250k-d256"), "hidden")
         self.assertEqual(contest_eval.dataset_kind("clustered250k-d256"), "local")
 
     def test_pair_reverses_order_and_writes_summary(self):

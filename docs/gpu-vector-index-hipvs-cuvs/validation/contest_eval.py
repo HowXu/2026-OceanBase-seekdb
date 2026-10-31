@@ -117,6 +117,7 @@ def dataset_specs(mode):
         raise ValueError(f"unknown dataset mode: {mode}")
     return [
         DatasetSpec("siftlike250k-d128", 250_000, 128, 4096, "siftlike", 20261109),
+        DatasetSpec("imagelike250k-d256", 250_000, 256, 4096, "siftlike", 20261110),
         DatasetSpec("gaussian250k-d128", 250_000, 128, 4096, "gaussian", 20261101),
         DatasetSpec("clustered250k-d128", 250_000, 128, 4096, "clustered", 20261102),
         DatasetSpec("gaussian250k-d256", 250_000, 256, 4096, "gaussian", 20261103),
@@ -207,33 +208,42 @@ def siftlike_arrays(spec, images_root, metadata=None):
             (32, 32), Image.Resampling.BILINEAR)
         return siftlike_descriptor(np.asarray(patch, dtype=np.float32))
 
-    base = np.empty((spec.rows, 128), dtype=np.float32)
+    if spec.dim <= 0 or spec.dim % 128 != 0:
+        raise ValueError(f"SIFT-like dimension must be a multiple of 128: {spec.dim}")
+    blocks = spec.dim // 128
+    base = np.empty((spec.rows, spec.dim), dtype=np.float32)
     metadata = []
     while len(metadata) < spec.rows:
-        patch_metadata = random_patch()
-        descriptor = extract(patch_metadata)
-        if descriptor is not None:
-            base[len(metadata)] = descriptor
-            metadata.append(patch_metadata)
+        row_metadata = []
+        for block in range(blocks):
+            while True:
+                patch_metadata = random_patch()
+                descriptor = extract(patch_metadata)
+                if descriptor is not None:
+                    base[len(metadata), block * 128:(block + 1) * 128] = descriptor
+                    row_metadata.append(patch_metadata)
+                    break
+        metadata.append(tuple(row_metadata))
 
-    queries = np.empty((spec.nq, 128), dtype=np.float32)
+    queries = np.empty((spec.nq, spec.dim), dtype=np.float32)
     related = spec.nq * 7 // 10
     for row in range(spec.nq):
-        while True:
-            if row < related:
-                image_index, x, y, size = metadata[int(rng.integers(len(metadata)))]
-                image = images[image_index]
-                center_x, center_y = x + size / 2.0, y + size / 2.0
-                size = int(np.clip(round(size * rng.uniform(0.9, 1.1)), 32, 96))
-                x = int(np.clip(round(center_x - size / 2.0 + rng.integers(-3, 4)), 0, image.shape[1] - size))
-                y = int(np.clip(round(center_y - size / 2.0 + rng.integers(-3, 4)), 0, image.shape[0] - size))
-                patch_metadata = (image_index, x, y, size)
-            else:
-                patch_metadata = random_patch()
-            descriptor = extract(patch_metadata)
-            if descriptor is not None:
-                queries[row] = descriptor
-                break
+        for block in range(blocks):
+            while True:
+                if row < related:
+                    image_index, x, y, size = metadata[int(rng.integers(len(metadata)))][block]
+                    image = images[image_index]
+                    center_x, center_y = x + size / 2.0, y + size / 2.0
+                    size = int(np.clip(round(size * rng.uniform(0.9, 1.1)), 32, 96))
+                    x = int(np.clip(round(center_x - size / 2.0 + rng.integers(-3, 4)), 0, image.shape[1] - size))
+                    y = int(np.clip(round(center_y - size / 2.0 + rng.integers(-3, 4)), 0, image.shape[0] - size))
+                    patch_metadata = (image_index, x, y, size)
+                else:
+                    patch_metadata = random_patch()
+                descriptor = extract(patch_metadata)
+                if descriptor is not None:
+                    queries[row, block * 128:(block + 1) * 128] = descriptor
+                    break
     return base, queries
 
 
@@ -373,7 +383,7 @@ def gpu_evidence(trace, log):
 
 def dataset_kind(name):
     return {"gaussian250k-d128": "sift", "siftlike250k-d128": "sift",
-            "gaussian250k-d256": "hidden"}.get(name, "local")
+            "gaussian250k-d256": "hidden", "imagelike250k-d256": "hidden"}.get(name, "local")
 
 
 def observer_command(config):
