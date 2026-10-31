@@ -231,7 +231,9 @@ static int configure_ivf_pq(sk_cuvs_index* h, long n, long dim)
     params->refinement_rate = 1;
   }
   if (!params->ivf_pq_build_params || !params->ivf_pq_search_params) return 0;
-  params->ivf_pq_build_params->conservative_memory_allocation = true;
+  const char* conservative = getenv("SEEKDB_CUVS_CAGRA_IVF_CONSERVATIVE");
+  params->ivf_pq_build_params->conservative_memory_allocation =
+      !(conservative && strcmp(conservative, "0") == 0);
   return parse_uint_override("SEEKDB_CUVS_CAGRA_IVF_NPROBES",
                              params->ivf_pq_search_params->n_probes,
                              &params->ivf_pq_search_params->n_probes) &&

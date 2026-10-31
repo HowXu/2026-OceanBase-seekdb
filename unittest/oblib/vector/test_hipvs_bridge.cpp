@@ -356,6 +356,11 @@ int main()
          ivf_last_lut == CUDA_R_16F && ivf_last_internal == CUDA_R_16F &&
          ivf_last_coarse == CUDA_R_16F && ivf_last_batch == 128 * 1024);
   seekdb_cuvs_free(h);
+  assert(setenv("SEEKDB_CUVS_CAGRA_IVF_CONSERVATIVE", "0", 1) == 0);
+  h = seekdb_cuvs_build(base.data(), 256, 4);
+  assert(h && !ivf_last_conservative);
+  seekdb_cuvs_free(h);
+  assert(unsetenv("SEEKDB_CUVS_CAGRA_IVF_CONSERVATIVE") == 0);
   assert(setenv("SEEKDB_CUVS_CAGRA_IVF_REFINEMENT", "0", 1) == 0);
   assert(!seekdb_cuvs_build(base.data(), 256, 4));
   assert(unsetenv("SEEKDB_CUVS_CAGRA_IVF_NPROBES") == 0);
