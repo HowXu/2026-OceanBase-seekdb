@@ -54,21 +54,17 @@ seekdb_cuvs_deserialize
 
 ### Contest algorithm experiments
 
-The bridge also exposes two experimental backends through the same ABI. Set
-`SEEKDB_CUVS_ALGO=brute_force` for exact GPU Top-K, or
-`SEEKDB_CUVS_ALGO=ivf_flat` for float32 inverted-list search. Leaving the
-variable unset (or setting it to `cagra`) preserves the existing CAGRA path.
-IVF-Flat defaults to `min(512, max(1, n/128))` lists and probes 32 lists (or
-all lists when fewer exist). `SEEKDB_CUVS_IVF_N_LISTS` and
-`SEEKDB_CUVS_IVF_N_PROBES` override those values for calibration. Use the same
-algorithm environment when serializing and reloading a snapshot; the OBCUVS02
-header does not record the experimental algorithm tag. New BruteForce snapshots
-store IDs and the base vectors only once, use `graph_bytes=0`, and rebuild the
-GPU index on load; older binaries are not guaranteed to read this experimental
-form. CAGRA, IVF-Flat and older nonzero-graph snapshots retain the graph path.
-Each index handle also reuses its query/output buffers and search parameters,
-releasing them when the handle is destroyed. These changes require real GPU A/B
-validation before any performance benefit is claimed.
+The contest binary uses exact GPU BruteForce Top-K by default; no algorithm
+environment variable is required. Set `SEEKDB_CUVS_ALGO=cagra` only when
+regression-testing the legacy CAGRA path. Use the same algorithm environment
+when serializing and reloading a snapshot; the OBCUVS02 header does not record
+the algorithm tag. New BruteForce snapshots store IDs and the base vectors only
+once, use `graph_bytes=0`, and rebuild the GPU index on load; older binaries are
+not guaranteed to read this experimental form. CAGRA and older nonzero-graph
+snapshots retain the graph path. Each index handle also reuses its query/output
+buffers and search parameters, releasing them when the handle is destroyed.
+These changes require real GPU A/B validation before any performance benefit is
+claimed.
 
 Build seekdb with the resulting library:
 

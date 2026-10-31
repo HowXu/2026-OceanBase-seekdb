@@ -2,7 +2,6 @@
 #include "seekdb_cuvs_bridge.h"
 #include <cuvs/neighbors/cagra.h>
 #include <cuvs/neighbors/brute_force.h>
-#include <cuvs/neighbors/ivf_flat.h>
 #include <algorithm>
 #include <cassert>
 #include <climits>
@@ -17,18 +16,14 @@ struct Resource { std::vector<std::function<void()>> pending; };
 struct Index { int64_t n = 0, dim = 0; std::vector<float> base; };
 static Index saved;
 static int calls, fail_at, live;
-static int rmm_allocs, cagra_search_param_creates, ivf_search_param_creates;
+static int rmm_allocs, cagra_search_param_creates;
 static int bf_builds, bf_searches, bf_saves, bf_loads;
 static const void* bf_base_ptr;
-static int ivf_builds, ivf_searches, ivf_saves, ivf_loads;
-static uint32_t ivf_lists, ivf_probes, ivf_iters;
-static double ivf_train_fraction;
 static std::set<void*> buffers;
 static bool fail() { return ++calls == fail_at; }
 static Resource* resource(cuvsResources_t r) { return reinterpret_cast<Resource*>(r); }
 static Index* index(cuvsCagraIndex_t i) { return static_cast<Index*>(i->data); }
 static Index* bf_index(cuvsBruteForceIndex_t i) { return reinterpret_cast<Index*>(i->addr); }
-static Index* ivf_index(cuvsIvfFlatIndex_t i) { return reinterpret_cast<Index*>(i->addr); }
 extern "C" {
 const char* cuvsGetLastErrorText() { return "injected failure"; }
 cuvsError_t cuvsResourcesCreate(cuvsResources_t* r) {
@@ -185,75 +180,6 @@ cuvsError_t cuvsBruteForceDeserialize(cuvsResources_t r, const char*, cuvsBruteF
   if (fail()) return CUVS_ERROR;
   resource(r)->pending.push_back([=] { *bf_index(i) = saved; }); ++bf_loads; return CUVS_SUCCESS;
 }
-cuvsError_t cuvsIvfFlatIndexParamsCreate(cuvsIvfFlatIndexParams_t* p) {
-  if (fail()) return CUVS_ERROR; *p = new cuvsIvfFlatIndexParams{}; ++live; return CUVS_SUCCESS;
-}
-cuvsError_t cuvsIvfFlatIndexParamsDestroy(cuvsIvfFlatIndexParams_t p) {
-  delete p; --live; return CUVS_SUCCESS;
-}
-cuvsError_t cuvsIvfFlatSearchParamsCreate(cuvsIvfFlatSearchParams_t* p) {
-  if (fail()) return CUVS_ERROR;
-  *p = new cuvsIvfFlatSearchParams{}; ++live; ++ivf_search_param_creates; return CUVS_SUCCESS;
-}
-cuvsError_t cuvsIvfFlatSearchParamsDestroy(cuvsIvfFlatSearchParams_t p) {
-  delete p; --live; return CUVS_SUCCESS;
-}
-cuvsError_t cuvsIvfFlatIndexCreate(cuvsIvfFlatIndex_t* out) {
-  if (fail()) return CUVS_ERROR;
-  *out = new cuvsIvfFlatIndex{reinterpret_cast<uintptr_t>(new Index), {}}; ++live; return CUVS_SUCCESS;
-}
-cuvsError_t cuvsIvfFlatIndexDestroy(cuvsIvfFlatIndex_t i) {
-  delete ivf_index(i); delete i; --live; return CUVS_SUCCESS;
-}
-cuvsError_t cuvsIvfFlatBuild(cuvsResources_t r, cuvsIvfFlatIndexParams_t p,
-                             DLManagedTensor* t, cuvsIvfFlatIndex_t i) {
-  if (fail()) return CUVS_ERROR;
-  assert(p->metric == L2Expanded && p->add_data_on_build && p->conservative_memory_allocation);
-  assert(t->dl_tensor.device.device_type == kDLCUDA && t->dl_tensor.device.device_id == 3);
-  ivf_lists = p->n_lists; ivf_iters = p->kmeans_n_iters;
-  ivf_train_fraction = p->kmeans_trainset_fraction;
-  int64_t n = t->dl_tensor.shape[0], dim = t->dl_tensor.shape[1];
-  auto data = static_cast<float*>(t->dl_tensor.data);
-  resource(r)->pending.push_back([=] { ivf_index(i)->n = n; ivf_index(i)->dim = dim;
-    ivf_index(i)->base.assign(data, data + n * dim); });
-  ++ivf_builds; return CUVS_SUCCESS;
-}
-cuvsError_t cuvsIvfFlatSearch(cuvsResources_t r, cuvsIvfFlatSearchParams_t p,
-    cuvsIvfFlatIndex_t i, DLManagedTensor* q, DLManagedTensor* ids,
-    DLManagedTensor* dist, cuvsFilter) {
-  if (fail()) return CUVS_ERROR;
-  ivf_probes = p->n_probes; assert(ivf_probes > 0 && ivf_probes <= ivf_lists);
-  assert(ids->dl_tensor.dtype.code == kDLInt && ids->dl_tensor.dtype.bits == 64);
-  auto query = static_cast<float*>(q->dl_tensor.data);
-  auto output = static_cast<int64_t*>(ids->dl_tensor.data);
-  auto distances = static_cast<float*>(dist->dl_tensor.data);
-  auto nq = q->dl_tensor.shape[0], k = ids->dl_tensor.shape[1];
-  resource(r)->pending.push_back([=] {
-    for (int64_t row = 0; row < nq; ++row) {
-      std::vector<std::pair<float, unsigned>> all;
-      for (int64_t b = 0; b < ivf_index(i)->n; ++b) {
-        float d = 0;
-        for (int64_t col = 0; col < ivf_index(i)->dim; ++col) {
-          float delta = query[row * ivf_index(i)->dim + col] - ivf_index(i)->base[b * ivf_index(i)->dim + col];
-          d += delta * delta;
-        }
-        all.emplace_back(d, b);
-      }
-      std::sort(all.begin(), all.end());
-      for (int64_t col = 0; col < k; ++col) {
-        distances[row*k+col] = all[col].first; output[row*k+col] = all[col].second;
-      }
-    }
-  });
-  ++ivf_searches; return CUVS_SUCCESS;
-}
-cuvsError_t cuvsIvfFlatSerialize(cuvsResources_t, const char*, cuvsIvfFlatIndex_t i) {
-  if (fail()) return CUVS_ERROR; saved = *ivf_index(i); ++ivf_saves; return CUVS_SUCCESS;
-}
-cuvsError_t cuvsIvfFlatDeserialize(cuvsResources_t r, const char*, cuvsIvfFlatIndex_t i) {
-  if (fail()) return CUVS_ERROR;
-  resource(r)->pending.push_back([=] { *ivf_index(i) = saved; }); ++ivf_loads; return CUVS_SUCCESS;
-}
 }
 
 static void check_query_resource_reuse(void* h, const float* query, int after_build)
@@ -280,7 +206,13 @@ int main()
   assert(!seekdb_cuvs_build(base.data(), 256, 0));
   assert(!seekdb_cuvs_build(base.data(), LONG_MAX, 4));
   assert(calls == 0);
-  void* h = seekdb_cuvs_build(base.data(), 256, 4); assert(h);
+  assert(unsetenv("SEEKDB_CUVS_ALGO") == 0);
+  fail_at = 0; calls = 0;
+  void* h = seekdb_cuvs_build(base.data(), 256, 4);
+  assert(h && bf_builds == 1 && seekdb_cuvs_raw_snapshot(h) == 1);
+  seekdb_cuvs_free(h); assert(live == 0 && buffers.empty());
+  assert(setenv("SEEKDB_CUVS_ALGO", "cagra", 1) == 0);
+  calls = 0; h = seekdb_cuvs_build(base.data(), 256, 4); assert(h);
   assert(seekdb_cuvs_raw_snapshot(nullptr) == 0 && seekdb_cuvs_raw_snapshot(h) == 0);
   int build_calls = calls;
   const int cagra_after_build = rmm_allocs;
@@ -306,7 +238,7 @@ int main()
   assert(seekdb_cuvs_search(h, wide_base.data(), 2, 3, ids, distances) == 0);
   assert(ids[0] == 0 && ids[3] == 1);
   seekdb_cuvs_free(h); assert(live == 0 && buffers.empty());
-  int cases = 13;
+  int cases = 14;
   for (int point = 1; point <= build_calls; ++point) {
     calls = 0; fail_at = point;
     h = seekdb_cuvs_build(base.data(), 256, 4); assert(!h);
@@ -331,7 +263,7 @@ int main()
     assert(live == 0 && buffers.empty()); ++cases;
   }
   assert(setenv("SEEKDB_CUVS_ALGO", "brute_force", 1) == 0);
-  fail_at = 0; calls = 0; h = seekdb_cuvs_build(base.data(), 256, 4); assert(h && bf_builds == 1);
+  fail_at = 0; calls = 0; h = seekdb_cuvs_build(base.data(), 256, 4); assert(h && bf_builds == 2);
   assert(seekdb_cuvs_raw_snapshot(h) == 1);
   const int bf_after_build = rmm_allocs;
   assert(buffers.count(const_cast<void*>(bf_base_ptr)) == 1);
@@ -346,32 +278,9 @@ int main()
   seekdb_cuvs_free(h); assert(live == 0 && buffers.empty());
   assert(setenv("SEEKDB_CUVS_ALGO", "invalid", 1) == 0);
   assert(!seekdb_cuvs_build(base.data(), 256, 4));
-  assert(unsetenv("SEEKDB_CUVS_ALGO") == 0);
-  cases += 2;
-
   assert(setenv("SEEKDB_CUVS_ALGO", "ivf_flat", 1) == 0);
-  fail_at = 0; calls = 0; h = seekdb_cuvs_build(base.data(), 256, 4);
-  assert(h && ivf_builds == 1 && ivf_lists == 2 && ivf_iters == 10 && ivf_train_fraction == 0.25);
-  assert(seekdb_cuvs_raw_snapshot(h) == 0);
-  const int ivf_after_build = rmm_allocs;
-  check_query_resource_reuse(h, base.data(), ivf_after_build);
-  assert(ivf_search_param_creates == 1);
-  assert(seekdb_cuvs_search(h, base.data(), 2, 3, ids, distances) == 0);
-  assert(ivf_searches == 5 && ivf_probes == 2 && ids[0] == 0 && ids[3] == 1);
-  assert(seekdb_cuvs_serialize(h, "mock.snapshot") == 0 && ivf_saves == 1);
-  seekdb_cuvs_free(h); assert(live == 0);
-  h = seekdb_cuvs_deserialize("mock.snapshot", 256, 4); assert(h && ivf_loads == 1);
-  seekdb_cuvs_free(h); assert(live == 0 && buffers.empty());
-  assert(setenv("SEEKDB_CUVS_IVF_N_LISTS", "64", 1) == 0);
-  assert(setenv("SEEKDB_CUVS_IVF_N_PROBES", "16", 1) == 0);
-  h = seekdb_cuvs_build(base.data(), 256, 4); assert(h && ivf_lists == 64);
-  assert(seekdb_cuvs_search(h, base.data(), 2, 3, ids, distances) == 0 && ivf_probes == 16);
-  seekdb_cuvs_free(h); assert(live == 0);
-  assert(setenv("SEEKDB_CUVS_IVF_N_PROBES", "65", 1) == 0);
   assert(!seekdb_cuvs_build(base.data(), 256, 4));
-  assert(unsetenv("SEEKDB_CUVS_IVF_N_LISTS") == 0);
-  assert(unsetenv("SEEKDB_CUVS_IVF_N_PROBES") == 0);
   assert(unsetenv("SEEKDB_CUVS_ALGO") == 0);
-  cases += 2;
+  cases += 3;
   std::printf("PASS bridge contract and fault-injection cases=%d (mock SDK; no GPU performance claim)\n", cases);
 }

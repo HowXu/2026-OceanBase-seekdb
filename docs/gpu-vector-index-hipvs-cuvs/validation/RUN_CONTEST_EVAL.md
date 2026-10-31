@@ -88,19 +88,16 @@ python3 unittest/oblib/vector/run_hipvs_adaptor_component.py
 
 ## Experimental algorithms
 
-The default candidate algorithm is CAGRA. To run the same paired evaluation
-with exact GPU search, start the evaluator with
-`SEEKDB_CUVS_ALGO=brute_force` in its environment. For IVF-Flat, use
-`SEEKDB_CUVS_ALGO=ivf_flat`; optional `SEEKDB_CUVS_IVF_N_LISTS` and
-`SEEKDB_CUVS_IVF_N_PROBES` overrides calibrate list count and query effort.
-The evaluator passes these variables to the candidate observer. Keep the
-algorithm and IVF settings unchanged across snapshot serialization and reload.
-New BruteForce snapshots use `graph_bytes=0` and rebuild from the single outer
-base copy; they are not promised to load in older binaries. Query buffers and
-search parameters are retained per handle until index destruction. Offline
-mock/component checks validate these contracts but do not measure GPU speedup.
-Repeat the paired GPU evaluation and require the usual Recall, QPS, trace and
-resource gates before accepting either optimization.
+The contest candidate uses exact GPU BruteForce by default, with no algorithm
+environment variable. Set `SEEKDB_CUVS_ALGO=cagra` only to regression-test the
+legacy path. Keep the algorithm setting unchanged across snapshot serialization
+and reload. New BruteForce snapshots use `graph_bytes=0` and rebuild from the
+single outer base copy; they are not promised to load in older binaries. Query
+buffers and search parameters are retained per handle until index destruction.
+Offline mock/component checks validate these contracts but do not measure GPU
+speedup. Repeat the paired GPU evaluation with the algorithm variable unset and
+require the usual Recall, QPS, trace and resource gates before accepting the
+optimization.
 
 ## Quick paired evaluation
 
