@@ -77,5 +77,5 @@
 
 - [x] 固化 MULTI_CTA、常驻 worker 和 OpenMP=8；用 `kmp_set_defaults` 覆盖内部 std::thread，零配置实测 ready=22.8830s。
 - [x] 完成 niter=50/25/12、intermediate=192、ITERATIVE 和 IVF_PQ 筛选；高斯 Recall 证明应保留 niter=100 和 degree=128/256。
-- [ ] 对固定组合在 d128/d256 各跑四轮完整 gates，并与冻结 V5 和增强 10% 外部参考比较。
-- [ ] 查询已越过 1.5×封顶线；原生构图尚未达到综合构建 3×，自定义全 GPU 建图必须另行设计评审，不在本计划直接实施。
+- [x] d128/d256 各四轮零配置完整 gates 全部通过；报告 `results-contest-cagra-final-four-20261031.*`，并比较冻结 V5 与增强 10% 外部参考。
+- [x] 查询已越过 1.5×封顶线；原生构图尚未达到综合构建 3×，后续构建优化交由独立工作流，本计划不再实施自定义建图。
