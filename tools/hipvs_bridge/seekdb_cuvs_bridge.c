@@ -22,6 +22,7 @@ typedef struct {
   float* dd;
   int64_t* wide_ids;
   size_t query_capacity, neighbor_capacity, distance_capacity, wide_capacity;
+  size_t cagra_itopk, cagra_search_width;
   sk_algorithm algorithm;
   long n, dim;
   int device;
@@ -117,6 +118,31 @@ static int configure_cagra_build(sk_cuvs_index* h)
   return 1;
 }
 
+static int configure_cagra_degrees(sk_cuvs_index* h, long n)
+{
+  uint32_t graph = 128, intermediate = n > 256 ? 256 : (uint32_t)n - 1;
+  if (!parse_uint_override("SEEKDB_CUVS_CAGRA_GRAPH_DEGREE", graph, &graph) ||
+      !parse_uint_override("SEEKDB_CUVS_CAGRA_INTERMEDIATE_DEGREE", intermediate, &intermediate) ||
+      graph >= intermediate || (uint64_t)intermediate >= (uint64_t)n) {
+    fprintf(stderr, "[seekdb_cuvs] invalid CAGRA graph degrees\n");
+    return 0;
+  }
+  h->ip->graph_degree = graph;
+  h->ip->intermediate_graph_degree = intermediate;
+  return 1;
+}
+
+static int configure_cagra_search(sk_cuvs_index* h)
+{
+  uint32_t itopk = h->dim > 256 ? 1024 : 512;
+  uint32_t width = 4;
+  if (!parse_uint_override("SEEKDB_CUVS_CAGRA_ITOPK", itopk, &itopk) ||
+      !parse_uint_override("SEEKDB_CUVS_CAGRA_SEARCH_WIDTH", width, &width)) return 0;
+  h->cagra_itopk = itopk;
+  h->cagra_search_width = width;
+  return 1;
+}
+
 void seekdb_cuvs_free(void* handle)
 {
   sk_cuvs_index* h = (sk_cuvs_index*)handle;
@@ -160,7 +186,8 @@ void* seekdb_cuvs_build(const float* base, long n, long dim)
     h->ip->graph_degree = 128;
     h->ip->intermediate_graph_degree = n > 256 ? 256 : (size_t)n - 1;
     h->ip->nn_descent_niter = 100;
-    if (!configure_cagra_build(h) || cuvsCagraIndexCreate(&h->idx) != CUVS_SUCCESS ||
+    if (!configure_cagra_build(h) || !configure_cagra_degrees(h, n) ||
+        cuvsCagraIndexCreate(&h->idx) != CUVS_SUCCESS ||
         cuvsCagraBuild(h->res, h->ip, &dataset, h->idx) != CUVS_SUCCESS ||
         cuvsStreamSync(h->res) != CUVS_SUCCESS) goto fail;
   } else {
@@ -215,6 +242,7 @@ int seekdb_cuvs_search(void* handle, const float* query, long nq, long topk,
       grow_device_buffer(h->res, (void**)&h->dd, &h->distance_capacity, distance_bytes) != 0) goto done;
   if (h->algorithm == SK_CAGRA && !h->sp &&
       cuvsCagraSearchParamsCreate(&h->sp) != CUVS_SUCCESS) goto done;
+  if (h->algorithm == SK_CAGRA && !h->cagra_itopk && !configure_cagra_search(h)) goto done;
   qt = matrix(h->qd, qs, kDLCUDA, h->device, kDLFloat);
   nt = matrix(h->nd, rs, kDLCUDA, h->device, h->algorithm == SK_CAGRA ? kDLUInt : kDLInt);
   if (h->algorithm != SK_CAGRA) nt.dl_tensor.dtype.bits = 64;
@@ -222,15 +250,11 @@ int seekdb_cuvs_search(void* handle, const float* query, long nq, long topk,
   filter.type = NO_FILTER;
   if (h->algorithm == SK_CAGRA) {
     h->sp->itopk_size = (size_t)topk * 4;
-    /* High-dimensional data needs a wider retained frontier to maintain recall.
-     * Keep the established 512-candidate path for dimensions up to 256. */
-    if (h->sp->itopk_size < (h->dim > 256 ? 1024UL : 512UL)) {
-      h->sp->itopk_size = h->dim > 256 ? 1024 : 512;
-    }
+    if (h->sp->itopk_size < h->cagra_itopk) h->sp->itopk_size = h->cagra_itopk;
     h->sp->itopk_size = (h->sp->itopk_size + 31) / 32 * 32;
     /* hipVS SINGLE_CTA rejects frontiers larger than 512. */
     if (h->sp->itopk_size > 512) h->sp->algo = MULTI_CTA;
-    h->sp->search_width = 4;
+    h->sp->search_width = h->cagra_search_width;
   }
   /* Copies and search must use the same resource stream. A default-stream
    * copy does not order work submitted to a nonblocking resource stream. */

@@ -18,7 +18,8 @@ static Index saved;
 static int calls, fail_at, live;
 static bool cagra_include_dataset;
 static int from_args_calls;
-static size_t cagra_last_niter;
+static size_t cagra_last_niter, cagra_last_graph_degree, cagra_last_intermediate_degree;
+static size_t cagra_last_itopk, cagra_last_search_width;
 static int cagra_last_build_algo;
 static int rmm_allocs, cagra_search_param_creates;
 static int bf_builds, bf_searches, bf_saves, bf_loads;
@@ -77,11 +78,12 @@ cuvsError_t cuvsCagraBuild(cuvsResources_t r, cuvsCagraIndexParams_t p, DLManage
   if (fail()) return CUVS_ERROR;
   assert(!t->manager_ctx && !t->deleter && !t->dl_tensor.strides);
   assert(p->metric == L2Expanded && p->graph_degree < p->intermediate_graph_degree);
+  cagra_last_graph_degree = p->graph_degree;
+  cagra_last_intermediate_degree = p->intermediate_graph_degree;
   int64_t n = t->dl_tensor.shape[0], dim = t->dl_tensor.shape[1];
   cagra_last_niter = p->nn_descent_niter;
   cagra_last_build_algo = p->build_algo;
-  assert(p->graph_degree == 128 && p->nn_descent_niter > 0);
-  assert(p->intermediate_graph_degree == (n > 256 ? 256u : static_cast<size_t>(n) - 1));
+  assert(p->graph_degree > 0 && p->nn_descent_niter > 0);
   assert(p->intermediate_graph_degree < static_cast<size_t>(n));
   auto data = static_cast<float*>(t->dl_tensor.data);
   resource(r)->pending.push_back([=] { index(i)->n = n; index(i)->dim = dim;
@@ -97,8 +99,8 @@ cuvsError_t cuvsCagraSearch(cuvsResources_t r, cuvsCagraSearchParams_t p, cuvsCa
   auto output = static_cast<unsigned*>(ids->dl_tensor.data);
   auto distances = static_cast<float*>(dist->dl_tensor.data);
   auto nq = q->dl_tensor.shape[0], k = ids->dl_tensor.shape[1];
+  cagra_last_itopk = p->itopk_size; cagra_last_search_width = p->search_width;
   assert(p->itopk_size % 32 == 0 && p->itopk_size >= static_cast<size_t>(k));
-  assert(p->itopk_size >= (index(i)->dim > 256 ? 1024u : 512u));
   assert(p->itopk_size <= 512 || p->algo == MULTI_CTA);
   resource(r)->pending.push_back([=] {
     for (int64_t row = 0; row < nq; ++row) {
@@ -328,6 +330,24 @@ int main()
   assert(unsetenv("SEEKDB_CUVS_CAGRA_NN_NITER") == 0);
   assert(unsetenv("SEEKDB_CUVS_CAGRA_BUILD_ALGO") == 0);
   cases += 3;
+  assert(setenv("SEEKDB_CUVS_CAGRA_BUILD_ALGO", "nn_descent", 1) == 0);
+  assert(setenv("SEEKDB_CUVS_CAGRA_NN_NITER", "50", 1) == 0);
+  assert(setenv("SEEKDB_CUVS_CAGRA_GRAPH_DEGREE", "64", 1) == 0);
+  assert(setenv("SEEKDB_CUVS_CAGRA_INTERMEDIATE_DEGREE", "128", 1) == 0);
+  assert(setenv("SEEKDB_CUVS_CAGRA_ITOPK", "256", 1) == 0);
+  assert(setenv("SEEKDB_CUVS_CAGRA_SEARCH_WIDTH", "2", 1) == 0);
+  h = seekdb_cuvs_build(base.data(), 256, 4);
+  assert(h && cagra_last_graph_degree == 64 && cagra_last_intermediate_degree == 128);
+  unsigned config_ids[10]; float config_distances[10];
+  assert(seekdb_cuvs_search(h, base.data(), 1, 10, config_ids, config_distances) == 0);
+  assert(cagra_last_itopk == 256 && cagra_last_search_width == 2);
+  seekdb_cuvs_free(h);
+  assert(setenv("SEEKDB_CUVS_CAGRA_INTERMEDIATE_DEGREE", "32", 1) == 0);
+  assert(!seekdb_cuvs_build(base.data(), 256, 4));
+  for (const char* name : {"SEEKDB_CUVS_CAGRA_BUILD_ALGO", "SEEKDB_CUVS_CAGRA_NN_NITER",
+       "SEEKDB_CUVS_CAGRA_GRAPH_DEGREE", "SEEKDB_CUVS_CAGRA_INTERMEDIATE_DEGREE",
+       "SEEKDB_CUVS_CAGRA_ITOPK", "SEEKDB_CUVS_CAGRA_SEARCH_WIDTH"}) unsetenv(name);
+  cases += 2;
 
   assert(setenv("SEEKDB_CUVS_ALGO", "invalid", 1) == 0);
   assert(!seekdb_cuvs_build(base.data(), 256, 4));
