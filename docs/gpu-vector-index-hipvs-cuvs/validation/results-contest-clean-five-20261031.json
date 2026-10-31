@@ -1,0 +1,1846 @@
+{
+  "status": "COMPLETE",
+  "clean_rebuild": true,
+  "rounds_per_dataset": 5,
+  "build_command": "RelWithDebInfo; OB_ENABLE_UNITY=ON; OB_USE_LLD=ON; OB_BUILD_CUVS=ON; OB_BUILD_CUVS_TRACE=ON; -j48",
+  "datasets": {
+    "siftlike250k-d128": {
+      "baseline": {
+        "status": "COMPLETE",
+        "revision": "634888d9b037153fa143d2c913ba4b25503e1d62",
+        "role": "baseline",
+        "round_count": 5,
+        "runs": [
+          {
+            "role": "baseline",
+            "observer": "/root/worker-v5/build_eval/src/observer/seekdb",
+            "observer_sha256": "a55770e7049dd8ee3437b99009454cf56df728c4c564e40d7f49125570c6ae09",
+            "bridge_sha256": "030b36246e3fc4e92743e432d00979f7a729fdf36fb8b6ff482b75fb008e9da6",
+            "port": 2982,
+            "create_seconds": 51.12850288115442,
+            "first_query_seconds": 0.036644378677010536,
+            "ready_seconds": 51.16514725983143,
+            "qps": {
+              "10": 139.54855102664507,
+              "100": 127.6281486202505
+            },
+            "recall": {
+              "10": 0.992529296875,
+              "100": 0.995654296875
+            },
+            "latency": {
+              "10": {
+                "p50_ms": 7.178208790719509,
+                "p95_ms": 7.681580726057291,
+                "p99_ms": 7.997858989983798
+              },
+              "100": {
+                "p50_ms": 7.810202427208424,
+                "p95_ms": 8.423827588558197,
+                "p99_ms": 8.753216546028854
+              }
+            },
+            "evidence": {
+              "passed": true,
+              "gpu_serves": 8193,
+              "gpu_snapshot_builds": 1,
+              "cpu_fallbacks": 0
+            },
+            "resources": {
+              "samples": 88,
+              "errors": [],
+              "peak_rss_bytes": 2913681408,
+              "peak_vram_bytes": 734212096,
+              "peak_gpu_percent": 97
+            },
+            "dataset": "siftlike250k-d128",
+            "round": 0
+          },
+          {
+            "role": "baseline",
+            "observer": "/root/worker-v5/build_eval/src/observer/seekdb",
+            "observer_sha256": "a55770e7049dd8ee3437b99009454cf56df728c4c564e40d7f49125570c6ae09",
+            "bridge_sha256": "030b36246e3fc4e92743e432d00979f7a729fdf36fb8b6ff482b75fb008e9da6",
+            "port": 2982,
+            "create_seconds": 50.87730275839567,
+            "first_query_seconds": 0.08167190663516521,
+            "ready_seconds": 50.95897466503084,
+            "qps": {
+              "10": 138.81365233056053,
+              "100": 122.82028752543638
+            },
+            "recall": {
+              "10": 0.9923095703125,
+              "100": 0.99569580078125
+            },
+            "latency": {
+              "10": {
+                "p50_ms": 7.198639214038849,
+                "p95_ms": 7.735603954643011,
+                "p99_ms": 8.019489236176016
+              },
+              "100": {
+                "p50_ms": 8.159426040947437,
+                "p95_ms": 8.660708088427782,
+                "p99_ms": 8.994041848927736
+              }
+            },
+            "evidence": {
+              "passed": true,
+              "gpu_serves": 8193,
+              "gpu_snapshot_builds": 1,
+              "cpu_fallbacks": 0
+            },
+            "resources": {
+              "samples": 87,
+              "errors": [],
+              "peak_rss_bytes": 2913214464,
+              "peak_vram_bytes": 734228480,
+              "peak_gpu_percent": 100
+            },
+            "dataset": "siftlike250k-d128",
+            "round": 1
+          },
+          {
+            "role": "baseline",
+            "observer": "/root/worker-v5/build_eval/src/observer/seekdb",
+            "observer_sha256": "a55770e7049dd8ee3437b99009454cf56df728c4c564e40d7f49125570c6ae09",
+            "bridge_sha256": "030b36246e3fc4e92743e432d00979f7a729fdf36fb8b6ff482b75fb008e9da6",
+            "port": 2982,
+            "create_seconds": 50.73318496532738,
+            "first_query_seconds": 0.03748580254614353,
+            "ready_seconds": 50.770670767873526,
+            "qps": {
+              "10": 141.19493297331803,
+              "100": 125.09430048226416
+            },
+            "recall": {
+              "10": 0.9923828125,
+              "100": 0.99574951171875
+            },
+            "latency": {
+              "10": {
+                "p50_ms": 7.089701481163502,
+                "p95_ms": 7.646976970136166,
+                "p99_ms": 8.008778933435678
+              },
+              "100": {
+                "p50_ms": 7.973391562700272,
+                "p95_ms": 8.73411912471056,
+                "p99_ms": 9.251617174595596
+              }
+            },
+            "evidence": {
+              "passed": true,
+              "gpu_serves": 8193,
+              "gpu_snapshot_builds": 1,
+              "cpu_fallbacks": 0
+            },
+            "resources": {
+              "samples": 88,
+              "errors": [],
+              "peak_rss_bytes": 2999214080,
+              "peak_vram_bytes": 734224384,
+              "peak_gpu_percent": 100
+            },
+            "dataset": "siftlike250k-d128",
+            "round": 2
+          },
+          {
+            "role": "baseline",
+            "observer": "/root/worker-v5/build_eval/src/observer/seekdb",
+            "observer_sha256": "a55770e7049dd8ee3437b99009454cf56df728c4c564e40d7f49125570c6ae09",
+            "bridge_sha256": "030b36246e3fc4e92743e432d00979f7a729fdf36fb8b6ff482b75fb008e9da6",
+            "port": 2982,
+            "create_seconds": 57.43502185307443,
+            "first_query_seconds": 0.035868141800165176,
+            "ready_seconds": 57.4708899948746,
+            "qps": {
+              "10": 138.7991234195245,
+              "100": 121.50069136413855
+            },
+            "recall": {
+              "10": 0.9923095703125,
+              "100": 0.99571533203125
+            },
+            "latency": {
+              "10": {
+                "p50_ms": 7.183177396655083,
+                "p95_ms": 7.828524336218834,
+                "p99_ms": 8.21870155632496
+              },
+              "100": {
+                "p50_ms": 8.194283582270145,
+                "p95_ms": 8.910381700843573,
+                "p99_ms": 9.368383511900904
+              }
+            },
+            "evidence": {
+              "passed": true,
+              "gpu_serves": 8193,
+              "gpu_snapshot_builds": 1,
+              "cpu_fallbacks": 0
+            },
+            "resources": {
+              "samples": 92,
+              "errors": [],
+              "peak_rss_bytes": 2916016128,
+              "peak_vram_bytes": 734224384,
+              "peak_gpu_percent": 100
+            },
+            "dataset": "siftlike250k-d128",
+            "round": 3
+          },
+          {
+            "role": "baseline",
+            "observer": "/root/worker-v5/build_eval/src/observer/seekdb",
+            "observer_sha256": "a55770e7049dd8ee3437b99009454cf56df728c4c564e40d7f49125570c6ae09",
+            "bridge_sha256": "030b36246e3fc4e92743e432d00979f7a729fdf36fb8b6ff482b75fb008e9da6",
+            "port": 2982,
+            "create_seconds": 53.12071333825588,
+            "first_query_seconds": 0.038054488599300385,
+            "ready_seconds": 53.15876782685518,
+            "qps": {
+              "10": 138.52110549839165,
+              "100": 124.69182753785425
+            },
+            "recall": {
+              "10": 0.9925048828125,
+              "100": 0.9956591796875
+            },
+            "latency": {
+              "10": {
+                "p50_ms": 7.187996059656143,
+                "p95_ms": 7.709669414907694,
+                "p99_ms": 8.154761884361507
+              },
+              "100": {
+                "p50_ms": 8.03203135728836,
+                "p95_ms": 8.58316384255886,
+                "p99_ms": 8.874139934778214
+              }
+            },
+            "evidence": {
+              "passed": true,
+              "gpu_serves": 8193,
+              "gpu_snapshot_builds": 1,
+              "cpu_fallbacks": 0
+            },
+            "resources": {
+              "samples": 88,
+              "errors": [],
+              "peak_rss_bytes": 3049009152,
+              "peak_vram_bytes": 734212096,
+              "peak_gpu_percent": 100
+            },
+            "dataset": "siftlike250k-d128",
+            "round": 4
+          }
+        ],
+        "averages": [
+          {
+            "dataset": "siftlike250k-d128",
+            "ready_seconds": 52.70489010289312,
+            "qps": {
+              "10": 139.37547304968797,
+              "100": 124.34705110598877
+            },
+            "recall": {
+              "10": 0.9924072265625,
+              "100": 0.99569482421875
+            }
+          }
+        ],
+        "errors": []
+      },
+      "candidate": {
+        "status": "COMPLETE",
+        "revision": "b4718ba2a",
+        "role": "candidate",
+        "round_count": 5,
+        "runs": [
+          {
+            "role": "candidate",
+            "observer": "/root/worker/build_eval/src/observer/seekdb",
+            "observer_sha256": "520d4c25338e545739a4fdf42cce6a8649b2594c41cc19160adf39fa7062d81f",
+            "bridge_sha256": "a37c3d20d13275cf54675a3eaf9e4af65712dcc54c7c833faa6bf931989522bf",
+            "port": 2982,
+            "create_seconds": 6.461597146466374,
+            "first_query_seconds": 0.025196176022291183,
+            "ready_seconds": 6.486793322488666,
+            "qps": {
+              "10": 973.1953896160126,
+              "100": 501.69299588465634
+            },
+            "recall": {
+              "10": 0.992724609375,
+              "100": 0.9957177734375
+            },
+            "latency": {
+              "10": {
+                "p50_ms": 0.9880317375063896,
+                "p95_ms": 1.2251678854227066,
+                "p99_ms": 1.2604797258973122
+              },
+              "100": {
+                "p50_ms": 1.9712410867214203,
+                "p95_ms": 2.05941591411829,
+                "p99_ms": 2.3211715742945684
+              }
+            },
+            "evidence": {
+              "passed": true,
+              "gpu_serves": 8193,
+              "gpu_snapshot_builds": 1,
+              "cpu_fallbacks": 0
+            },
+            "resources": {
+              "samples": 25,
+              "errors": [],
+              "peak_rss_bytes": 2221236224,
+              "peak_vram_bytes": 730898432,
+              "peak_gpu_percent": 68
+            },
+            "dataset": "siftlike250k-d128",
+            "round": 0,
+            "comparison": {
+              "build_speedup": 8.124952882370057,
+              "recall": {
+                "10": 0.992724609375,
+                "100": 0.9957177734375
+              },
+              "baseline_recall": {
+                "10": 0.9924072265625,
+                "100": 0.99569482421875
+              },
+              "recall_delta": {
+                "10": -0.0003173828124999334,
+                "100": -2.2949218750012434e-05
+              },
+              "query_qps_ratio": {
+                "10": 6.982544118570017,
+                "100": 4.0346191680656105
+              },
+              "query_speedup": 5.307721388943318
+            },
+            "resources_comparison": {
+              "baseline_vram_bytes": 734220288.0,
+              "candidate_vram_bytes": 730898432,
+              "candidate_rss_bytes": 2221236224
+            },
+            "gates": [
+              {
+                "name": "recall@10_minimum",
+                "passed": true,
+                "actual": 0.992724609375,
+                "limit": 0.95
+              },
+              {
+                "name": "recall@100_minimum",
+                "passed": true,
+                "actual": 0.9957177734375,
+                "limit": 0.95
+              },
+              {
+                "name": "recall@10_baseline_delta",
+                "passed": true,
+                "actual": -0.0003173828124999334,
+                "limit": 0.005
+              },
+              {
+                "name": "query_regression@10",
+                "passed": true,
+                "actual": 6.982544118570017,
+                "limit": 0.9
+              },
+              {
+                "name": "recall@100_baseline_delta",
+                "passed": true,
+                "actual": -2.2949218750012434e-05,
+                "limit": 0.005
+              },
+              {
+                "name": "query_regression@100",
+                "passed": true,
+                "actual": 4.0346191680656105,
+                "limit": 0.9
+              },
+              {
+                "name": "relative_vram_limit",
+                "passed": true,
+                "actual": 730898432,
+                "limit": 917775360.0
+              },
+              {
+                "name": "physical_vram_limit",
+                "passed": true,
+                "actual": 730898432,
+                "limit": 48318382080
+              },
+              {
+                "name": "host_memory_limit",
+                "passed": true,
+                "actual": 2221236224,
+                "limit": 103079215104
+              }
+            ],
+            "passed": true
+          },
+          {
+            "role": "candidate",
+            "observer": "/root/worker/build_eval/src/observer/seekdb",
+            "observer_sha256": "520d4c25338e545739a4fdf42cce6a8649b2594c41cc19160adf39fa7062d81f",
+            "bridge_sha256": "a37c3d20d13275cf54675a3eaf9e4af65712dcc54c7c833faa6bf931989522bf",
+            "port": 2982,
+            "create_seconds": 6.4630010314285755,
+            "first_query_seconds": 0.02618386782705784,
+            "ready_seconds": 6.489184899255633,
+            "qps": {
+              "10": 933.9748650713864,
+              "100": 499.9585285607922
+            },
+            "recall": {
+              "10": 0.992333984375,
+              "100": 0.995625
+            },
+            "latency": {
+              "10": {
+                "p50_ms": 0.9990883991122246,
+                "p95_ms": 1.2459619902074337,
+                "p99_ms": 1.2996015138924133
+              },
+              "100": {
+                "p50_ms": 1.9736513495445251,
+                "p95_ms": 2.1755965426564217,
+                "p99_ms": 2.476056478917599
+              }
+            },
+            "evidence": {
+              "passed": true,
+              "gpu_serves": 8193,
+              "gpu_snapshot_builds": 1,
+              "cpu_fallbacks": 0
+            },
+            "resources": {
+              "samples": 25,
+              "errors": [],
+              "peak_rss_bytes": 2417557504,
+              "peak_vram_bytes": 730906624,
+              "peak_gpu_percent": 88
+            },
+            "dataset": "siftlike250k-d128",
+            "round": 1,
+            "comparison": {
+              "build_speedup": 8.121958446420418,
+              "recall": {
+                "10": 0.992333984375,
+                "100": 0.995625
+              },
+              "baseline_recall": {
+                "10": 0.9924072265625,
+                "100": 0.99569482421875
+              },
+              "recall_delta": {
+                "10": 7.324218750004441e-05,
+                "100": 6.982421875001421e-05
+              },
+              "query_qps_ratio": {
+                "10": 6.701142206982287,
+                "100": 4.020670567689187
+              },
+              "query_speedup": 5.190672908353352
+            },
+            "resources_comparison": {
+              "baseline_vram_bytes": 734220288.0,
+              "candidate_vram_bytes": 730906624,
+              "candidate_rss_bytes": 2417557504
+            },
+            "gates": [
+              {
+                "name": "recall@10_minimum",
+                "passed": true,
+                "actual": 0.992333984375,
+                "limit": 0.95
+              },
+              {
+                "name": "recall@100_minimum",
+                "passed": true,
+                "actual": 0.995625,
+                "limit": 0.95
+              },
+              {
+                "name": "recall@10_baseline_delta",
+                "passed": true,
+                "actual": 7.324218750004441e-05,
+                "limit": 0.005
+              },
+              {
+                "name": "query_regression@10",
+                "passed": true,
+                "actual": 6.701142206982287,
+                "limit": 0.9
+              },
+              {
+                "name": "recall@100_baseline_delta",
+                "passed": true,
+                "actual": 6.982421875001421e-05,
+                "limit": 0.005
+              },
+              {
+                "name": "query_regression@100",
+                "passed": true,
+                "actual": 4.020670567689187,
+                "limit": 0.9
+              },
+              {
+                "name": "relative_vram_limit",
+                "passed": true,
+                "actual": 730906624,
+                "limit": 917775360.0
+              },
+              {
+                "name": "physical_vram_limit",
+                "passed": true,
+                "actual": 730906624,
+                "limit": 48318382080
+              },
+              {
+                "name": "host_memory_limit",
+                "passed": true,
+                "actual": 2417557504,
+                "limit": 103079215104
+              }
+            ],
+            "passed": true
+          },
+          {
+            "role": "candidate",
+            "observer": "/root/worker/build_eval/src/observer/seekdb",
+            "observer_sha256": "520d4c25338e545739a4fdf42cce6a8649b2594c41cc19160adf39fa7062d81f",
+            "bridge_sha256": "a37c3d20d13275cf54675a3eaf9e4af65712dcc54c7c833faa6bf931989522bf",
+            "port": 2982,
+            "create_seconds": 6.454112423583865,
+            "first_query_seconds": 0.024506479501724243,
+            "ready_seconds": 6.478618903085589,
+            "qps": {
+              "10": 926.617800801354,
+              "100": 495.82434926839835
+            },
+            "recall": {
+              "10": 0.9924560546875,
+              "100": 0.99573974609375
+            },
+            "latency": {
+              "10": {
+                "p50_ms": 1.011418178677559,
+                "p95_ms": 1.2492076493799686,
+                "p99_ms": 1.2790529988706116
+              },
+              "100": {
+                "p50_ms": 1.972690224647522,
+                "p95_ms": 2.0767487585544586,
+                "p99_ms": 2.2034029476344625
+              }
+            },
+            "evidence": {
+              "passed": true,
+              "gpu_serves": 8193,
+              "gpu_snapshot_builds": 1,
+              "cpu_fallbacks": 0
+            },
+            "resources": {
+              "samples": 25,
+              "errors": [],
+              "peak_rss_bytes": 2403676160,
+              "peak_vram_bytes": 730906624,
+              "peak_gpu_percent": 71
+            },
+            "dataset": "siftlike250k-d128",
+            "round": 2,
+            "comparison": {
+              "build_speedup": 8.135204569262628,
+              "recall": {
+                "10": 0.9924560546875,
+                "100": 0.99573974609375
+              },
+              "baseline_recall": {
+                "10": 0.9924072265625,
+                "100": 0.99569482421875
+              },
+              "recall_delta": {
+                "10": -4.882812499995559e-05,
+                "100": -4.492187500004796e-05
+              },
+              "query_qps_ratio": {
+                "10": 6.648356274787392,
+                "100": 3.987423464073758
+              },
+              "query_speedup": 5.148767989296978
+            },
+            "resources_comparison": {
+              "baseline_vram_bytes": 734220288.0,
+              "candidate_vram_bytes": 730906624,
+              "candidate_rss_bytes": 2403676160
+            },
+            "gates": [
+              {
+                "name": "recall@10_minimum",
+                "passed": true,
+                "actual": 0.9924560546875,
+                "limit": 0.95
+              },
+              {
+                "name": "recall@100_minimum",
+                "passed": true,
+                "actual": 0.99573974609375,
+                "limit": 0.95
+              },
+              {
+                "name": "recall@10_baseline_delta",
+                "passed": true,
+                "actual": -4.882812499995559e-05,
+                "limit": 0.005
+              },
+              {
+                "name": "query_regression@10",
+                "passed": true,
+                "actual": 6.648356274787392,
+                "limit": 0.9
+              },
+              {
+                "name": "recall@100_baseline_delta",
+                "passed": true,
+                "actual": -4.492187500004796e-05,
+                "limit": 0.005
+              },
+              {
+                "name": "query_regression@100",
+                "passed": true,
+                "actual": 3.987423464073758,
+                "limit": 0.9
+              },
+              {
+                "name": "relative_vram_limit",
+                "passed": true,
+                "actual": 730906624,
+                "limit": 917775360.0
+              },
+              {
+                "name": "physical_vram_limit",
+                "passed": true,
+                "actual": 730906624,
+                "limit": 48318382080
+              },
+              {
+                "name": "host_memory_limit",
+                "passed": true,
+                "actual": 2403676160,
+                "limit": 103079215104
+              }
+            ],
+            "passed": true
+          },
+          {
+            "role": "candidate",
+            "observer": "/root/worker/build_eval/src/observer/seekdb",
+            "observer_sha256": "520d4c25338e545739a4fdf42cce6a8649b2594c41cc19160adf39fa7062d81f",
+            "bridge_sha256": "a37c3d20d13275cf54675a3eaf9e4af65712dcc54c7c833faa6bf931989522bf",
+            "port": 2982,
+            "create_seconds": 6.460691092535853,
+            "first_query_seconds": 0.04617688059806824,
+            "ready_seconds": 6.506867973133922,
+            "qps": {
+              "10": 965.4672149131273,
+              "100": 503.65427638739493
+            },
+            "recall": {
+              "10": 0.99248046875,
+              "100": 0.99571044921875
+            },
+            "latency": {
+              "10": {
+                "p50_ms": 0.9905733168125153,
+                "p95_ms": 1.2216521427035332,
+                "p99_ms": 1.257137954235077
+              },
+              "100": {
+                "p50_ms": 1.9534062594175339,
+                "p95_ms": 2.024504356086254,
+                "p99_ms": 2.4105920456349854
+              }
+            },
+            "evidence": {
+              "passed": true,
+              "gpu_serves": 8193,
+              "gpu_snapshot_builds": 1,
+              "cpu_fallbacks": 0
+            },
+            "resources": {
+              "samples": 25,
+              "errors": [],
+              "peak_rss_bytes": 2404007936,
+              "peak_vram_bytes": 730910720,
+              "peak_gpu_percent": 82
+            },
+            "dataset": "siftlike250k-d128",
+            "round": 3,
+            "comparison": {
+              "build_speedup": 8.09988620032023,
+              "recall": {
+                "10": 0.99248046875,
+                "100": 0.99571044921875
+              },
+              "baseline_recall": {
+                "10": 0.9924072265625,
+                "100": 0.99569482421875
+              },
+              "recall_delta": {
+                "10": -7.324218749993339e-05,
+                "100": -1.5624999999963585e-05
+              },
+              "query_qps_ratio": {
+                "10": 6.92709551966101,
+                "100": 4.050391801877947
+              },
+              "query_speedup": 5.296928440488922
+            },
+            "resources_comparison": {
+              "baseline_vram_bytes": 734220288.0,
+              "candidate_vram_bytes": 730910720,
+              "candidate_rss_bytes": 2404007936
+            },
+            "gates": [
+              {
+                "name": "recall@10_minimum",
+                "passed": true,
+                "actual": 0.99248046875,
+                "limit": 0.95
+              },
+              {
+                "name": "recall@100_minimum",
+                "passed": true,
+                "actual": 0.99571044921875,
+                "limit": 0.95
+              },
+              {
+                "name": "recall@10_baseline_delta",
+                "passed": true,
+                "actual": -7.324218749993339e-05,
+                "limit": 0.005
+              },
+              {
+                "name": "query_regression@10",
+                "passed": true,
+                "actual": 6.92709551966101,
+                "limit": 0.9
+              },
+              {
+                "name": "recall@100_baseline_delta",
+                "passed": true,
+                "actual": -1.5624999999963585e-05,
+                "limit": 0.005
+              },
+              {
+                "name": "query_regression@100",
+                "passed": true,
+                "actual": 4.050391801877947,
+                "limit": 0.9
+              },
+              {
+                "name": "relative_vram_limit",
+                "passed": true,
+                "actual": 730910720,
+                "limit": 917775360.0
+              },
+              {
+                "name": "physical_vram_limit",
+                "passed": true,
+                "actual": 730910720,
+                "limit": 48318382080
+              },
+              {
+                "name": "host_memory_limit",
+                "passed": true,
+                "actual": 2404007936,
+                "limit": 103079215104
+              }
+            ],
+            "passed": true
+          },
+          {
+            "role": "candidate",
+            "observer": "/root/worker/build_eval/src/observer/seekdb",
+            "observer_sha256": "520d4c25338e545739a4fdf42cce6a8649b2594c41cc19160adf39fa7062d81f",
+            "bridge_sha256": "a37c3d20d13275cf54675a3eaf9e4af65712dcc54c7c833faa6bf931989522bf",
+            "port": 2982,
+            "create_seconds": 6.259712653234601,
+            "first_query_seconds": 0.02493174746632576,
+            "ready_seconds": 6.284644400700927,
+            "qps": {
+              "10": 960.5888961627817,
+              "100": 504.6160246103649
+            },
+            "recall": {
+              "10": 0.9925537109375,
+              "100": 0.99569091796875
+            },
+            "latency": {
+              "10": {
+                "p50_ms": 0.9820926934480667,
+                "p95_ms": 1.2240340001881123,
+                "p99_ms": 1.2896766886115079
+              },
+              "100": {
+                "p50_ms": 1.9608121365308762,
+                "p95_ms": 2.1165586076676846,
+                "p99_ms": 2.403823006898165
+              }
+            },
+            "evidence": {
+              "passed": true,
+              "gpu_serves": 8193,
+              "gpu_snapshot_builds": 1,
+              "cpu_fallbacks": 0
+            },
+            "resources": {
+              "samples": 25,
+              "errors": [],
+              "peak_rss_bytes": 2415214592,
+              "peak_vram_bytes": 730898432,
+              "peak_gpu_percent": 69
+            },
+            "dataset": "siftlike250k-d128",
+            "round": 4,
+            "comparison": {
+              "build_speedup": 8.386296302940377,
+              "recall": {
+                "10": 0.9925537109375,
+                "100": 0.99569091796875
+              },
+              "baseline_recall": {
+                "10": 0.9924072265625,
+                "100": 0.99569482421875
+              },
+              "recall_delta": {
+                "10": -0.0001464843749999778,
+                "100": 3.906250000018652e-06
+              },
+              "query_qps_ratio": {
+                "10": 6.8920942483210625,
+                "100": 4.058126188937517
+              },
+              "query_speedup": 5.288571467394322
+            },
+            "resources_comparison": {
+              "baseline_vram_bytes": 734220288.0,
+              "candidate_vram_bytes": 730898432,
+              "candidate_rss_bytes": 2415214592
+            },
+            "gates": [
+              {
+                "name": "recall@10_minimum",
+                "passed": true,
+                "actual": 0.9925537109375,
+                "limit": 0.95
+              },
+              {
+                "name": "recall@100_minimum",
+                "passed": true,
+                "actual": 0.99569091796875,
+                "limit": 0.95
+              },
+              {
+                "name": "recall@10_baseline_delta",
+                "passed": true,
+                "actual": -0.0001464843749999778,
+                "limit": 0.005
+              },
+              {
+                "name": "query_regression@10",
+                "passed": true,
+                "actual": 6.8920942483210625,
+                "limit": 0.9
+              },
+              {
+                "name": "recall@100_baseline_delta",
+                "passed": true,
+                "actual": 3.906250000018652e-06,
+                "limit": 0.005
+              },
+              {
+                "name": "query_regression@100",
+                "passed": true,
+                "actual": 4.058126188937517,
+                "limit": 0.9
+              },
+              {
+                "name": "relative_vram_limit",
+                "passed": true,
+                "actual": 730898432,
+                "limit": 917775360.0
+              },
+              {
+                "name": "physical_vram_limit",
+                "passed": true,
+                "actual": 730898432,
+                "limit": 48318382080
+              },
+              {
+                "name": "host_memory_limit",
+                "passed": true,
+                "actual": 2415214592,
+                "limit": 103079215104
+              }
+            ],
+            "passed": true
+          }
+        ],
+        "averages": [
+          {
+            "dataset": "siftlike250k-d128",
+            "ready_seconds": 6.449221899732947,
+            "qps": {
+              "10": 951.9688333129324,
+              "100": 501.14923494232136
+            },
+            "recall": {
+              "10": 0.9925097656249999,
+              "100": 0.99569677734375
+            }
+          }
+        ],
+        "errors": []
+      },
+      "comparison": {
+        "build_speedup": 8.17228666067073,
+        "qps_ratio": {
+          "10": 6.830246473664353,
+          "100": 4.030246238128804
+        },
+        "recall_delta": {
+          "10": -0.00010253906249990674,
+          "100": -1.9531249999538147e-06
+        }
+      }
+    },
+    "imagelike250k-d256": {
+      "baseline": {
+        "status": "COMPLETE",
+        "revision": "634888d9b037153fa143d2c913ba4b25503e1d62",
+        "role": "baseline",
+        "round_count": 5,
+        "runs": [
+          {
+            "role": "baseline",
+            "observer": "/root/worker-v5/build_eval/src/observer/seekdb",
+            "observer_sha256": "a55770e7049dd8ee3437b99009454cf56df728c4c564e40d7f49125570c6ae09",
+            "bridge_sha256": "030b36246e3fc4e92743e432d00979f7a729fdf36fb8b6ff482b75fb008e9da6",
+            "port": 2982,
+            "create_seconds": 59.169641172513366,
+            "first_query_seconds": 0.04499487020075321,
+            "ready_seconds": 59.21463604271412,
+            "qps": {
+              "10": 121.16347713460183,
+              "100": 110.59338167477814
+            },
+            "recall": {
+              "10": 0.9999267578125,
+              "100": 0.99994140625
+            },
+            "latency": {
+              "10": {
+                "p50_ms": 8.25728289783001,
+                "p95_ms": 8.831668179482222,
+                "p99_ms": 9.217783249914646
+              },
+              "100": {
+                "p50_ms": 9.032102301716805,
+                "p95_ms": 9.655450005084276,
+                "p99_ms": 9.955922607332468
+              }
+            },
+            "evidence": {
+              "passed": true,
+              "gpu_serves": 8193,
+              "gpu_snapshot_builds": 1,
+              "cpu_fallbacks": 0
+            },
+            "resources": {
+              "samples": 107,
+              "errors": [],
+              "peak_rss_bytes": 3411660800,
+              "peak_vram_bytes": 862392320,
+              "peak_gpu_percent": 100
+            },
+            "dataset": "imagelike250k-d256",
+            "round": 0
+          },
+          {
+            "role": "baseline",
+            "observer": "/root/worker-v5/build_eval/src/observer/seekdb",
+            "observer_sha256": "a55770e7049dd8ee3437b99009454cf56df728c4c564e40d7f49125570c6ae09",
+            "bridge_sha256": "030b36246e3fc4e92743e432d00979f7a729fdf36fb8b6ff482b75fb008e9da6",
+            "port": 2982,
+            "create_seconds": 59.16676101461053,
+            "first_query_seconds": 0.03611651621758938,
+            "ready_seconds": 59.20287753082812,
+            "qps": {
+              "10": 122.13388908808193,
+              "100": 111.62621394517042
+            },
+            "recall": {
+              "10": 0.999951171875,
+              "100": 0.99994384765625
+            },
+            "latency": {
+              "10": {
+                "p50_ms": 8.186017163097858,
+                "p95_ms": 8.74365633353591,
+                "p99_ms": 9.067651629447937
+              },
+              "100": {
+                "p50_ms": 8.944664150476456,
+                "p95_ms": 9.559995494782925,
+                "p99_ms": 9.87071553245187
+              }
+            },
+            "evidence": {
+              "passed": true,
+              "gpu_serves": 8193,
+              "gpu_snapshot_builds": 1,
+              "cpu_fallbacks": 0
+            },
+            "resources": {
+              "samples": 105,
+              "errors": [],
+              "peak_rss_bytes": 3407540224,
+              "peak_vram_bytes": 862392320,
+              "peak_gpu_percent": 100
+            },
+            "dataset": "imagelike250k-d256",
+            "round": 1
+          },
+          {
+            "role": "baseline",
+            "observer": "/root/worker-v5/build_eval/src/observer/seekdb",
+            "observer_sha256": "a55770e7049dd8ee3437b99009454cf56df728c4c564e40d7f49125570c6ae09",
+            "bridge_sha256": "030b36246e3fc4e92743e432d00979f7a729fdf36fb8b6ff482b75fb008e9da6",
+            "port": 2982,
+            "create_seconds": 58.972457099705935,
+            "first_query_seconds": 0.03981487639248371,
+            "ready_seconds": 59.01227197609842,
+            "qps": {
+              "10": 121.89173681771466,
+              "100": 111.86700865090381
+            },
+            "recall": {
+              "10": 0.999951171875,
+              "100": 0.9999462890625
+            },
+            "latency": {
+              "10": {
+                "p50_ms": 8.216573856770992,
+                "p95_ms": 8.742670994251966,
+                "p99_ms": 9.033222403377296
+              },
+              "100": {
+                "p50_ms": 8.920520544052124,
+                "p95_ms": 9.542243089526892,
+                "p99_ms": 9.886583779007198
+              }
+            },
+            "evidence": {
+              "passed": true,
+              "gpu_serves": 8193,
+              "gpu_snapshot_builds": 1,
+              "cpu_fallbacks": 0
+            },
+            "resources": {
+              "samples": 105,
+              "errors": [],
+              "peak_rss_bytes": 3414593536,
+              "peak_vram_bytes": 862388224,
+              "peak_gpu_percent": 100
+            },
+            "dataset": "imagelike250k-d256",
+            "round": 2
+          },
+          {
+            "role": "baseline",
+            "observer": "/root/worker-v5/build_eval/src/observer/seekdb",
+            "observer_sha256": "a55770e7049dd8ee3437b99009454cf56df728c4c564e40d7f49125570c6ae09",
+            "bridge_sha256": "030b36246e3fc4e92743e432d00979f7a729fdf36fb8b6ff482b75fb008e9da6",
+            "port": 2982,
+            "create_seconds": 60.12121691927314,
+            "first_query_seconds": 0.04023351892828941,
+            "ready_seconds": 60.16145043820143,
+            "qps": {
+              "10": 122.55238123719818,
+              "100": 112.03073317248976
+            },
+            "recall": {
+              "10": 0.999951171875,
+              "100": 0.99994140625
+            },
+            "latency": {
+              "10": {
+                "p50_ms": 8.160301484167576,
+                "p95_ms": 8.737343829125166,
+                "p99_ms": 9.007161855697634
+              },
+              "100": {
+                "p50_ms": 8.913840167224407,
+                "p95_ms": 9.540828876197338,
+                "p99_ms": 9.866456780582666
+              }
+            },
+            "evidence": {
+              "passed": true,
+              "gpu_serves": 8193,
+              "gpu_snapshot_builds": 1,
+              "cpu_fallbacks": 0
+            },
+            "resources": {
+              "samples": 105,
+              "errors": [],
+              "peak_rss_bytes": 3431219200,
+              "peak_vram_bytes": 862392320,
+              "peak_gpu_percent": 100
+            },
+            "dataset": "imagelike250k-d256",
+            "round": 3
+          },
+          {
+            "role": "baseline",
+            "observer": "/root/worker-v5/build_eval/src/observer/seekdb",
+            "observer_sha256": "a55770e7049dd8ee3437b99009454cf56df728c4c564e40d7f49125570c6ae09",
+            "bridge_sha256": "030b36246e3fc4e92743e432d00979f7a729fdf36fb8b6ff482b75fb008e9da6",
+            "port": 2982,
+            "create_seconds": 59.097438022494316,
+            "first_query_seconds": 0.035523636266589165,
+            "ready_seconds": 59.132961658760905,
+            "qps": {
+              "10": 122.09913840529231,
+              "100": 111.91194145255088
+            },
+            "recall": {
+              "10": 0.9999267578125,
+              "100": 0.99995361328125
+            },
+            "latency": {
+              "10": {
+                "p50_ms": 8.17907229065895,
+                "p95_ms": 8.766507729887962,
+                "p99_ms": 9.101240057498217
+              },
+              "100": {
+                "p50_ms": 8.925644680857658,
+                "p95_ms": 9.552793111652136,
+                "p99_ms": 9.85250035300851
+              }
+            },
+            "evidence": {
+              "passed": true,
+              "gpu_serves": 8193,
+              "gpu_snapshot_builds": 1,
+              "cpu_fallbacks": 0
+            },
+            "resources": {
+              "samples": 106,
+              "errors": [],
+              "peak_rss_bytes": 3408359424,
+              "peak_vram_bytes": 862388224,
+              "peak_gpu_percent": 100
+            },
+            "dataset": "imagelike250k-d256",
+            "round": 4
+          }
+        ],
+        "averages": [
+          {
+            "dataset": "imagelike250k-d256",
+            "ready_seconds": 59.344839529320595,
+            "qps": {
+              "10": 121.96812453657778,
+              "100": 111.6058557791786
+            },
+            "recall": {
+              "10": 0.99994140625,
+              "100": 0.9999453125000001
+            }
+          }
+        ],
+        "errors": []
+      },
+      "candidate": {
+        "status": "COMPLETE",
+        "revision": "b4718ba2a",
+        "role": "candidate",
+        "round_count": 5,
+        "runs": [
+          {
+            "role": "candidate",
+            "observer": "/root/worker/build_eval/src/observer/seekdb",
+            "observer_sha256": "520d4c25338e545739a4fdf42cce6a8649b2594c41cc19160adf39fa7062d81f",
+            "bridge_sha256": "a37c3d20d13275cf54675a3eaf9e4af65712dcc54c7c833faa6bf931989522bf",
+            "port": 2982,
+            "create_seconds": 8.37704917229712,
+            "first_query_seconds": 0.030083127319812775,
+            "ready_seconds": 8.407132299616933,
+            "qps": {
+              "10": 700.8270800768682,
+              "100": 473.86987835387635
+            },
+            "recall": {
+              "10": 0.9999267578125,
+              "100": 0.99996337890625
+            },
+            "latency": {
+              "10": {
+                "p50_ms": 1.2985775247216225,
+                "p95_ms": 1.3274364173412323,
+                "p99_ms": 1.4351983554661303
+              },
+              "100": {
+                "p50_ms": 2.086825668811798,
+                "p95_ms": 2.1618297323584557,
+                "p99_ms": 2.339067682623865
+              }
+            },
+            "evidence": {
+              "passed": true,
+              "gpu_serves": 8193,
+              "gpu_snapshot_builds": 1,
+              "cpu_fallbacks": 0
+            },
+            "resources": {
+              "samples": 32,
+              "errors": [],
+              "peak_rss_bytes": 2728456192,
+              "peak_vram_bytes": 859144192,
+              "peak_gpu_percent": 73
+            },
+            "dataset": "imagelike250k-d256",
+            "round": 0,
+            "comparison": {
+              "build_speedup": 7.058868281640414,
+              "recall": {
+                "10": 0.9999267578125,
+                "100": 0.99996337890625
+              },
+              "baseline_recall": {
+                "10": 0.99994140625,
+                "100": 0.9999453125000001
+              },
+              "recall_delta": {
+                "10": 1.46484375000977e-05,
+                "100": -1.8066406249905853e-05
+              },
+              "query_qps_ratio": {
+                "10": 5.7459855412197705,
+                "100": 4.2459230749636205
+              },
+              "query_speedup": 4.939333213893587
+            },
+            "resources_comparison": {
+              "baseline_vram_bytes": 862390681.6,
+              "candidate_vram_bytes": 859144192,
+              "candidate_rss_bytes": 2728456192
+            },
+            "gates": [
+              {
+                "name": "recall@10_minimum",
+                "passed": true,
+                "actual": 0.9999267578125,
+                "limit": 0.9
+              },
+              {
+                "name": "recall@100_minimum",
+                "passed": true,
+                "actual": 0.99996337890625,
+                "limit": 0.85
+              },
+              {
+                "name": "recall@10_baseline_delta",
+                "passed": true,
+                "actual": 1.46484375000977e-05,
+                "limit": 0.005
+              },
+              {
+                "name": "query_regression@10",
+                "passed": true,
+                "actual": 5.7459855412197705,
+                "limit": 0.9
+              },
+              {
+                "name": "recall@100_baseline_delta",
+                "passed": true,
+                "actual": -1.8066406249905853e-05,
+                "limit": 0.005
+              },
+              {
+                "name": "query_regression@100",
+                "passed": true,
+                "actual": 4.2459230749636205,
+                "limit": 0.9
+              },
+              {
+                "name": "relative_vram_limit",
+                "passed": true,
+                "actual": 859144192,
+                "limit": 1077988352.0
+              },
+              {
+                "name": "physical_vram_limit",
+                "passed": true,
+                "actual": 859144192,
+                "limit": 48318382080
+              },
+              {
+                "name": "host_memory_limit",
+                "passed": true,
+                "actual": 2728456192,
+                "limit": 103079215104
+              }
+            ],
+            "passed": true
+          },
+          {
+            "role": "candidate",
+            "observer": "/root/worker/build_eval/src/observer/seekdb",
+            "observer_sha256": "520d4c25338e545739a4fdf42cce6a8649b2594c41cc19160adf39fa7062d81f",
+            "bridge_sha256": "a37c3d20d13275cf54675a3eaf9e4af65712dcc54c7c833faa6bf931989522bf",
+            "port": 2982,
+            "create_seconds": 8.272662432864308,
+            "first_query_seconds": 0.030422577634453773,
+            "ready_seconds": 8.303085010498762,
+            "qps": {
+              "10": 744.3592611011895,
+              "100": 470.49250700081274
+            },
+            "recall": {
+              "10": 0.999951171875,
+              "100": 0.9999755859375
+            },
+            "latency": {
+              "10": {
+                "p50_ms": 1.314070075750351,
+                "p95_ms": 1.3520936481654644,
+                "p99_ms": 1.4180923812091353
+              },
+              "100": {
+                "p50_ms": 2.107754349708557,
+                "p95_ms": 2.2072182036936283,
+                "p99_ms": 2.4352919310331362
+              }
+            },
+            "evidence": {
+              "passed": true,
+              "gpu_serves": 8193,
+              "gpu_snapshot_builds": 1,
+              "cpu_fallbacks": 0
+            },
+            "resources": {
+              "samples": 31,
+              "errors": [],
+              "peak_rss_bytes": 2741972992,
+              "peak_vram_bytes": 859140096,
+              "peak_gpu_percent": 78
+            },
+            "dataset": "imagelike250k-d256",
+            "round": 1,
+            "comparison": {
+              "build_speedup": 7.147324091501236,
+              "recall": {
+                "10": 0.999951171875,
+                "100": 0.9999755859375
+              },
+              "baseline_recall": {
+                "10": 0.99994140625,
+                "100": 0.9999453125000001
+              },
+              "recall_delta": {
+                "10": -9.765624999991118e-06,
+                "100": -3.0273437499950262e-05
+              },
+              "query_qps_ratio": {
+                "10": 6.102899949715624,
+                "100": 4.215661478656828
+              },
+              "query_speedup": 5.07225395915
+            },
+            "resources_comparison": {
+              "baseline_vram_bytes": 862390681.6,
+              "candidate_vram_bytes": 859140096,
+              "candidate_rss_bytes": 2741972992
+            },
+            "gates": [
+              {
+                "name": "recall@10_minimum",
+                "passed": true,
+                "actual": 0.999951171875,
+                "limit": 0.9
+              },
+              {
+                "name": "recall@100_minimum",
+                "passed": true,
+                "actual": 0.9999755859375,
+                "limit": 0.85
+              },
+              {
+                "name": "recall@10_baseline_delta",
+                "passed": true,
+                "actual": -9.765624999991118e-06,
+                "limit": 0.005
+              },
+              {
+                "name": "query_regression@10",
+                "passed": true,
+                "actual": 6.102899949715624,
+                "limit": 0.9
+              },
+              {
+                "name": "recall@100_baseline_delta",
+                "passed": true,
+                "actual": -3.0273437499950262e-05,
+                "limit": 0.005
+              },
+              {
+                "name": "query_regression@100",
+                "passed": true,
+                "actual": 4.215661478656828,
+                "limit": 0.9
+              },
+              {
+                "name": "relative_vram_limit",
+                "passed": true,
+                "actual": 859140096,
+                "limit": 1077988352.0
+              },
+              {
+                "name": "physical_vram_limit",
+                "passed": true,
+                "actual": 859140096,
+                "limit": 48318382080
+              },
+              {
+                "name": "host_memory_limit",
+                "passed": true,
+                "actual": 2741972992,
+                "limit": 103079215104
+              }
+            ],
+            "passed": true
+          },
+          {
+            "role": "candidate",
+            "observer": "/root/worker/build_eval/src/observer/seekdb",
+            "observer_sha256": "520d4c25338e545739a4fdf42cce6a8649b2594c41cc19160adf39fa7062d81f",
+            "bridge_sha256": "a37c3d20d13275cf54675a3eaf9e4af65712dcc54c7c833faa6bf931989522bf",
+            "port": 2982,
+            "create_seconds": 8.16642307676375,
+            "first_query_seconds": 0.02448190748691559,
+            "ready_seconds": 8.190904984250665,
+            "qps": {
+              "10": 758.9223969197127,
+              "100": 467.73822058709294
+            },
+            "recall": {
+              "10": 0.9999267578125,
+              "100": 0.99996826171875
+            },
+            "latency": {
+              "10": {
+                "p50_ms": 1.3011498376727104,
+                "p95_ms": 1.3378001749515533,
+                "p99_ms": 1.497266720980406
+              },
+              "100": {
+                "p50_ms": 2.102050930261612,
+                "p95_ms": 2.1961303427815437,
+                "p99_ms": 2.4269239977002153
+              }
+            },
+            "evidence": {
+              "passed": true,
+              "gpu_serves": 8193,
+              "gpu_snapshot_builds": 1,
+              "cpu_fallbacks": 0
+            },
+            "resources": {
+              "samples": 31,
+              "errors": [],
+              "peak_rss_bytes": 2592321536,
+              "peak_vram_bytes": 859136000,
+              "peak_gpu_percent": 73
+            },
+            "dataset": "imagelike250k-d256",
+            "round": 2,
+            "comparison": {
+              "build_speedup": 7.24521156617344,
+              "recall": {
+                "10": 0.9999267578125,
+                "100": 0.99996826171875
+              },
+              "baseline_recall": {
+                "10": 0.99994140625,
+                "100": 0.9999453125000001
+              },
+              "recall_delta": {
+                "10": 1.46484375000977e-05,
+                "100": -2.2949218749901412e-05
+              },
+              "query_qps_ratio": {
+                "10": 6.222301111895139,
+                "100": 4.190982787789841
+              },
+              "query_speedup": 5.1066189264911985
+            },
+            "resources_comparison": {
+              "baseline_vram_bytes": 862390681.6,
+              "candidate_vram_bytes": 859136000,
+              "candidate_rss_bytes": 2592321536
+            },
+            "gates": [
+              {
+                "name": "recall@10_minimum",
+                "passed": true,
+                "actual": 0.9999267578125,
+                "limit": 0.9
+              },
+              {
+                "name": "recall@100_minimum",
+                "passed": true,
+                "actual": 0.99996826171875,
+                "limit": 0.85
+              },
+              {
+                "name": "recall@10_baseline_delta",
+                "passed": true,
+                "actual": 1.46484375000977e-05,
+                "limit": 0.005
+              },
+              {
+                "name": "query_regression@10",
+                "passed": true,
+                "actual": 6.222301111895139,
+                "limit": 0.9
+              },
+              {
+                "name": "recall@100_baseline_delta",
+                "passed": true,
+                "actual": -2.2949218749901412e-05,
+                "limit": 0.005
+              },
+              {
+                "name": "query_regression@100",
+                "passed": true,
+                "actual": 4.190982787789841,
+                "limit": 0.9
+              },
+              {
+                "name": "relative_vram_limit",
+                "passed": true,
+                "actual": 859136000,
+                "limit": 1077988352.0
+              },
+              {
+                "name": "physical_vram_limit",
+                "passed": true,
+                "actual": 859136000,
+                "limit": 48318382080
+              },
+              {
+                "name": "host_memory_limit",
+                "passed": true,
+                "actual": 2592321536,
+                "limit": 103079215104
+              }
+            ],
+            "passed": true
+          },
+          {
+            "role": "candidate",
+            "observer": "/root/worker/build_eval/src/observer/seekdb",
+            "observer_sha256": "520d4c25338e545739a4fdf42cce6a8649b2594c41cc19160adf39fa7062d81f",
+            "bridge_sha256": "a37c3d20d13275cf54675a3eaf9e4af65712dcc54c7c833faa6bf931989522bf",
+            "port": 2982,
+            "create_seconds": 8.172733433544636,
+            "first_query_seconds": 0.024862907826900482,
+            "ready_seconds": 8.197596341371536,
+            "qps": {
+              "10": 750.32560495988,
+              "100": 474.5532939568568
+            },
+            "recall": {
+              "10": 0.9999267578125,
+              "100": 0.999970703125
+            },
+            "latency": {
+              "10": {
+                "p50_ms": 1.3023419305682182,
+                "p95_ms": 1.334932167083025,
+                "p99_ms": 1.4326000586152086
+              },
+              "100": {
+                "p50_ms": 2.0845355466008186,
+                "p95_ms": 2.15725414454937,
+                "p99_ms": 2.236998826265335
+              }
+            },
+            "evidence": {
+              "passed": true,
+              "gpu_serves": 8193,
+              "gpu_snapshot_builds": 1,
+              "cpu_fallbacks": 0
+            },
+            "resources": {
+              "samples": 30,
+              "errors": [],
+              "peak_rss_bytes": 2585243648,
+              "peak_vram_bytes": 859136000,
+              "peak_gpu_percent": 90
+            },
+            "dataset": "imagelike250k-d256",
+            "round": 3,
+            "comparison": {
+              "build_speedup": 7.2392976011541,
+              "recall": {
+                "10": 0.9999267578125,
+                "100": 0.999970703125
+              },
+              "baseline_recall": {
+                "10": 0.99994140625,
+                "100": 0.9999453125000001
+              },
+              "recall_delta": {
+                "10": 1.46484375000977e-05,
+                "100": -2.5390624999954703e-05
+              },
+              "query_qps_ratio": {
+                "10": 6.151817188390564,
+                "100": 4.252046549383571
+              },
+              "query_speedup": 5.114470945106115
+            },
+            "resources_comparison": {
+              "baseline_vram_bytes": 862390681.6,
+              "candidate_vram_bytes": 859136000,
+              "candidate_rss_bytes": 2585243648
+            },
+            "gates": [
+              {
+                "name": "recall@10_minimum",
+                "passed": true,
+                "actual": 0.9999267578125,
+                "limit": 0.9
+              },
+              {
+                "name": "recall@100_minimum",
+                "passed": true,
+                "actual": 0.999970703125,
+                "limit": 0.85
+              },
+              {
+                "name": "recall@10_baseline_delta",
+                "passed": true,
+                "actual": 1.46484375000977e-05,
+                "limit": 0.005
+              },
+              {
+                "name": "query_regression@10",
+                "passed": true,
+                "actual": 6.151817188390564,
+                "limit": 0.9
+              },
+              {
+                "name": "recall@100_baseline_delta",
+                "passed": true,
+                "actual": -2.5390624999954703e-05,
+                "limit": 0.005
+              },
+              {
+                "name": "query_regression@100",
+                "passed": true,
+                "actual": 4.252046549383571,
+                "limit": 0.9
+              },
+              {
+                "name": "relative_vram_limit",
+                "passed": true,
+                "actual": 859136000,
+                "limit": 1077988352.0
+              },
+              {
+                "name": "physical_vram_limit",
+                "passed": true,
+                "actual": 859136000,
+                "limit": 48318382080
+              },
+              {
+                "name": "host_memory_limit",
+                "passed": true,
+                "actual": 2585243648,
+                "limit": 103079215104
+              }
+            ],
+            "passed": true
+          },
+          {
+            "role": "candidate",
+            "observer": "/root/worker/build_eval/src/observer/seekdb",
+            "observer_sha256": "520d4c25338e545739a4fdf42cce6a8649b2594c41cc19160adf39fa7062d81f",
+            "bridge_sha256": "a37c3d20d13275cf54675a3eaf9e4af65712dcc54c7c833faa6bf931989522bf",
+            "port": 2982,
+            "create_seconds": 8.46969204209745,
+            "first_query_seconds": 0.09056844934821129,
+            "ready_seconds": 8.56026049144566,
+            "qps": {
+              "10": 756.3513661882699,
+              "100": 478.3466065605286
+            },
+            "recall": {
+              "10": 0.999951171875,
+              "100": 0.9999658203125
+            },
+            "latency": {
+              "10": {
+                "p50_ms": 1.2973528355360031,
+                "p95_ms": 1.325337216258049,
+                "p99_ms": 1.3558702543377876
+              },
+              "100": {
+                "p50_ms": 2.068805508315563,
+                "p95_ms": 2.135754097253084,
+                "p99_ms": 2.342366892844439
+              }
+            },
+            "evidence": {
+              "passed": true,
+              "gpu_serves": 8193,
+              "gpu_snapshot_builds": 1,
+              "cpu_fallbacks": 0
+            },
+            "resources": {
+              "samples": 31,
+              "errors": [],
+              "peak_rss_bytes": 2765352960,
+              "peak_vram_bytes": 859144192,
+              "peak_gpu_percent": 73
+            },
+            "dataset": "imagelike250k-d256",
+            "round": 4,
+            "comparison": {
+              "build_speedup": 6.932597388668766,
+              "recall": {
+                "10": 0.999951171875,
+                "100": 0.9999658203125
+              },
+              "baseline_recall": {
+                "10": 0.99994140625,
+                "100": 0.9999453125000001
+              },
+              "recall_delta": {
+                "10": -9.765624999991118e-06,
+                "100": -2.0507812499959144e-05
+              },
+              "query_qps_ratio": {
+                "10": 6.201221581967041,
+                "100": 4.286035022274968
+              },
+              "query_speedup": 5.155448853513932
+            },
+            "resources_comparison": {
+              "baseline_vram_bytes": 862390681.6,
+              "candidate_vram_bytes": 859144192,
+              "candidate_rss_bytes": 2765352960
+            },
+            "gates": [
+              {
+                "name": "recall@10_minimum",
+                "passed": true,
+                "actual": 0.999951171875,
+                "limit": 0.9
+              },
+              {
+                "name": "recall@100_minimum",
+                "passed": true,
+                "actual": 0.9999658203125,
+                "limit": 0.85
+              },
+              {
+                "name": "recall@10_baseline_delta",
+                "passed": true,
+                "actual": -9.765624999991118e-06,
+                "limit": 0.005
+              },
+              {
+                "name": "query_regression@10",
+                "passed": true,
+                "actual": 6.201221581967041,
+                "limit": 0.9
+              },
+              {
+                "name": "recall@100_baseline_delta",
+                "passed": true,
+                "actual": -2.0507812499959144e-05,
+                "limit": 0.005
+              },
+              {
+                "name": "query_regression@100",
+                "passed": true,
+                "actual": 4.286035022274968,
+                "limit": 0.9
+              },
+              {
+                "name": "relative_vram_limit",
+                "passed": true,
+                "actual": 859144192,
+                "limit": 1077988352.0
+              },
+              {
+                "name": "physical_vram_limit",
+                "passed": true,
+                "actual": 859144192,
+                "limit": 48318382080
+              },
+              {
+                "name": "host_memory_limit",
+                "passed": true,
+                "actual": 2765352960,
+                "limit": 103079215104
+              }
+            ],
+            "passed": true
+          }
+        ],
+        "averages": [
+          {
+            "dataset": "imagelike250k-d256",
+            "ready_seconds": 8.33179582543671,
+            "qps": {
+              "10": 742.1571418491841,
+              "100": 473.00010129183346
+            },
+            "recall": {
+              "10": 0.9999365234375,
+              "100": 0.99996875
+            }
+          }
+        ],
+        "errors": []
+      },
+      "comparison": {
+        "build_speedup": 7.122694887474639,
+        "qps_ratio": {
+          "10": 6.084845074637628,
+          "100": 4.238129782613766
+        },
+        "recall_delta": {
+          "10": 4.882812500106581e-06,
+          "100": -2.3437499999889866e-05
+        }
+      }
+    }
+  }
+}
