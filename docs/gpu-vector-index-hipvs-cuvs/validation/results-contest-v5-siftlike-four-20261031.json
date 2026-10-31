@@ -1,0 +1,244 @@
+{
+  "status": "COMPLETE",
+  "revision": "634888d9b037153fa143d2c913ba4b25503e1d62",
+  "role": "baseline",
+  "round_count": 4,
+  "runs": [
+    {
+      "role": "baseline",
+      "observer": "/root/worker-v5/build_eval/src/observer/seekdb",
+      "observer_sha256": "d3f78804ce1adb97ba3e926b503b0fe6b69a3b2a90f77abab7a4fc3c5ab72910",
+      "bridge_sha256": "030b36246e3fc4e92743e432d00979f7a729fdf36fb8b6ff482b75fb008e9da6",
+      "port": 2982,
+      "create_seconds": 52.7924182228744,
+      "first_query_seconds": 0.0809791311621666,
+      "ready_seconds": 52.87339735403657,
+      "qps": {
+        "10": 136.41714901303732,
+        "100": 122.48675907375438
+      },
+      "recall": {
+        "10": 0.9921142578125,
+        "100": 0.99568359375
+      },
+      "latency": {
+        "10": {
+          "p50_ms": 7.325983606278896,
+          "p95_ms": 7.827939465641975,
+          "p99_ms": 8.10308177024126
+        },
+        "100": {
+          "p50_ms": 8.16443283110857,
+          "p95_ms": 8.727902080863714,
+          "p99_ms": 9.030470717698337
+        }
+      },
+      "evidence": {
+        "passed": true,
+        "gpu_serves": 8193,
+        "gpu_snapshot_builds": 1,
+        "cpu_fallbacks": 0
+      },
+      "resources": {
+        "samples": 101,
+        "errors": [],
+        "peak_rss_bytes": 3069194240,
+        "peak_vram_bytes": 734212096,
+        "peak_gpu_percent": 100
+      },
+      "dataset": "siftlike250k-d128",
+      "round": 0
+    },
+    {
+      "role": "baseline",
+      "observer": "/root/worker-v5/build_eval/src/observer/seekdb",
+      "observer_sha256": "d3f78804ce1adb97ba3e926b503b0fe6b69a3b2a90f77abab7a4fc3c5ab72910",
+      "bridge_sha256": "030b36246e3fc4e92743e432d00979f7a729fdf36fb8b6ff482b75fb008e9da6",
+      "port": 2982,
+      "create_seconds": 50.36975093744695,
+      "first_query_seconds": 0.032789720222353935,
+      "ready_seconds": 50.402540657669306,
+      "qps": {
+        "10": 144.28393331472338,
+        "100": 129.47520900277487
+      },
+      "recall": {
+        "10": 0.99189453125,
+        "100": 0.995732421875
+      },
+      "latency": {
+        "10": {
+          "p50_ms": 6.933480501174927,
+          "p95_ms": 7.39103090018034,
+          "p99_ms": 7.5877701863646525
+        },
+        "100": {
+          "p50_ms": 7.719456218183041,
+          "p95_ms": 8.155574556440115,
+          "p99_ms": 8.418108243495228
+        }
+      },
+      "evidence": {
+        "passed": true,
+        "gpu_serves": 8193,
+        "gpu_snapshot_builds": 1,
+        "cpu_fallbacks": 0
+      },
+      "resources": {
+        "samples": 86,
+        "errors": [],
+        "peak_rss_bytes": 2976104448,
+        "peak_vram_bytes": 734216192,
+        "peak_gpu_percent": 100
+      },
+      "dataset": "siftlike250k-d128",
+      "round": 1
+    },
+    {
+      "role": "baseline",
+      "observer": "/root/worker-v5/build_eval/src/observer/seekdb",
+      "observer_sha256": "d3f78804ce1adb97ba3e926b503b0fe6b69a3b2a90f77abab7a4fc3c5ab72910",
+      "bridge_sha256": "030b36246e3fc4e92743e432d00979f7a729fdf36fb8b6ff482b75fb008e9da6",
+      "port": 2982,
+      "create_seconds": 51.137929659336805,
+      "first_query_seconds": 0.038773151114583015,
+      "ready_seconds": 51.17670281045139,
+      "qps": {
+        "10": 134.94253206288866,
+        "100": 122.62994304617814
+      },
+      "recall": {
+        "10": 0.99267578125,
+        "100": 0.99577392578125
+      },
+      "latency": {
+        "10": {
+          "p50_ms": 7.404111325740814,
+          "p95_ms": 7.964850403368473,
+          "p99_ms": 8.31465255469084
+        },
+        "100": {
+          "p50_ms": 8.156967349350452,
+          "p95_ms": 8.691776543855667,
+          "p99_ms": 8.99664703756571
+        }
+      },
+      "evidence": {
+        "passed": true,
+        "gpu_serves": 8193,
+        "gpu_snapshot_builds": 1,
+        "cpu_fallbacks": 0
+      },
+      "resources": {
+        "samples": 90,
+        "errors": [],
+        "peak_rss_bytes": 2952761344,
+        "peak_vram_bytes": 734216192,
+        "peak_gpu_percent": 100
+      },
+      "dataset": "siftlike250k-d128",
+      "round": 2
+    },
+    {
+      "role": "baseline",
+      "observer": "/root/worker-v5/build_eval/src/observer/seekdb",
+      "observer_sha256": "d3f78804ce1adb97ba3e926b503b0fe6b69a3b2a90f77abab7a4fc3c5ab72910",
+      "bridge_sha256": "030b36246e3fc4e92743e432d00979f7a729fdf36fb8b6ff482b75fb008e9da6",
+      "port": 2982,
+      "create_seconds": 51.19235850870609,
+      "first_query_seconds": 0.03348781540989876,
+      "ready_seconds": 51.22584632411599,
+      "qps": {
+        "10": 137.49400932162834,
+        "100": 124.89728964614964
+      },
+      "recall": {
+        "10": 0.9924072265625,
+        "100": 0.9957763671875
+      },
+      "latency": {
+        "10": {
+          "p50_ms": 7.251432165503502,
+          "p95_ms": 7.7589331194758415,
+          "p99_ms": 8.09964770451188
+        },
+        "100": {
+          "p50_ms": 7.991832681000233,
+          "p95_ms": 8.529151324182749,
+          "p99_ms": 8.825517632067204
+        }
+      },
+      "evidence": {
+        "passed": true,
+        "gpu_serves": 8193,
+        "gpu_snapshot_builds": 1,
+        "cpu_fallbacks": 0
+      },
+      "resources": {
+        "samples": 88,
+        "errors": [],
+        "peak_rss_bytes": 3092627456,
+        "peak_vram_bytes": 734208000,
+        "peak_gpu_percent": 100
+      },
+      "dataset": "siftlike250k-d128",
+      "round": 3
+    }
+  ],
+  "averages": [
+    {
+      "dataset": "siftlike250k-d128",
+      "ready_seconds": 51.419621786568314,
+      "qps": {
+        "10": 138.28440592806942,
+        "100": 124.87230019221425
+      },
+      "recall": {
+        "10": 0.99227294921875,
+        "100": 0.9957415771484375
+      }
+    }
+  ],
+  "errors": [],
+  "dataset_manifest": {
+    "version": 1,
+    "spec": {
+      "name": "siftlike250k-d128",
+      "rows": 250000,
+      "dim": 128,
+      "nq": 4096,
+      "distribution": "siftlike",
+      "seed": 20261109
+    },
+    "generator": "real-image-siftlike-v1",
+    "source_images": 174,
+    "source_images_sha256": "693fe6f28f292e303677bcd12d2c7f596232381dc1dabf855a42f0d030d1feb1",
+    "base_sha256": "3a69ebe104a4f4772979930b4121625444a547eb232eb46f089d6be24834caac",
+    "queries_sha256": "2ae23fc2adf9727b5e7d382f05bba1c2094be9cb978e2dabdab16094426b876b",
+    "truth_sha256": "904f92fb54b44e32f425facaf3aab8d2da72303098ee0205f65ec77b8ac5d2da"
+  },
+  "data_note": "Single-scale SIFT-like descriptors extracted from local real images; not official SIFT250K",
+  "source_report": "/work/evals/v5-siftlike-four-20261031-073857",
+  "external_reference": {
+    "ready_seconds": 23.0,
+    "qps": {
+      "10": 147.0,
+      "100": 143.0
+    },
+    "recall": {
+      "10": 1.0,
+      "100": 1.0
+    }
+  },
+  "external_reference_plus_10_percent": {
+    "ready_seconds": 20.909090909090907,
+    "qps": {
+      "10": 161.7,
+      "100": 157.3
+    },
+    "recall": {
+      "10": 1.0,
+      "100": 1.0
+    }
+  }
+}
