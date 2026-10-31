@@ -54,11 +54,11 @@ seekdb_cuvs_deserialize
 
 ### Contest algorithm experiments
 
-The contest binary uses exact GPU BruteForce Top-K by default; no algorithm
-environment variable is required. Set `SEEKDB_CUVS_ALGO=cagra` only when
-regression-testing the legacy CAGRA path. Use the same algorithm environment
-when serializing and reloading a snapshot; the OBCUVS02 header does not record
-the algorithm tag. New BruteForce snapshots store IDs and the base vectors only
+The contest binary uses fixed hipVS CAGRA Search by default; no algorithm
+environment variable is required. `SEEKDB_CUVS_ALGO=brute_force` is retained
+only for non-contest experiments and is not submission-compliant. Use the same
+algorithm environment when serializing and reloading a snapshot; the OBCUVS02
+header does not record the algorithm tag. New BruteForce snapshots store IDs and the base vectors only
 once, use `graph_bytes=0`, and rebuild the GPU index on load; older binaries are
 not guaranteed to read this experimental form. CAGRA and older nonzero-graph
 snapshots retain the graph path. Each index handle also reuses its query/output

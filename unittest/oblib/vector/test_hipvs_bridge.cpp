@@ -209,7 +209,7 @@ int main()
   assert(unsetenv("SEEKDB_CUVS_ALGO") == 0);
   fail_at = 0; calls = 0;
   void* h = seekdb_cuvs_build(base.data(), 256, 4);
-  assert(h && bf_builds == 1 && seekdb_cuvs_raw_snapshot(h) == 1);
+  assert(h && bf_builds == 0 && seekdb_cuvs_raw_snapshot(h) == 0);
   seekdb_cuvs_free(h); assert(live == 0 && buffers.empty());
   assert(setenv("SEEKDB_CUVS_ALGO", "cagra", 1) == 0);
   calls = 0; h = seekdb_cuvs_build(base.data(), 256, 4); assert(h);
@@ -263,7 +263,7 @@ int main()
     assert(live == 0 && buffers.empty()); ++cases;
   }
   assert(setenv("SEEKDB_CUVS_ALGO", "brute_force", 1) == 0);
-  fail_at = 0; calls = 0; h = seekdb_cuvs_build(base.data(), 256, 4); assert(h && bf_builds == 2);
+  fail_at = 0; calls = 0; h = seekdb_cuvs_build(base.data(), 256, 4); assert(h && bf_builds == 1);
   assert(seekdb_cuvs_raw_snapshot(h) == 1);
   const int bf_after_build = rmm_allocs;
   assert(buffers.count(const_cast<void*>(bf_base_ptr)) == 1);

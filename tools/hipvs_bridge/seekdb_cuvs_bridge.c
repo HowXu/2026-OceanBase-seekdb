@@ -72,12 +72,12 @@ static DLManagedTensor matrix(void* data, int64_t* shape, DLDeviceType device, i
 static int selected_algorithm(sk_algorithm* algorithm)
 {
   const char* name = getenv("SEEKDB_CUVS_ALGO");
-  if (!name || !name[0] || strcmp(name, "brute_force") == 0) {
-    *algorithm = SK_BRUTE_FORCE;
+  if (!name || !name[0] || strcmp(name, "cagra") == 0) {
+    *algorithm = SK_CAGRA;
     return 1;
   }
-  if (strcmp(name, "cagra") == 0) {
-    *algorithm = SK_CAGRA;
+  if (strcmp(name, "brute_force") == 0) {
+    *algorithm = SK_BRUTE_FORCE;
     return 1;
   }
   fprintf(stderr, "[seekdb_cuvs] unknown algorithm: %s\n", name);

@@ -88,9 +88,9 @@ python3 unittest/oblib/vector/run_hipvs_adaptor_component.py
 
 ## Experimental algorithms
 
-The contest candidate uses exact GPU BruteForce by default, with no algorithm
-environment variable. Set `SEEKDB_CUVS_ALGO=cagra` only to regression-test the
-legacy path. Keep the algorithm setting unchanged across snapshot serialization
+The contest candidate uses fixed hipVS CAGRA Search by default, with no
+algorithm environment variable. Do not select the non-contest BruteForce
+experiment for submission testing. Keep the algorithm setting unchanged across snapshot serialization
 and reload. New BruteForce snapshots use `graph_bytes=0` and rebuild from the
 single outer base copy; they are not promised to load in older binaries. Query
 buffers and search parameters are retained per handle until index destruction.
