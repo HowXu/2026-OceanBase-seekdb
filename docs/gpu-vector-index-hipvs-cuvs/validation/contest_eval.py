@@ -272,7 +272,7 @@ def observer_command(config):
     command = [str(config.observer), "--nodaemon", "--port", str(config.port),
                "--data-dir", str(base / "store"), "--base-dir", str(base),
                "--parameter", "__min_full_resource_pool_memory=2147483648",
-               "--parameter", "memory_budget=16G", "--parameter", "datafile_size=100G",
+               "--parameter", "memory_budget=2G", "--parameter", "datafile_size=20G",
                "--parameter", "cpu_count=24", "--parameter", "local_ip=127.0.0.1"]
     env = dict(os.environ)
     env.pop("OB_VSAG_USE_CUVS", None)
