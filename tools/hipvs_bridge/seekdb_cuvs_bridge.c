@@ -14,6 +14,7 @@ typedef struct {
   cuvsResources_t res;
   cuvsCagraIndexParams_t ip;
   cuvsCagraIndex_t idx;
+  cuvsCagraIndex_t graph_owner;
   cuvsBruteForceIndex_t bf;
   cuvsCagraSearchParams_t sp;
   float* qd;
@@ -90,6 +91,7 @@ void seekdb_cuvs_free(void* handle)
   if (!h) return;
   cuvsStreamSync(h->res);
   if (h->idx) cuvsCagraIndexDestroy(h->idx);
+  if (h->graph_owner) cuvsCagraIndexDestroy(h->graph_owner);
   if (h->bf) cuvsBruteForceIndexDestroy(h->bf);
   if (h->ip) cuvsCagraIndexParamsDestroy(h->ip);
   if (h->sp) cuvsCagraSearchParamsDestroy(h->sp);
@@ -231,7 +233,7 @@ int seekdb_cuvs_serialize(void* handle, const char* filename)
   sk_cuvs_index* h = (sk_cuvs_index*)handle;
   if (!h || !filename || !filename[0]) return 1;
   cuvsError_t status;
-  if (h->algorithm == SK_CAGRA) status = cuvsCagraSerialize(h->res, filename, h->idx, true);
+  if (h->algorithm == SK_CAGRA) status = cuvsCagraSerialize(h->res, filename, h->idx, false);
   else status = cuvsBruteForceSerialize(h->res, filename, h->bf);
   if (status != CUVS_SUCCESS || cuvsStreamSync(h->res) != CUVS_SUCCESS) {
     log_error("serialize"); return 1;
@@ -267,6 +269,47 @@ void* seekdb_cuvs_deserialize(const char* filename, long n, long dim)
   return h;
 load_fail:
   log_error("deserialize or snapshot shape check");
+  seekdb_cuvs_free(h);
+  return NULL;
+}
+
+void* seekdb_cuvs_deserialize_with_base(const char* filename, const float* base, long n, long dim)
+{
+  size_t bytes = 0;
+  int64_t shape[2] = {n, dim};
+  cudaStream_t stream = NULL;
+  sk_algorithm algorithm;
+  sk_cuvs_index* h;
+  DLManagedTensor graph = {0};
+  DLManagedTensor dataset;
+  if (!filename || !filename[0] || !base || n < 256 || (uint64_t)n > UINT32_MAX ||
+      dim <= 0 || !matrix_bytes(n, dim, sizeof(float), &bytes)) return NULL;
+  if (!selected_algorithm(&algorithm)) return NULL;
+  if (algorithm != SK_CAGRA) return seekdb_cuvs_deserialize(filename, n, dim);
+  h = (sk_cuvs_index*)calloc(1, sizeof(*h));
+  if (!h) return NULL;
+  h->algorithm = algorithm;
+  if (cuvsResourcesCreate(&h->res) != CUVS_SUCCESS) { free(h); return NULL; }
+  if (cuvsDeviceIdGet(h->res, &h->device) != CUVS_SUCCESS ||
+      cuvsCagraIndexCreate(&h->graph_owner) != CUVS_SUCCESS ||
+      cuvsCagraDeserialize(h->res, filename, h->graph_owner) != CUVS_SUCCESS ||
+      cuvsStreamSync(h->res) != CUVS_SUCCESS ||
+      cuvsCagraIndexGetGraph(h->graph_owner, &graph) != CUVS_SUCCESS ||
+      graph.dl_tensor.ndim != 2 || !graph.dl_tensor.shape || graph.dl_tensor.shape[0] != n ||
+      graph.dl_tensor.dtype.code != kDLUInt || graph.dl_tensor.dtype.bits != 32 ||
+      cuvsStreamGet(h->res, &stream) != CUVS_SUCCESS ||
+      cuvsRMMAlloc(h->res, (void**)&h->device_base, bytes) != CUVS_SUCCESS) goto load_fail;
+  h->device_bytes = bytes;
+  if (cudaMemcpyAsync(h->device_base, base, bytes, cudaMemcpyHostToDevice, stream) != cudaSuccess) goto load_fail;
+  dataset = matrix(h->device_base, shape, kDLCUDA, h->device, kDLFloat);
+  if (cuvsCagraIndexCreate(&h->idx) != CUVS_SUCCESS ||
+      cuvsCagraIndexFromArgs(h->res, L2Expanded, &graph, &dataset, h->idx) != CUVS_SUCCESS ||
+      cuvsStreamSync(h->res) != CUVS_SUCCESS) goto load_fail;
+  h->n = n;
+  h->dim = dim;
+  return h;
+load_fail:
+  log_error("deserialize with external dataset");
   seekdb_cuvs_free(h);
   return NULL;
 }

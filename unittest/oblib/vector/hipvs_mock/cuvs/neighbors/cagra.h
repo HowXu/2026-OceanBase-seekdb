@@ -29,6 +29,9 @@ cuvsError_t cuvsCagraSerialize(cuvsResources_t, const char*, cuvsCagraIndex_t, b
 cuvsError_t cuvsCagraDeserialize(cuvsResources_t, const char*, cuvsCagraIndex_t);
 cuvsError_t cuvsCagraIndexGetSize(cuvsCagraIndex_t, int64_t*);
 cuvsError_t cuvsCagraIndexGetDims(cuvsCagraIndex_t, int64_t*);
+cuvsError_t cuvsCagraIndexGetGraph(cuvsCagraIndex_t, DLManagedTensor*);
+cuvsError_t cuvsCagraIndexFromArgs(cuvsResources_t, cuvsDistanceType, DLManagedTensor*,
+                                   DLManagedTensor*, cuvsCagraIndex_t);
 #ifdef __cplusplus
 }
 #endif

@@ -69,6 +69,7 @@ void seekdb_cuvs_free(void*) {}
 int seekdb_cuvs_cagra_knn(const float*,long,long,const float*,long,long,unsigned*) { return 1; }
 int seekdb_cuvs_serialize(void*,const char*) { ++serialize_calls; return 1; }
 void* seekdb_cuvs_deserialize(const char*,long,long) { ++deserialize_calls; return nullptr; }
+void* seekdb_cuvs_deserialize_with_base(const char*,const float*,long,long) { ++deserialize_calls; return nullptr; }
 int seekdb_cuvs_raw_snapshot(void* handle) { return raw_snapshot_mode && handle != nullptr ? 1 : 0; }
 }
 #endif
