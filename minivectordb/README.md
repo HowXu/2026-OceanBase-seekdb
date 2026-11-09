@@ -1,6 +1,6 @@
 # MiniVectorDB
 
-A single-process vector database for the `2026-competition-round2` task. Go 1.26,
+A single-process vector database for the `2026-competition-round2` task. Go 1.22,
 standard library only (no SQL, storage or vector-index libraries).
 
 ## Build and run
