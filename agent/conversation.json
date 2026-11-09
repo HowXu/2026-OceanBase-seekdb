@@ -183,6 +183,54 @@
       "turn_id": "01a1c00e-6567-7e83-8da6-a6cbb8195f75",
       "topic": "唯一实现来源",
       "content": "后续统一以 opus 仓库的 main@de2aa79 为唯一来源，astra 当前结果只作为历史记录，不再继续发展成另一条实现线。"
+    },
+    {
+      "id": "M20",
+      "speaker": "student",
+      "thread": "astra",
+      "turn_id": "01a1bf9a-e26e-7df3-8898-a913c7aa6e0e",
+      "topic": "识别旧格式导致的错误预测",
+      "content": "格式确实在 a31b30e 变了，你上一轮预测 137 是因为用了 06ebb31 的旧格式，而实际测试已经运行在批次级 frame 格式上。我核对了 3344 - 2432 = 912 字节，它是帧头加 37 行。"
+    },
+    {
+      "id": "M21",
+      "speaker": "student",
+      "thread": "astra",
+      "turn_id": "01a1bf9a-e26e-7df3-8898-a913c7aa6e0e",
+      "topic": "冷启动离群值和计时口径",
+      "content": "7 次写入里第 1 次是 0.770 秒，其他都在 0.12 秒左右。我认为原因是第一次运行包含冷启动、文件和页缓存初始化等一次性开销，属于离群值，所以上一轮用单次 0.697 秒得出‘涨了 30%’的结论不可靠。"
+    },
+    {
+      "id": "M22",
+      "speaker": "student",
+      "thread": "astra",
+      "turn_id": "01a1c022-346f-7a40-8d52-9bfd99cb67a4",
+      "topic": "批次写入预测",
+      "content": "我的预测：修正后 write_s 中位数约 0.06 秒。理由：帧数量从 10,000 个降到 100 个，头部、CRC 和写调用开销减少；fsync 仍然是每批一次，因此不会按帧数量同比例下降。"
+    },
+    {
+      "id": "M23",
+      "speaker": "student",
+      "thread": "astra",
+      "turn_id": "01a1c045-8406-7132-a4fe-84b3299d0e67",
+      "topic": "核对 flat view 是否真实存在",
+      "content": "你之前说 flat view 已经实现了，但我在这个 worktree 的源码里没有找到。请用 git status、git diff --stat 和 rg -n flat_ src/ 核对；如果找不到，明确写当前 worktree 无法证明 flat view 实现存在。"
+    },
+    {
+      "id": "M24",
+      "speaker": "student",
+      "thread": "astra",
+      "turn_id": "01a1c031-562c-7131-8b15-7048924a7663",
+      "topic": "协议和正确性优先于性能",
+      "content": "我不打算现在直接上 ANN。当前优先级仍然是正式 stdin/stdout 协议、SQL、事务和恢复正确性，性能优化要建立在 exact 结果不变的前提上。"
+    },
+    {
+      "id": "M25",
+      "speaker": "student",
+      "thread": "astra",
+      "turn_id": "01a1c031-562c-7131-8b15-7048924a7663",
+      "topic": "flat storage 方案拆分",
+      "content": "方案 A 直接把持久化和内存结构改成连续布局，方案 B 保留现有持久化格式，只在加载后建立 query-only 的 flat embedding view。请从正确性风险、峰值内存、查询耗时、写入 I/O 和维护成本比较后，停下来让我选择。"
     }
   ],
   "experiments": [
@@ -257,6 +305,106 @@
       "output": "query:\n1.54 real\n1.53 user\n0.01 sys",
       "classification": "actual-result",
       "environment": "historical macOS benchmark; endpoint was process wall time"
+    },
+    {
+      "id": "R11",
+      "source": "tool-output-as-quoted-in-thread",
+      "thread": "astra",
+      "topic": "批次 frame 受控和随机 kill",
+      "output": "[kill] round=3 kill_stage=write_to_fsync confirmed_count=100 recovered_count=200 recovered_minus_confirmed=100 batch_aligned=true\n[kill] round=21 kill_stage=write_mid_frame_after_frame_37 confirmed_count=100 recovered_count=100 frame_written=37 tail_truncated=true batch_aligned=true\n[kill-summary] controlled_rounds=9 random_rounds=12 write_to_fsync_covered=true fsync_after_covered=true",
+      "classification": "actual-result",
+      "environment": "historical round13 worktree; macOS arm64; reference-only",
+      "sha256_of_raw_stdout": "06e7bf6a6e9c8c416a5051dbbd046c4320ebed47563c7b30f1ee9b2600e533aa"
+    },
+    {
+      "id": "R12",
+      "source": "tool-output-as-quoted-in-thread",
+      "thread": "astra",
+      "topic": "恢复中再次 kill",
+      "output": "[recovery-kill] round=1 progress_rows_before_kill=100 kill_stage=replaying_records final_recovered_count=1000 wif_signaled=true wtermsig=9\n[recovery-kill] round=5 progress_rows_before_kill=600 kill_stage=replaying_records final_recovered_count=1000 wif_signaled=true wtermsig=9",
+      "classification": "actual-result",
+      "environment": "historical round13 worktree; macOS arm64; reference-only"
+    },
+    {
+      "id": "R13",
+      "source": "tool-output-as-quoted-in-thread",
+      "thread": "astra",
+      "topic": "独立参考实现与阶段分解",
+      "output": "ACCURACY variant=a reference=independent max_abs_dist=7.828e-07 max_abs_dist2=1.499e-05 max_rel_dist=9.074e-08 topk_mismatch=0/1000\nSTAGES variant=a unfiltered scan_ms=64.282 heap_ms=5.409 sort_ms=0.173 total_ms=69.864\nSTAGES variant=c unfiltered scan_ms=109.707 heap_ms=5.374 sort_ms=0.180 total_ms=115.261",
+      "classification": "actual-result",
+      "environment": "historical round13 worktree; macOS arm64; reference-only"
+    },
+    {
+      "id": "R14",
+      "source": "tool-output-as-quoted-in-thread",
+      "thread": "astra",
+      "topic": "过滤故障探针",
+      "output": "good.probe_filter exit=0 [fault-probe] name=filter_after_topk detected=false result_id=2\nfilter_after_topk.probe_filter exit=1 correctness: FAIL: FAULT_DETECTED: filter-after-topk returned a wrong result",
+      "classification": "actual-result",
+      "environment": "historical round13 worktree; macOS arm64; reference-only"
+    },
+    {
+      "id": "R15",
+      "source": "tool-output-as-quoted-in-thread",
+      "thread": "astra",
+      "topic": "协议和内存审计",
+      "output": "当前没有正式数据库进程入口；没有 SQL parser、BEGIN/COMMIT/ROLLBACK、SQL 错误码；启动时把全部记录放进 vector<Record> 和 unordered_map；因此当前实现不能作为超内存正式实现。",
+      "classification": "actual-source-audit",
+      "environment": "evidence-7c53d0f worktree; no code modification or experiment"
+    },
+    {
+      "id": "R16",
+      "source": "tool-output-as-quoted-in-thread",
+      "thread": "astra",
+      "topic": "batch=100 写入计数与统计",
+      "output": "batch=100 frame_count=100 rows_per_frame=100 fsync_count=100 stat_size=5203200 write_s median=0.065741208 min=0.0625205 max=0.071906875",
+      "classification": "actual-result",
+      "environment": "historical precise-runs worktree; macOS arm64; reference-only"
+    },
+    {
+      "id": "R17",
+      "source": "tool-output-as-quoted-in-thread",
+      "thread": "astra",
+      "topic": "冷启动和预热写入统计",
+      "output": "cold_write_s median=0.066439791 min=0.065024041 max=0.098946666\nwarm_write_s median=0.069045167 min=0.065481666 max=0.175069625",
+      "classification": "actual-result",
+      "environment": "historical precise-runs worktree; macOS arm64; reference-only"
+    },
+    {
+      "id": "R18",
+      "source": "tool-output-as-quoted-in-thread",
+      "thread": "astra",
+      "topic": "scan/heap/sort 阶段和独立参考",
+      "output": "ACCURACY variant=a reference=independent max_abs_dist=7.828e-07 max_rel_dist=9.074e-08 topk_mismatch=0/1000\nSTAGES variant=a unfiltered scan_ms=64.282 heap_ms=5.409 sort_ms=0.173 total_ms=69.864",
+      "classification": "actual-result",
+      "environment": "historical round13 worktree; macOS arm64; reference-only"
+    },
+    {
+      "id": "R19",
+      "source": "tool-output-as-quoted-in-thread",
+      "thread": "astra",
+      "topic": "flat view 来源审计",
+      "output": "branch=evidence-7c53d0f\ncommit=7c53d0fb85cf58b0a460f36d029b7676873e92de\nstatus=clean\nrg flat_ src/: no matching files\n当前 worktree 无法证明 flat view 实现存在",
+      "classification": "actual-source-audit",
+      "environment": "evidence-7c53d0f worktree; read-only audit"
+    },
+    {
+      "id": "R20",
+      "source": "tool-output-as-quoted-in-thread",
+      "thread": "astra",
+      "topic": "协议、事务和超内存审计",
+      "output": "当前没有正式数据库进程入口；没有 SQL parser、BEGIN/COMMIT/ROLLBACK、SQL 错误码；启动时把全部记录放进 vector<Record> 和 unordered_map；因此当前实现不能作为超内存正式实现。",
+      "classification": "actual-source-audit",
+      "environment": "evidence-7c53d0f worktree; read-only audit"
+    },
+    {
+      "id": "R21",
+      "source": "agent-audit-result-quoted-in-thread",
+      "thread": "astra",
+      "topic": "flat storage A/B 取舍审计",
+      "output": "方案 A 正确性风险高、恢复和事务影响大；方案 B 保留磁盘格式，额外约 5.2 MB，维护成本中等，适合先验证 query-side layout。",
+      "classification": "actual-source-based-analysis",
+      "environment": "evidence-7c53d0f worktree; no implementation change"
     },
     {
       "id": "R09",
@@ -451,7 +599,7 @@
         "excerpt": "我自己核对的结果：磁盘数据没有被改，问题出在复制到对话时的删行、截断或重排。以后贴原始输出只能直接复制 cat 的文件内容，不能重新排版、补字段或截断。"
       },
       "result_evidence": {
-        "pointer": "/experiments/9/output",
+        "pointer": "/experiments/20/output",
         "excerpt": "756a9c8526ab5c033f8a6ecc36e52ed87826cdacdca80ca80c926d1481e3dec  new/run-1/stdout\nbcca898107cfea22ad6ce37926987c0ba38b99931053cd4b6edbb20a72b0f771  old/run-1/stderr"
       },
       "evidence_status": "independent-reproduction",
@@ -470,14 +618,110 @@
       "evidence_status": "process-decision-only",
       "score_ceiling": 0.5,
       "reason": "学生明确拆分当前实现与历史结果的来源，避免把不同 commit 的最佳结果拼成一次提交；这是独立流程决策，未绑定新的实验结果。"
+    },
+    {
+      "id": "U18",
+      "dimension": "技术理解与迁移",
+      "topic": "识别旧 commit 格式导致的错误恢复预测",
+      "student_evidence": {
+        "pointer": "/conversations/19/content",
+        "excerpt": "格式确实在 a31b30e 变了，你上一轮预测 137 是因为用了 06ebb31 的旧格式，而实际测试已经运行在批次级 frame 格式上。我核对了 3344 - 2432 = 912 字节，它是帧头加 37 行。"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/8/output",
+        "excerpt": "[kill] round=21 kill_stage=write_mid_frame_after_frame_37 confirmed_count=100 recovered_count=100 frame_written=37 tail_truncated=true batch_aligned=true"
+      },
+      "evidence_status": "format-correction-and-new-result",
+      "score_ceiling": 1.5,
+      "reason": "学生根据 commit 和文件长度重新解释旧的 137 行预测，区分了旧格式与当前批次 frame；实际第 37 行中断结果验证了新格式下恢复为完整批次。当前记录没有同一实例中学生之后再次修正的独立原话，保守不宣称 2 分。"
+    },
+    {
+      "id": "U19",
+      "dimension": "取舍与反思",
+      "topic": "用冷启动和中位数修正单次性能结论",
+      "student_evidence": {
+        "pointer": "/conversations/20/content",
+        "excerpt": "7 次写入里第 1 次是 0.770 秒，其他都在 0.12 秒左右。我认为原因是第一次运行包含冷启动、文件和页缓存初始化等一次性开销，属于离群值，所以上一轮用单次 0.697 秒得出‘涨了 30%’的结论不可靠。"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/14/output",
+        "excerpt": "cold_write_s median=0.066439791 min=0.065024041 max=0.098946666\nwarm_write_s median=0.069045167 min=0.065481666 max=0.175069625"
+      },
+      "evidence_status": "measurement-interpretation",
+      "score_ceiling": 1.0,
+      "reason": "学生没有把单次慢运行当作稳定回归，而是识别冷启动和非空闲负载，并要求使用多次运行的中位数；原始结果保留了 min/median/max。"
+    },
+    {
+      "id": "U20",
+      "dimension": "问题理解与自主拆解",
+      "topic": "把批次大小实验拆成可核对的 I/O 变量",
+      "student_evidence": {
+        "pointer": "/conversations/21/content",
+        "excerpt": "我的预测：修正后 write_s 中位数约 0.06 秒。理由：帧数量从 10,000 个降到 100 个，头部、CRC 和写调用开销减少；fsync 仍然是每批一次，因此不会按帧数量同比例下降。"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/13/output",
+        "excerpt": "batch=100 frame_count=100 rows_per_frame=100 fsync_count=100 stat_size=5203200 write_s median=0.065741208"
+      },
+      "evidence_status": "prediction-and-measurement",
+      "score_ceiling": 1.0,
+      "reason": "学生给出写入中位数预测，并将帧数、fsync 次数和文件大小作为独立可核对变量；实际 batch=100 结果约 0.066 秒，接近预测。"
+    },
+    {
+      "id": "U21",
+      "dimension": "独立验证与质疑",
+      "topic": "发现 flat view 实现被错误归因",
+      "student_evidence": {
+        "pointer": "/conversations/22/content",
+        "excerpt": "你之前说 flat view 已经实现了，但我在这个 worktree 的源码里没有找到。请用 git status、git diff --stat 和 rg -n flat_ src/ 核对；如果找不到，明确写当前 worktree 无法证明 flat view 实现存在。"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/16/output",
+        "excerpt": "branch=evidence-7c53d0f\ncommit=7c53d0fb85cf58b0a460f36d029b7676873e92de\nstatus=clean\nrg flat_ src/: no matching files"
+      },
+      "evidence_status": "independent-source-audit",
+      "score_ceiling": 1.0,
+      "reason": "学生不接受无法追溯的 flat view 声明，要求源码、commit 和未提交状态交叉核对；结果确认当前 worktree 无法证明 flat view 实现存在。"
+    },
+    {
+      "id": "U22",
+      "dimension": "问题理解与自主拆解",
+      "topic": "把协议无关核心和协议适配层分离",
+      "student_evidence": {
+        "pointer": "/conversations/23/content",
+        "excerpt": "我不打算现在直接上 ANN。当前优先级仍然是正式 stdin/stdout 协议、SQL、事务和恢复正确性，性能优化要建立在 exact 结果不变的前提上。"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/17/output",
+        "excerpt": "当前没有正式数据库进程入口；没有 SQL parser、BEGIN/COMMIT/ROLLBACK、SQL 错误码；启动时把全部记录放进 vector<Record> 和 unordered_map；因此当前实现不能作为超内存正式实现。"
+      },
+      "evidence_status": "audit-backed-priority",
+      "score_ceiling": 1.0,
+      "reason": "学生先确定协议、SQL、事务和恢复优先于 ANN；源码审计逐项确认这些能力缺失，形成了基于事实的任务拆解。"
+    },
+    {
+      "id": "U23",
+      "dimension": "取舍与反思",
+      "topic": "比较全局 flat storage 与 query-only flat view",
+      "student_evidence": {
+        "pointer": "/conversations/24/content",
+        "excerpt": "方案 A 直接把持久化和内存结构改成连续布局，方案 B 保留现有持久化格式，只在加载后建立 query-only 的 flat embedding view。请从正确性风险、峰值内存、查询耗时、写入 I/O 和维护成本比较后，停下来让我选择。"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/18/output",
+        "excerpt": "方案 A 正确性风险高、恢复和事务影响大；方案 B 保留磁盘格式，额外约 5.2 MB，维护成本中等，适合先验证 query-side layout。"
+      },
+      "evidence_status": "tradeoff-analysis",
+      "score_ceiling": 1.0,
+      "reason": "学生把一个性能改动拆成两个隔离程度不同的方案，并要求同时考虑正确性、内存、I/O 和维护成本；审计结果支持选择更窄的 query-only 路线。"
     }
   ],
   "rubric_coverage": {
-    "问题理解与自主拆解": ["U01", "U11", "U12", "U17"],
-    "技术理解与迁移": ["U03", "U09", "U10"],
-    "独立验证与质疑": ["U05", "U16"],
+    "问题理解与自主拆解": ["U01", "U11", "U12", "U17", "U20", "U22"],
+    "技术理解与迁移": ["U03", "U09", "U10", "U18"],
+    "独立验证与质疑": ["U05", "U16", "U21"],
     "实验与反馈迭代": ["U06", "U07", "U15"],
-    "取舍与反思": ["U08"]
+    "取舍与反思": ["U08", "U19", "U23"]
   },
   "agent_and_tool_context": [
     {
