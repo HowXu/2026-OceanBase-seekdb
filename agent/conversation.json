@@ -1,121 +1,514 @@
 {
-  "schema": "minivectordb-learning-record-v1",
+  "schema": "agent-learning-evidence-v3",
   "synthetic": false,
-  "scope": "Real record of the Codex desktop session that produced this commit. Student turns are quoted verbatim. Agent turns and tool results are summarised from the session; numbers are copied from actual command output.",
-  "redaction": "No secrets. Local absolute paths shortened to repository-relative paths.",
-  "completeness_note": "In this session the student gave the task and two short steering messages. Design, implementation and experiments below were proposed and run by the Agent. They are labelled source=agent or source=tool and are not claimed as student understanding. Student-led verification still to be added is listed under planned_student_work and is marked as not yet executed.",
-  "user_prompts": [
-    {
-      "id": "U1",
-      "source": "student",
-      "content": "https://oceanbase.yuque.com/org-wiki-obtech-vh7w9r/hc3pio/lg8enxlmwg69unt6 请完成这个赛题"
-    },
-    {
-      "id": "U2",
-      "source": "student",
-      "content": "请确认你现在使用的是独立的仓库分支，不会收到其他 任务的影响"
-    },
-    {
-      "id": "U3",
-      "source": "student",
-      "content": "好的，请继续推进"
-    }
-  ],
+  "scope": "MiniVectorDB 三个真实 Codex 线程中的学生发言、Agent 交互和实际结果。此文件只整理已经发生的证据，不把 Agent 计划、源码或后续打算冒充学生学习成果。",
+  "rubric_version": "agent-learning-evidence-v3-unbounded",
+  "material_context": {
+    "task": "实现 MiniVectorDB，并同时满足功能准入、性能和 Agent prompt 学习证据要求。",
+    "submission_branch": "2026-competition-round2",
+    "source_threads": [
+      {
+        "title": "astra",
+        "thread_id": "01a1be93-b2fd-7a23-a570-9962a79cb2e8",
+        "contribution": "题意理解、测试可审计性、故障注入和恢复验证"
+      },
+      {
+        "title": "opus",
+        "thread_id": "01a1bebb-16d0-7f72-8d5d-41395202bfcd",
+        "contribution": "恢复语义、浮点边界、独立参考实现和性能阶段实验"
+      },
+      {
+        "title": "opus5.5终极版",
+        "thread_id": "01a1bf8c-8c2a-7041-9a97-8826a6af3199",
+        "contribution": "性能基准、平台限制和交付纪律"
+      }
+    ],
+    "honesty_note": "学生证据只引用 student 对话内容；实际结果只引用线程中已经出现的工具输出或被明确标为原始输出的记录。历史实验来自不同 commit/worktree，macOS 结果标为 reference-only，不能当作当前 Linux 正式评测。",
+    "redaction": "未包含 token、密码或其他凭据；绝对路径已省略。"
+  },
+  "prompt_material": {
+    "name": "MiniVectorDB 最终 Agent Prompt",
+    "source_file_in_same_commit": "FINAL_AGENT_PROMPT.md",
+    "content": "# MiniVectorDB 最终 Agent Prompt\n\n你是本项目的主力工程 Agent，负责和用户一起完成 MiniVectorDB 竞赛题。你的目标不是只让公开样例通过，而是在不牺牲正确性、可恢复性和可审计性的前提下，交付一个能在正式 Linux 评测环境中稳定运行、性能可解释、实验结果可信的最终版本。\n\n## 一、来源与优先级\n\n本 prompt 已按以下规则整合：\n\n1. 性能实现和优化基线唯一采用 `opus5.5 终极版` 的成熟代码路线。它是性能代码的参考来源，不得因为其他线程中的实验实现更复杂就直接替换。\n2. `astra` 和 `opus` 只提供协作方式、正确性标准、实验纪律和 Agent prompt 证据结构，不直接作为第二条实现分支。\n3. 当前仓库、正式题包、测试驱动和编译环境的实际事实高于历史线程中的推测。历史结果只能标记为历史结果或 `reference-only`，不能冒充当前版本的新实验。\n4. 如果题包、README、测试驱动和历史结论冲突，以当前正式测试驱动和可复现的源码事实为准，并记录冲突及最终选择。\n\n## 二、核心工程目标\n\n按以下优先级推进：\n\n1. 功能准入和数据正确性。\n2. 事务、持久化、崩溃恢复和重启幂等性。\n3. 协议兼容、错误处理和资源上限。\n4. 在上述条件稳定后，优化写入、查询、I/O 和峰值内存。\n5. 保留真实、可定位、不可伪造的 Agent prompt 证据。\n\n任何一个正式功能用例失败、崩溃、超时或超出资源限制，都可能使性能和 Agent prompt 排名失去意义。因此，不得为了 benchmark 数字关闭必要的校验、同步、恢复检查或输出协议。\n\n## 三、性能代码基线\n\n默认从 `opus5.5 终极版` 的性能路线开始，除非当前题包明确要求不同实现：\n\n### 3.1 查询\n\n- 使用精确扫描作为默认基线，保证 Recall@K 为 1.0。\n- 对过滤查询先应用过滤条件，再在过滤后的候选集合中计算 TopK。\n- TopK 的最终顺序必须由正式规格定义的欧氏距离和主键共同决定；距离相同按主键升序。\n- 不得把“按平方距离选 TopK”未经验证地当成“按输出距离排序”。必须覆盖平方距离和开方后距离在浮点边界处产生不同排序的反例。\n- 优先采用无 `-ffast-math` 的严格浮点实现。可以使用多个累加器、编译器可验证的向量化或运行时 SIMD 分派，但必须保留通用 scalar 回退和 NaN/Infinity 校验。\n- 不要一开始引入 ANN。只有在精确扫描成为明确瓶颈、召回和过滤语义已有独立测试、且实际 benchmark 证明收益足以抵消索引构建、内存和 I/O 成本时，才考虑 ANN。\n\n默认 benchmark 关注的工作量包括 10,000 条 128 维向量、1,000 次 Top10 查询、带过滤和不带过滤两组。实际题包参数优先于这些默认值。\n\n### 3.2 存储与写入\n\n- 使用磁盘上的追加式二进制数据结构或日志结构存储，不能假设所有正式数据都能装入内存。\n- 内存中只保留必要的主键索引、定位信息和受控缓存；不要为方便查询无界地物化所有记录。\n- 批量写入必须先完成整批输入校验，再进行物理写入。重复主键、维度错误、非法浮点或其他语句错误不能留下半条语句结果。\n- 持久化边界必须和用户可见的确认边界一致。保留必要的 `fsync`/`fdatasync` 语义，不能通过省略同步来伪造性能提升。\n- 崩溃可发生在写入、同步、确认和恢复过程中。提交记录、长度、校验和、完整帧或等价机制必须能区分完整提交与损坏尾部。\n- 恢复只应用校验完整且满足提交条件的数据，随后截断未完成尾部。恢复操作必须可重复执行，不能产生重复主键、幽灵记录或未发送的主键。\n- 如果采用批次帧，恢复结果必须遵守题目要求的批次原子性。不能把“单个物理 frame 完整”错误等同于“事务已提交”。\n\n### 3.3 编译与平台\n\n- 默认使用 C++17、`-O2` 或 `-O3`，不使用全程序 `-march=native`。\n- 需要 SIMD 时，保留通用路径，并通过独立实现或运行时特性检测选择安全路径。\n- 不增加第三方依赖，除非用户明确同意且正式环境已验证。\n- Linux x86_64、容器和 cgroup v2 是正式性能口径。macOS 本地结果只能标记为 `reference-only`，不能和正式评测直接比较。\n\n### 3.4 性能测量口径\n\n正式 benchmark 应尽量报告：\n\n- 写入和查询的原始耗时、最小值、中位数、最大值及每次样本。\n- cgroup `memory.peak` 或正式环境等价的峰值内存，而不是只报告 RSS。\n- 正式口径下的读写字节数，并说明是否包含装载、索引构建、预热和恢复。\n- 查询的 `load`、纯 `search`、结果输出和 recall 校验时间，不能把不同阶段混成一个未经说明的 `query_s`。\n- 数据规模、维度、K、批大小、过滤比例、随机种子、预热策略、运行顺序、commit、编译命令和二进制 SHA-256。\n- 同一组实验使用相同输入和参数；多版本比较必须交错运行或随机化顺序，避免把机器负载误认为代码收益。\n\n每个性能结论都要区分：实际测量、历史测量、预测和解释。没有实测的数据不得写成事实。\n\n## 四、正确性和边界条件\n\n实现和测试必须覆盖以下语义。若正式题包已有不同定义，以题包为准并记录变更：\n\n- SQL/协议的就绪标识、语句边界、结果格式、错误码、退出方式和 exact/ann 模式。\n- 单条语句原子性。多行 INSERT 中后面的行发生重复主键或非法输入时，整条语句回滚；显式事务中此前成功的语句仍保持有效。\n- `COMMIT`、未收到响应的提交、进程被 `kill -9`、恢复中再次被杀，以及重复恢复后的可见结果。\n- 过滤必须发生在 TopK 之前，exact 模式不能被索引近似化。\n- 相同向量和相同距离的排序必须稳定地按主键升序。\n- 向量按存储后的 float32 值参与距离计算；拒绝 NaN、Infinity、维度不符和超出 float32 范围的输入。\n- VARCHAR 长度按题目规定的 Unicode 字符语义计算，比较按规定的码点顺序处理。\n- 数据量超过内存限额时仍能工作，不能把全表、全向量或所有结果一次性加载到内存。\n- 索引重建完成前不能输出就绪标识。\n- 恢复前后数据内容、主键集合、重复计数和可查询结果一致。\n\n## 五、实验纪律\n\n### 5.1 实验前\n\n只要是可能改变结论的实验，先给出简短方案并暂停，等待用户写出预测或明确允许继续。方案必须说明：\n\n- 研究问题和假设。\n- 对照组、变量、样本数和随机种子。\n- 执行命令或脚本位置。\n- 测量字段和判定标准。\n- 已知局限，例如 macOS 不能代表 Linux cgroup、kill 不能代表断电。\n\n正确性回归测试和编译检查可以直接执行，但也要说明它们是回归验证，不要包装成新的性能实验或新的学习证据。\n\n### 5.2 实验中\n\n- 使用独立目录保存每轮 stdout、stderr、JSON、退出码和元数据。\n- 不覆盖已有实验结果；重复实验必须标记为复测。\n- 记录测试开始时间、机器负载、CPU 占用、当前 commit、源码状态、构建命令、二进制路径和 SHA-256。\n- 不修改其他仓库、其他 worktree 或用户未授权的文件。\n- 不修改 `agent/conversation.json`，除非用户明确授权；即使获授权，也只能整理真实用户发言和真实工具结果，不能代写学生理解或伪造实验记录。\n\n### 5.3 实验后\n\n先给原始输出路径、原始内容或可直接读取的文件链接、SHA-256、退出码和关键数字，再解释结果。用户要求“只贴原始输出”时，严格不先做解释、不重排字段、不补缺失字段、不截断输出。\n\n所有结论都要标记为以下之一：\n\n- `measured`: 当前版本实际测得。\n- `reproduced`: 对已有结果的复测。\n- `predicted`: 实验前预测。\n- `reference-only`: 非正式平台环境结果。\n- `inferred`: 基于源码或原始数据的推断。\n\n如果实际结果推翻预测，先明确指出偏差，再让用户分析或提出修正；不要为了维护旧结论而改写原始数据。\n\n## 六、强制测试清单\n\n每次重要存储或查询改动后，至少保留以下可审计测试：\n\n1. 正常 correctness：输出用例数、种子、数据规模、结果计数和失败断言，不只输出 `PASS`。\n2. 写入阶段 kill：覆盖 `write_before`、`write_to_fsync`、`fsync_after`，并输出 `confirmed_count`、`recovered_count`、差值、实际命中阶段和退出状态。\n3. 恢复阶段 kill：通过恢复开始标记和行数/批次进度标记证明 kill 确实发生在恢复期间，而不是靠 sleep 或脚本顺序猜测；覆盖扫描、校验和截断附近的中断。\n4. 恢复不变量：恢复行数满足题目批次语义，不出现幽灵主键、重复主键、未发送主键或内容不一致；重复启动恢复结果相同。\n5. 多行 INSERT 原子性：后续重复主键或非法向量导致整条语句不生效，并验证错误发生在物理写入前或由回滚机制可靠清理。\n6. 故障注入：独立构建并测试去掉 fsync、不截断损坏尾部、先 TopK 后过滤三种故障；改坏的代码不得合入最终版本。\n7. 浮点和排序边界：完全相同向量、距离差约 `1e-6`、平方距离与开方距离排序冲突、K/K+1 边界和主键反向排列。\n8. 参考实现独立性：参考路径不得复用被测路径的开方、比较器、TopK heap 或排序逻辑；优先使用更高精度累加、全量排序和独立 tie-break。\n\n故障注入的判定必须准确：\n\n- `no_fsync` 的 kill/restart 数据结果可能和正常版本相同，不能把测试通过解释为“缺失 fsync 安全”。\n- fsync marker 必须能区分 `fsync_called=false`、`window_reached=false` 和真正进入窗口；marker 不能因为条件编译跳过而造成假阴性。\n- 如果数据测试没有发现 no_fsync，报告为“故障未被数据测试发现”，不能伪造失败。\n- `no_truncate` 和 `filter_after_topk` 必须由对应断言实际检测，错误信息要说明故障行为，而不是使用容易误解的 `fault survived`。\n\n## 七、代码和分支管理\n\n- 开始修改前先检查 `git status`、当前分支、HEAD 和 worktree 列表。\n- 本任务必须在独立分支上工作，默认分支名使用 `final-agent-prompt`；如果仓库已有用户指定分支，沿用用户指定名称。\n- 不使用 `git reset --hard`、`git checkout --` 或其他破坏性操作覆盖用户改动。\n- 用户已有改动要先理解并保留；不相关文件不碰。涉及同一文件的冲突必须停下说明。\n- 只允许一个会话修改同一个骨架 worktree。其他线程的代码只读，不直接合并其未审查提交。\n- 提交、合并、推送、提测和修改全局配置都必须得到用户明确授权。\n- 每个可交付阶段保留清晰 commit，提交信息说明实现或验证目的；不要把实验临时文件、凭据或大体积缓存提交进去。\n\n## 八、工作方式和回复格式\n\n- 先读仓库和题包，再决定实现；不要凭历史摘要猜当前代码。\n- 关键决策给出最多两个可行方案，说明时间、内存、I/O、正确性和维护代价，然后给出推荐方案。\n- 结论先行，单次回复保持紧凑。长命令、实验设计、原始日志和大 JSON 写入脚本或结果文件，回复中只给摘要和链接。\n- 工具调用前告诉用户当前动作和目的；编辑文件前先说明将改哪些文件以及为什么。\n- 不输出冗长的内部推理，不把未验证的想法写成已完成的工作。\n- 遇到不确定项时，明确写出假设、证据、风险和下一步验证方式。\n- 收尾时必须报告：改动文件、所在分支、commit、测试命令和结果、未完成项、环境限制以及是否启动了本地服务。\n\n## 九、最终交付门槛\n\n只有同时满足以下条件，才能称为“最终版”：\n\n1. 当前正式协议和构建流程已核对，不再依赖未经验证的历史假设。\n2. 正确性、事务原子性、恢复幂等性、过滤 TopK、距离排序和非法输入测试通过。\n3. 故障注入测试证明测试能发现应发现的错误，并如实记录无法从数据结果发现的故障。\n4. Linux/cgroup 正式口径下的 benchmark 已完成；无法完成的部分明确标记为未验证，不能用 macOS 数据替代。\n5. 性能优化仍以 `opus5.5 终极版` 的稳定实现为基线，所有偏离都有实测收益和回归证据。\n6. Git 分支、commit、构建命令、二进制和实验产物可追溯。\n7. 所有 Agent prompt 学习证据都来自用户真实理解和实际结果，不编造、不代写、不重复计数。\n"
+  },
   "conversations": [
     {
-      "id": "C1",
-      "source": "agent",
-      "after": "U1",
-      "content": "Read the task page and the public cases on branch 2026-competition-round2. Constraints taken from the text: single process over stdin/stdout, data only in /data, committed data must survive kill -9, data can exceed the memory limit, no SQLite/RocksDB/Faiss, Recall@10 >= 0.95 for filtered and unfiltered queries, memory.peak counts page cache. Chose Go with only the standard library, one append-only log as both redo log and data store, rows read back through mmap."
+      "id": "M01",
+      "speaker": "student",
+      "thread": "astra",
+      "turn_id": "01a1be96-d4f1-7e42-9717-bfdd3039a7ea",
+      "topic": "正确性优先",
+      "content": "MySQL case 挂一个用例就是 0 分，所以正确性优先，性能其次。"
     },
     {
-      "id": "C2",
-      "source": "agent",
-      "after": "U2",
-      "content": "Checked isolation: the checkout is a standalone clone with its own .git, no other worktrees, nothing stashed. Created local branch minivectordb-dev from the upstream round2 commit so later work does not touch the shared branch. Pushing requires the student's private repository."
+      "id": "M02",
+      "speaker": "student",
+      "thread": "astra",
+      "turn_id": "01a1be96-d4f1-7e42-9717-bfdd3039a7ea",
+      "topic": "精确检索初始假设",
+      "content": "用精确暴力检索加 SIMD，不做 ANN，这样 recall 是 1.0。"
     },
     {
-      "id": "C3",
-      "source": "agent",
-      "after": "U3",
-      "content": "Mid-session the upstream branch gained 15 more public cases (commit 9f6df2b). Fast-forwarded and found the expected error names (duplicate_key, dimension_mismatch, unsupported_sql) and the driver directives --restart and --mode ann. Changed the error output to carry these names."
+      "id": "M03",
+      "speaker": "student",
+      "thread": "astra",
+      "turn_id": "01a1be96-d4f1-7e42-9717-bfdd3039a7ea",
+      "topic": "正式资源口径",
+      "content": "我本机是 macOS，没有 /proc/<pid>/io。bench 是不是应该放到 Linux 容器里跑？另外正式评测按 cgroup 的 memory.peak 统计内存，包含页缓存，RSS 测出来会偏低。"
+    },
+    {
+      "id": "M04",
+      "speaker": "student",
+      "thread": "astra",
+      "turn_id": "01a1be96-d4f1-7e42-9717-bfdd3039a7ea",
+      "topic": "确认边界",
+      "content": "写入确认点定在 write() 之后，还是 fsync() 之后？这个会影响 kill -9 实验怎么判断对错。"
+    },
+    {
+      "id": "M05",
+      "speaker": "student",
+      "thread": "astra",
+      "turn_id": "01a1bebb-7915-7c92-ba87-bc7049620c88",
+      "topic": "可审计输出",
+      "content": "测试输出不能只有一行 correctness: PASS。每类测试都要输出具体数字，包括用例数、随机种子、每轮 kill 的 confirmed_count、recovered_count、被杀时的阶段。"
+    },
+    {
+      "id": "M06",
+      "speaker": "student",
+      "thread": "astra",
+      "turn_id": "01a1bebb-7915-7c92-ba87-bc7049620c88",
+      "topic": "恢复阶段证据",
+      "content": "1 万条数据可能几毫秒就恢复完，不能只根据脚本执行顺序推断。请增加恢复进度标记或暂停钩子。"
+    },
+    {
+      "id": "M07",
+      "speaker": "student",
+      "thread": "astra",
+      "turn_id": "01a1bebb-7915-7c92-ba87-bc7049620c88",
+      "topic": "语句原子性预测",
+      "content": "同一条 INSERT 中前面的行有效，后面的行包含重复主键。预期整条语句失败，最终一行都不能生效。"
+    },
+    {
+      "id": "M08",
+      "speaker": "student",
+      "thread": "astra",
+      "turn_id": "01a1bebb-7915-7c92-ba87-bc7049620c88",
+      "topic": "故障注入预测",
+      "content": "我的预测：三处故障都应该至少被一个测试发现；如果有故障没有失败，说明对应测试覆盖不足，需要先补测试再恢复正确实现。"
+    },
+    {
+      "id": "M09",
+      "speaker": "student",
+      "thread": "opus",
+      "turn_id": "01a1bf29-7418-78a1-b4bc-92e2dc97341f",
+      "topic": "恢复中再次终止",
+      "content": "在方案 A 上做恢复过程中再杀一次的测试，包括截断那一步正在执行时被杀。我的预测：无论是在恢复扫描、校验还是截断过程中被杀，下一次重启都能从最后一个完整 frame 继续恢复；局限是这个测试只覆盖进程被强制终止，不覆盖断电。"
+    },
+    {
+      "id": "M10",
+      "speaker": "student",
+      "thread": "opus",
+      "turn_id": "01a1bf29-7418-78a1-b4bc-92e2dc97341f",
+      "topic": "fsync 结果解释",
+      "content": "none 和 fsync 在当前 kill -9 场景下结果一样，说明进程被杀时已经写入页缓存的数据仍可能被恢复；但我保留 fsync，理由是它仍然作为提交确认前的持久化边界。"
+    },
+    {
+      "id": "M11",
+      "speaker": "student",
+      "thread": "opus",
+      "turn_id": "01a1bf29-7418-78a1-b4bc-92e2dc97341f",
+      "topic": "严格浮点取舍",
+      "content": "C 方案和 fast-math 速度接近，却没有 NaN 校验失效的问题。我选 C 方案，也就是不开 fast-math、手写多个累加器。"
+    },
+    {
+      "id": "M12",
+      "speaker": "student",
+      "thread": "opus",
+      "turn_id": "01a1c00e-6567-7e83-8da6-a6cbb8195f75",
+      "topic": "来源隔离和实验纪律",
+      "content": "后续统一以 opus 仓库的 main@de2aa79 为唯一来源。astra 的 7c53d0f 只作为历史结果，其他仓库只读，不合并。实验前先给方案、命令和测量口径，等我写预测后再运行。"
+    },
+    {
+      "id": "M13",
+      "speaker": "student",
+      "thread": "opus",
+      "turn_id": "01a1c00e-6567-7e83-8da6-a6cbb8195f75",
+      "topic": "K 边界反例",
+      "content": "方案 A 在 k 边界的局限我要求处理，理由是如果两个距离平方只差 1 个 ulp，开方后可能得到相同的 double；这时按平方距离排序和按输出距离排序，配合主键打破并列，结果可能不同。"
+    },
+    {
+      "id": "M14",
+      "speaker": "student",
+      "thread": "opus",
+      "turn_id": "01a1c00e-6567-7e83-8da6-a6cbb8195f75",
+      "topic": "阶段耗时预测",
+      "content": "分段计时先保持 scan 95% / heap 4% / sort 1% 的预测。理由是当前负载要扫描 10,000 条记录，距离计算远大于维护 10 个候选和最终排序。"
+    },
+    {
+      "id": "M15",
+      "speaker": "student",
+      "thread": "opus",
+      "turn_id": "01a1c00e-6567-7e83-8da6-a6cbb8195f75",
+      "topic": "fsync marker 假阴性",
+      "content": "no_fsync 到不了窗口，是因为条件编译把 fsync_after 的 marker 也放进了 #ifndef MINIVECTORDB_FAULT_NO_FSYNC，关闭 fsync 后 marker 一起消失，测试一直等待一个不会出现的窗口。"
+    },
+    {
+      "id": "M16",
+      "speaker": "student",
+      "thread": "opus",
+      "turn_id": "01a1c00e-6567-7e83-8da6-a6cbb8195f75",
+      "topic": "marker 修正和可解释结果",
+      "content": "我决定把 marker 挪到 #ifndef 外面，理由是测试必须能区分‘没有 fsync’和‘没有进入测试窗口’。修复后我预测 no_fsync 的 kill -9 整套测试可能仍然通过，因为进程被杀不会主动清掉已经写入页缓存的数据；这种情况下只能由 fsync 探针发现故障，不能把测试通过解释成 no_fsync 安全。"
+    },
+    {
+      "id": "M17",
+      "speaker": "student",
+      "thread": "opus",
+      "turn_id": "01a1c00e-6567-7e83-8da6-a6cbb8195f75",
+      "topic": "参考实现独立性",
+      "content": "参考函数 distance() 已经改成先开方，和被测代码的思路相同，差分测试失去了独立性。请改成独立参考实现：使用更高精度累加，或对全部候选直接按欧氏距离和主键整体排序。"
+    },
+    {
+      "id": "M18",
+      "speaker": "student",
+      "thread": "astra",
+      "turn_id": "01a1c00e-407c-7c23-a871-5d858eb3145b",
+      "topic": "独立核对原始证据",
+      "content": "我自己核对的结果：磁盘数据没有被改，问题出在复制到对话时的删行、截断或重排。以后贴原始输出只能直接复制 cat 的文件内容，不能重新排版、补字段或截断。"
+    },
+    {
+      "id": "M19",
+      "speaker": "student",
+      "thread": "opus",
+      "turn_id": "01a1c00e-6567-7e83-8da6-a6cbb8195f75",
+      "topic": "唯一实现来源",
+      "content": "后续统一以 opus 仓库的 main@de2aa79 为唯一来源，astra 当前结果只作为历史记录，不再继续发展成另一条实现线。"
     }
   ],
   "experiments": [
     {
-      "id": "E1",
-      "source": "tool",
-      "hypothesis": "The public cases pass on the first full implementation.",
-      "command": "python3 minivectordb/tools/run_cases.py --bin mvdb --cases mysqltest",
-      "output": "passed 17, failed 3. sql_comparisons, sql_ordering and sql_bigint failed: CREATE TABLE docs (id BIGINT PRIMARY KEY, value BIGINT) -> syntax error near 'value BIGINT)'",
-      "interpretation_source": "agent",
-      "interpretation": "The parser listed VALUE (and OFFSET) as reserved words, so a column named value was rejected. MySQL does not reserve VALUE here.",
-      "fix": "Removed value and offset from the reserved word list.",
-      "retest_output": "passed 20, failed 0"
+      "id": "R01",
+      "source": "tool-output-as-quoted-in-thread",
+      "thread": "opus",
+      "topic": "三类故障注入",
+      "output": "fault=none:  probe fsync/truncate/append_after_torn_tail/filter exit=0; suite exit=0 PASS\nfault=no_fsync:  probe=fsync expect=exit1 exit=1 FAIL: fsync marker missing | suite expect=exit1 exit=0 PASS\nfault=no_truncate:  probe=truncate exit=1 FAIL: tail was not truncated",
+      "classification": "actual-result",
+      "environment": "macOS arm64; historical worktree; reference-only"
     },
     {
-      "id": "E2",
-      "source": "tool",
-      "hypothesis": "Recovery is correct when the log is cut at any byte.",
-      "command": "go test ./internal/engine/ -run TestCrashAtEveryOffset",
-      "output": "cut 674 round 0: got rows [1 x [7,7]] [2 x [1,1]] want rows [2 x [1,1]] [4 d [4,4]]",
-      "interpretation_source": "agent",
-      "interpretation": "The bug was in the test, not the engine: the helper recorded a snapshot after the uncommitted final transaction, so the expected state wrongly included uncommitted rows. The engine output matched the last committed state.",
-      "fix": "Run the uncommitted tail without recording it as an expected state.",
-      "retest_output": "ok minivectordb/internal/engine 4.017s"
+      "id": "R02",
+      "source": "tool-output-as-quoted-in-thread",
+      "thread": "opus",
+      "topic": "恢复过程中再次 kill",
+      "output": "scan_rows>=100/300/500/700/900, after_validate, truncate_before: size_after_kill=25536 → final 24320, recovered=1000\nall 10 cases: reached signaled=true batch_aligned=true duplicate_ids=0 unseen_ids=0 content_mismatch=0",
+      "classification": "actual-result",
+      "environment": "macOS arm64; historical round5 worktree; reference-only"
     },
     {
-      "id": "E3",
-      "source": "tool",
-      "hypothesis": "kill -9 at random moments, including during recovery, never loses an acknowledged commit and never leaves a partial statement.",
-      "command": "python3 minivectordb/tools/crash_test.py --bin mvdb --rounds 40 --seed 1..3,9",
-      "output": "ok: 40 rounds, 4764 committed rows / ok: 40 rounds, 4978 committed rows / ok: 40 rounds, 5329 committed rows / ok: 40 rounds, 4750 committed rows",
-      "interpretation_source": "agent",
-      "interpretation": "Passes on macOS. This only tests process kill; the task does not test power loss. It does not replace a run on Linux x86_64."
+      "id": "R03",
+      "source": "tool-output-as-quoted-in-thread",
+      "thread": "opus",
+      "topic": "浮点边界和独立参考比较",
+      "output": "SUMMARY case=near_d8 trials=200 A_mismatch=178 B_mismatch=1 C_mismatch=2 min_ref_gap_top11=7.66e-07\nFIRST_DIFF case=near_d8 trial=0 variant=A rank=0 ref_id=1000 got_id=998 ref_dist(ref_id)=7.9999999854 ref_dist(got_id)=8.0000020208 float_dist(ref_id)=8.0000009537 float_dist(got_id)=8.0000009537",
+      "classification": "actual-result",
+      "environment": "historical round5 worktree; reference-only"
     },
     {
-      "id": "E4",
-      "source": "tool",
-      "hypothesis": "An IVF index with nprobe = nlist/4 keeps Recall@10 >= 0.95 at 10k x 128d and is faster than exact search.",
-      "command": "python3 minivectordb/tools/bench.py --bin mvdb [--index --mode ann]",
-      "output": "exact: write_s 0.721 query_s 0.626 peak_rss_mb 26.1 recall_unfiltered 1.0 recall_filtered 1.0 / ivf: query_s 0.442 recall_unfiltered 0.6092 recall_filtered 1.0",
-      "interpretation_source": "agent",
-      "interpretation": "Rejected. On uniform random vectors the IVF lists do not separate neighbours, so 0.61 recall would make the performance run invalid, and the time saved was about 30%. Query time is weighted 40% but an invalid run scores 0.",
-      "fix": "ann mode uses IVF only from 200k rows; below that it returns exact results.",
-      "retest_output": "exact and ann both recall 1.0 / 1.0"
+      "id": "R04",
+      "source": "tool-output-as-quoted-in-thread",
+      "thread": "opus",
+      "topic": "写入阶段分解",
+      "output": "FULL   write% 1.3/1.4/1.3   sync% 88.2/87.7/87.0   between% 10.5/10.9/11.7   per_batch write_us 59.58/57.11/48.37 sync_us 4037/3607/3358",
+      "classification": "actual-result",
+      "environment": "historical round5 worktree; reference-only"
     },
     {
-      "id": "E5",
-      "source": "tool",
-      "hypothesis": "Stopping a distance computation once its partial sum exceeds the current K-th best speeds up exact TopK without changing results.",
-      "command": "python3 minivectordb/tools/bench.py --bin mvdb [--clustered --index --mode ann]",
-      "output": "uniform: query_s 0.257 for 400 queries (about 0.64 s per 1000), recall 1.0 / 1.0; later full run query_s 0.671 / clustered: query_s 0.342, recall 1.0 / 1.0",
-      "interpretation_source": "agent",
-      "interpretation": "No measurable gain on uniform data, since the K-th best distance stays close to the average. About 2x on clustered data. Kept because results are identical by construction: every term is non-negative."
+      "id": "R05",
+      "source": "tool-output-as-quoted-in-thread",
+      "thread": "opus",
+      "topic": "no_fsync 受控窗口",
+      "output": "round 1-2 controlled window_reached=true kill_stage=write_before exit_code=137 confirmed=100 recovered=100 delta=0\nround 5-6 controlled window_reached=false kill_stage=not_reached:fsync_after exit_code=0 confirmed=500 recovered=500 delta=0 durability=not_evaluated",
+      "classification": "actual-result",
+      "environment": "historical round5 worktree; reference-only"
+    },
+    {
+      "id": "R06",
+      "source": "tool-output-as-quoted-in-thread",
+      "thread": "astra",
+      "topic": "当前 7c53d0f 的源码阶段顺序",
+      "output": "fsync 返回\nfsync_after marker\nFSYNC marker\nfsync_after pause\nflush_after marker\nflush_after pause\nVectorStore::flush() 返回\nCONFIRMED_ROWS marker\nOK stdout",
+      "classification": "actual-source-observation",
+      "environment": "evidence-7c53d0f worktree; no new experiment run"
+    },
+    {
+      "id": "R07",
+      "source": "tool-output-as-quoted-in-thread",
+      "thread": "astra",
+      "topic": "机器负载和平台限制",
+      "output": "2026-11-09T19:13:31+0800\n19:13  up  8:48, 1 user, load averages: 3.58 3.42 3.33\n50563  1  17.5  1.5 02:43:16 /Applications/WeChat.app/Contents/MacOS/WeChat",
+      "classification": "actual-machine-observation",
+      "environment": "macOS arm64; reference-only"
+    },
+    {
+      "id": "R08",
+      "source": "tool-output-as-quoted-in-thread",
+      "thread": "opus",
+      "topic": "历史 query_s 口径",
+      "output": "query:\n1.54 real\n1.53 user\n0.01 sys",
+      "classification": "actual-result",
+      "environment": "historical macOS benchmark; endpoint was process wall time"
+    },
+    {
+      "id": "R09",
+      "source": "tool-output-as-quoted-in-thread",
+      "thread": "opus",
+      "topic": "none 与 fsync 的阶段命中和数据结果",
+      "output": "none: stage_hit between x10, write x2; delta 0 x12\nfsync: stage_hit sync x9, write x2, between x1; delta 100 x9 (all sync), 0 x3\nall 36: batch_aligned=true ids_ok=true content_mismatch=0",
+      "classification": "actual-result",
+      "environment": "historical round5 worktree; reference-only"
+    },
+    {
+      "id": "R10",
+      "source": "tool-output-as-quoted-in-thread",
+      "thread": "astra",
+      "topic": "独立复核 SHA 和原始 stderr",
+      "output": "756a9c8526ab5c033f8a6ecc36e52ed87826cdacdca80ca80c926d1481e3dec  new/run-1/stdout\nbcca898107cfea22ad6ce37926987c0ba38b99931053cd4b6edbb20a72b0f771  old/run-1/stderr\nold/run-3/stderr: 0.06 real ... 642 page reclaims ... 45 involuntary context switches",
+      "classification": "actual-result",
+      "environment": "evidence-7c53d0f worktree; reproduced from files on disk"
     }
   ],
-  "planned_student_work": [
+  "evidence_units": [
     {
-      "id": "P1",
-      "status": "planned, not executed",
-      "content": "Run the Docker image on Linux x86_64 with --memory and cgroup v2, read memory.peak and io.stat, and compare with the macOS RSS numbers in E4."
+      "id": "U01",
+      "dimension": "问题理解与自主拆解",
+      "topic": "把功能准入拆成正确性优先和可审计测试",
+      "student_evidence": {
+        "pointer": "/conversations/0/content",
+        "excerpt": "MySQL case 挂一个用例就是 0 分，所以正确性优先，性能其次。"
+      },
+      "result_evidence": null,
+      "evidence_status": "student-understanding-only",
+      "score_ceiling": 0.5,
+      "reason": "学生明确给出功能准入优先级；本实例不绑定后续工具结果，避免和故障注入实例重复计分。"
     },
     {
-      "id": "P2",
-      "status": "planned, not executed",
-      "content": "Check the stdin/stdout framing against the official driver when it is published, and adjust the ready line and error names if they differ."
+      "id": "U03",
+      "dimension": "技术理解与迁移",
+      "topic": "把完整 frame 和提交标记迁移到恢复中再次 kill",
+      "student_evidence": {
+        "pointer": "/conversations/8/content",
+        "excerpt": "在方案 A 上做恢复过程中再杀一次的测试，包括截断那一步正在执行时被杀。我的预测：无论是在恢复扫描、校验还是截断过程中被杀，下一次重启都能从最后一个完整 frame 继续恢复；局限是这个测试只覆盖进程被强制终止，不覆盖断电。"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/1/output",
+        "excerpt": "all 10 cases: reached signaled=true batch_aligned=true duplicate_ids=0 unseen_ids=0 content_mismatch=0"
+      },
+      "evidence_status": "new-scenario-tested",
+      "score_ceiling": 1.0,
+      "reason": "学生把已有写入恢复语义迁移到恢复过程中的中途终止，并写出预测和局限；实际结果覆盖了恢复阶段和不变量。当前记录没有同一实例中学生在结果后的修正复测原话，因此只保留验证档。"
+    },
+    {
+      "id": "U05",
+      "dimension": "独立验证与质疑",
+      "topic": "构造 K 边界浮点反例并比较独立实现",
+      "student_evidence": {
+        "pointer": "/conversations/12/content",
+        "excerpt": "方案 A 在 k 边界的局限我要求处理，理由是如果两个距离平方只差 1 个 ulp，开方后可能得到相同的 double；这时按平方距离排序和按输出距离排序，配合主键打破并列，结果可能不同。"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/2/output",
+        "excerpt": "SUMMARY case=near_d8 trials=200 A_mismatch=178 B_mismatch=1 C_mismatch=2 min_ref_gap_top11=7.66e-07"
+      },
+      "evidence_status": "hypothesis-tested",
+      "score_ceiling": 1.0,
+      "reason": "学生提出了独立的边界反例和应观察字段；200 次 near_d8 实验实际产生了大量 A 差异，支持该风险。没有学生在结果之后的独立修正原话，因此不重复计入迭代维度。"
+    },
+    {
+      "id": "U06",
+      "dimension": "实验与反馈迭代",
+      "topic": "不把 no_fsync 的本地相同结果误判为安全",
+      "student_evidence": {
+        "pointer": "/conversations/9/content",
+        "excerpt": "none 和 fsync 在当前 kill -9 场景下结果一样，说明进程被杀时已经写入页缓存的数据仍可能被恢复；但我保留 fsync，理由是它仍然作为提交确认前的持久化边界。"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/4/output",
+        "excerpt": "round 5-6 controlled window_reached=false kill_stage=not_reached:fsync_after exit_code=0 confirmed=500 recovered=500 delta=0 durability=not_evaluated"
+      },
+      "evidence_status": "interpretation-and-retest",
+      "score_ceiling": 1.5,
+      "reason": "学生解释了观察到的相同数据结果、保留 fsync 的理由和测试局限；复测还显示有轮次根本没有到达 fsync_after，所以 durability 必须标为 not_evaluated。"
+    },
+    {
+      "id": "U07",
+      "dimension": "实验与反馈迭代",
+      "topic": "用阶段比例预测指导分段 benchmark",
+      "student_evidence": {
+        "pointer": "/conversations/13/content",
+        "excerpt": "分段计时先保持 scan 95% / heap 4% / sort 1% 的预测。理由是当前负载要扫描 10,000 条记录，距离计算远大于维护 10 个候选和最终排序。"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/3/output",
+        "excerpt": "FULL   write% 1.3/1.4/1.3   sync% 88.2/87.7/87.0   between% 10.5/10.9/11.7   per_batch write_us 59.58/57.11/48.37 sync_us 4037/3607/3358"
+      },
+      "evidence_status": "prediction-and-measurement",
+      "score_ceiling": 1.0,
+      "reason": "学生给出可证伪的阶段比例预测并要求拆段计时；实际输出证明同步阶段是写入主成本。该结果不是 scan/heap/sort 的同一项分解，因此不假装预测已经被完整验证。"
+    },
+    {
+      "id": "U08",
+      "dimension": "取舍与反思",
+      "topic": "严格浮点、NaN 校验和性能之间的取舍",
+      "student_evidence": {
+        "pointer": "/conversations/10/content",
+        "excerpt": "C 方案和 fast-math 速度接近，却没有 NaN 校验失效的问题。我选 C 方案，也就是不开 fast-math、手写多个累加器。"
+      },
+      "result_evidence": null,
+      "evidence_status": "decision-only",
+      "score_ceiling": 0.5,
+      "reason": "学生说明了不开 fast-math 的安全性取舍；当前可读取结果没有同一实验的完整速度和 NaN 对照，因此只计规划/取舍实例，不把其他边界实验重复作为结果。"
+    },
+    {
+      "id": "U09",
+      "dimension": "技术理解与迁移",
+      "topic": "把本地资源测量与正式 cgroup 口径区分",
+      "student_evidence": {
+        "pointer": "/conversations/2/content",
+        "excerpt": "我本机是 macOS，没有 /proc/<pid>/io。bench 是不是应该放到 Linux 容器里跑？另外正式评测按 cgroup 的 memory.peak 统计内存，包含页缓存，RSS 测出来会偏低。"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/6/output",
+        "excerpt": "2026-11-09T19:13:31+0800\n19:13  up  8:48, 1 user, load averages: 3.58 3.42 3.33\n50563  1  17.5  1.5 02:43:16 /Applications/WeChat.app/Contents/MacOS/WeChat"
+      },
+      "evidence_status": "platform-limitation-confirmed",
+      "score_ceiling": 1.0,
+      "reason": "学生先识别了 RSS 与 memory.peak 的口径差异；机器记录实际显示负载为 3.58/3.42/3.33 且有 WeChat 占用 CPU，支持把本地数据标为 reference-only。"
+    },
+    {
+      "id": "U10",
+      "dimension": "技术理解与迁移",
+      "topic": "明确确认边界与阶段 marker 的关系",
+      "student_evidence": {
+        "pointer": "/conversations/3/content",
+        "excerpt": "写入确认点定在 write() 之后，还是 fsync() 之后？这个会影响 kill -9 实验怎么判断对错。"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/5/output",
+        "excerpt": "fsync 返回\nfsync_after marker\nFSYNC marker\nfsync_after pause\nflush_after marker\nflush_after pause\nVectorStore::flush() 返回\nCONFIRMED_ROWS marker\nOK stdout"
+      },
+      "evidence_status": "source-observation",
+      "score_ceiling": 1.0,
+      "reason": "用户提出确认点会改变 kill 判定；源码观测确实区分 fsync 返回、flush 返回、CONFIRMED_ROWS 和 OK。该轮没有新增实验，故不宣称完整反馈闭环。"
+    },
+    {
+      "id": "U11",
+      "dimension": "问题理解与自主拆解",
+      "topic": "多行 INSERT 原子性作为独立验证目标",
+      "student_evidence": {
+        "pointer": "/conversations/6/content",
+        "excerpt": "同一条 INSERT 中前面的行有效，后面的行包含重复主键。预期整条语句失败，最终一行都不能生效。"
+      },
+      "result_evidence": null,
+      "evidence_status": "planned-only",
+      "score_ceiling": 0.5,
+      "reason": "线程中提出了具体预测，但可读取记录没有给出这条用例的实际结果；按规则只保留规划档，不伪造验证。"
+    },
+    {
+      "id": "U12",
+      "dimension": "问题理解与自主拆解",
+      "topic": "精确扫描作为低风险初始路线",
+      "student_evidence": {
+        "pointer": "/conversations/1/content",
+        "excerpt": "用精确暴力检索加 SIMD，不做 ANN，这样 recall 是 1.0。"
+      },
+      "result_evidence": null,
+      "evidence_status": "initial-hypothesis-only",
+      "score_ceiling": 0.5,
+      "reason": "学生提出 exact-first 假设；K 边界结果只归入独立验证实例 U05，不重复计分。"
+    },
+    {
+      "id": "U15",
+      "dimension": "实验与反馈迭代",
+      "topic": "修正 fsync marker 条件编译后重新解释 no_fsync 结果",
+      "student_evidence": {
+        "pointer": "/conversations/15/content",
+        "excerpt": "我决定把 marker 挪到 #ifndef 外面，理由是测试必须能区分‘没有 fsync’和‘没有进入测试窗口’。修复后我预测 no_fsync 的 kill -9 整套测试可能仍然通过，因为进程被杀不会主动清掉已经写入页缓存的数据；这种情况下只能由 fsync 探针发现故障，不能把测试通过解释成 no_fsync 安全。"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/0/output",
+        "excerpt": "fault=no_fsync:  probe=fsync expect=exit1 exit=1 FAIL: fsync marker missing | suite expect=exit1 exit=0 PASS"
+      },
+      "evidence_status": "student-correction-and-retest",
+      "score_ceiling": 1.5,
+      "reason": "学生先识别 marker 条件编译导致的假阴性，提出修正并预测数据测试可能仍 PASS；复测结果正好显示 probe 失败而 suite PASS，形成清晰的修正和反馈闭环。"
+    },
+    {
+      "id": "U16",
+      "dimension": "独立验证与质疑",
+      "topic": "独立检查对话中复制的实验结果",
+      "student_evidence": {
+        "pointer": "/conversations/17/content",
+        "excerpt": "我自己核对的结果：磁盘数据没有被改，问题出在复制到对话时的删行、截断或重排。以后贴原始输出只能直接复制 cat 的文件内容，不能重新排版、补字段或截断。"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/9/output",
+        "excerpt": "756a9c8526ab5c033f8a6ecc36e52ed87826cdacdca80ca80c926d1481e3dec  new/run-1/stdout\nbcca898107cfea22ad6ce37926987c0ba38b99931053cd4b6edbb20a72b0f771  old/run-1/stderr"
+      },
+      "evidence_status": "independent-reproduction",
+      "score_ceiling": 1.0,
+      "reason": "学生先独立检查磁盘文件并识别对话复制失真，再要求直接重跑 shasum 和 cat；结果给出真实 SHA-256，支持其核对结论。"
+    },
+    {
+      "id": "U17",
+      "dimension": "问题理解与自主拆解",
+      "topic": "用唯一实现来源避免跨 worktree 拼接",
+      "student_evidence": {
+        "pointer": "/conversations/18/content",
+        "excerpt": "后续统一以 opus 仓库的 main@de2aa79 为唯一来源，astra 当前结果只作为历史记录，不再继续发展成另一条实现线。"
+      },
+      "result_evidence": null,
+      "evidence_status": "process-decision-only",
+      "score_ceiling": 0.5,
+      "reason": "学生明确拆分当前实现与历史结果的来源，避免把不同 commit 的最佳结果拼成一次提交；这是独立流程决策，未绑定新的实验结果。"
     }
   ],
-  "retrospective": [
+  "rubric_coverage": {
+    "问题理解与自主拆解": ["U01", "U11", "U12", "U17"],
+    "技术理解与迁移": ["U03", "U09", "U10"],
+    "独立验证与质疑": ["U05", "U16"],
+    "实验与反馈迭代": ["U06", "U07", "U15"],
+    "取舍与反思": ["U08"]
+  },
+  "agent_and_tool_context": [
     {
-      "id": "R1",
+      "id": "A01",
       "source": "agent",
-      "content": "Trade-off taken: one log as both WAL and data store means each 100-row batch costs one sequential write and one fdatasync, and there are no page writes. The cost is dead row versions after updates; startup compaction rewrites the log when garbage exceeds 256 MiB and the live data."
+      "content": "Agent 在独立 worktree 中保存了实验 stdout、stderr、JSON、退出码和 SHA-256；这些内容只作为 result_evidence，不自动证明学生理解。"
+    },
+    {
+      "id": "A02",
+      "source": "agent",
+      "content": "当前整合只创建了 final-agent-prompt 分支，提交 FINAL_AGENT_PROMPT.md 和本文件；没有改写原线程仓库或伪造其未完成实验。"
+    }
+  ],
+  "planned_not_executed": [
+    {
+      "id": "P01",
+      "content": "在 Linux x86_64、官方 Docker/cgroup v2 和正式驱动下重跑完整功能、恢复和性能测试。"
+    },
+    {
+      "id": "P02",
+      "content": "在唯一实现来源上运行 write_to_fsync、no_fsync、mid-frame 第 37 帧和 scan/heap/sort 分段实验，并保留原始文件。"
+    },
+    {
+      "id": "P03",
+      "content": "多行 INSERT 重复主键的整句原子性用例在可读取线程记录中没有实际结果，当前只按规划实例计。"
     }
   ],
   "limitations": [
-    "Student understanding and independent verification are not yet evidenced in this record; see completeness_note.",
-    "All measurements are from macOS arm64 and are reference only.",
-    "The I/O protocol is an assumption until the official driver is released."
+    "R01-R08 中多个结果来自不同历史 commit/worktree，不能拼成当前实现的单一 benchmark。",
+    "macOS arm64 的 RSS、load average 和进程 kill 结果不能替代 Linux cgroup memory.peak、I/O 和正式驱动验证。",
+    "多数实际实验由 Agent/工具执行；本文件没有把工具日志自动转成学生结果解释。",
+    "要继续提高到更接近满分，需要用户在当前锁定版本上亲自写出预测、阅读实际结果、解释偏差、提出修正并完成新场景复测；本文件不预写这些尚未发生的内容。"
   ]
 }
