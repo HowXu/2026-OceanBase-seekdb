@@ -92,6 +92,16 @@ func TestStatementAtomicityAndTxn(t *testing.T) {
 	}
 }
 
+func TestFilteredTopKFiltersBeforeAdmission(t *testing.T) {
+	db := open(t, t.TempDir())
+	mustExec(t, db, "CREATE TABLE docs (id BIGINT PRIMARY KEY, keep VARCHAR(4), e VECTOR(1))")
+	mustExec(t, db, "INSERT INTO docs VALUES (1,'no','[0]'),(2,'yes','[10]'),(3,'yes','[20]')")
+	r := mustExec(t, db, "SELECT id FROM docs WHERE keep = 'yes' ORDER BY L2_DISTANCE(e, '[0]') LIMIT 1")
+	if len(r.Rows) != 1 || r.Rows[0][0].I != 2 {
+		t.Fatalf("filtered TopK admitted an unfiltered candidate: %+v", r.Rows)
+	}
+}
+
 // TestCrashAtEveryOffset writes a history of committed and uncommitted work,
 // then reopens copies of the log cut at every byte. The recovered state must
 // equal the state after some committed prefix, and must contain everything

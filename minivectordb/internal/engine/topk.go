@@ -50,15 +50,16 @@ func (t *topK) bound() float64 {
 	return t.h[0].d
 }
 
-// offer adds a candidate. The filter runs only for candidates that would
-// enter the heap, so cheap distance rejection happens first.
+// offer adds a candidate. Filtering must happen before heap admission: a row
+// that does not satisfy WHERE must not consume one of the TopK slots or make
+// a valid filtered row look too far away to enter.
 func (t *topK) offer(d float64, pk, off int64) {
 	c := hit{d, pk, off}
-	full := len(t.h) >= t.k
-	if full && !worse(t.h[0], c) {
+	if t.pred != nil && !t.pred(t.db.rowBytes(off)) {
 		return
 	}
-	if t.pred != nil && !t.pred(t.db.rowBytes(off)) {
+	full := len(t.h) >= t.k
+	if full && !worse(t.h[0], c) {
 		return
 	}
 	if full {
