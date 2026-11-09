@@ -231,6 +231,46 @@
       "turn_id": "01a1c031-562c-7131-8b15-7048924a7663",
       "topic": "flat storage 方案拆分",
       "content": "方案 A 直接把持久化和内存结构改成连续布局，方案 B 保留现有持久化格式，只在加载后建立 query-only 的 flat embedding view。请从正确性风险、峰值内存、查询耗时、写入 I/O 和维护成本比较后，停下来让我选择。"
+    },
+    {
+      "id": "M26",
+      "speaker": "student",
+      "thread": "opus",
+      "turn_id": "01a1c043-d74a-7cc1-9480-97c433f22e3c",
+      "topic": "受控窗口和变体实验的预测",
+      "content": "我的预测：修复后 summary 和 kill-summary 的 controlled 计数都是 9，controlled_windows=5。scan 对照中，(a) 骨架布局+16 个 float 累加器 80～120 ms，(b) flat+double 顺序累加 160～220 ms，(c) 骨架+16 个 double 累加器约 120～170 ms。"
+    },
+    {
+      "id": "M27",
+      "speaker": "student",
+      "thread": "opus",
+      "turn_id": "01a1c043-d74a-7cc1-9480-97c433f22e3c",
+      "topic": "独立参考与字段完整性",
+      "content": "S 和 b 使用的距离计算方式与 store.search 相同，不能拿 store.search 作为独立参考；只报告 a 和 c 相对于独立参考的误差。随机 marker 字段缺失时输出 random_last_unknown，不要把两个空值当成相等。"
+    },
+    {
+      "id": "M28",
+      "speaker": "student",
+      "thread": "opus",
+      "turn_id": "01a1c045-8406-7132-a4fe-84b3299d0e67",
+      "topic": "拒绝无法追溯的性能实现",
+      "content": "我自己核对了当前 worktree：git status、git diff --stat 和 rg flat_ src/ 都没有找到 flat view。当前不要修改 src、构建脚本或实验脚本；找不到源码来源的二进制不能用于后续实验。"
+    },
+    {
+      "id": "M29",
+      "speaker": "student",
+      "thread": "opus",
+      "turn_id": "01a1bf9a-e26e-7df3-8898-a913c7aa6e0e",
+      "topic": "批次级 frame 与计时口径",
+      "content": "stat 显示 bench 是一行调用一次 put_batch，一共写了 1 万个帧。题面要求每批 100 条后提交，请改成每批 100 行一次 put_batch、一次 flush；预期文件大小 5203200 字节、fsync 100 次。"
+    },
+    {
+      "id": "M30",
+      "speaker": "student",
+      "thread": "opus",
+      "turn_id": "01a1c04e-9b74-7981-a783-96f5fdfbbf9a",
+      "topic": "从准入门槛反推优先级",
+      "content": "当前版本不是性能差导致低分，而是功能准入未完成会让总分为 0。完成正式协议、SQL、事务和恢复后，再谈 flat layout、SIMD 或 ANN。"
     }
   ],
   "experiments": [
@@ -405,6 +445,60 @@
       "output": "方案 A 正确性风险高、恢复和事务影响大；方案 B 保留磁盘格式，额外约 5.2 MB，维护成本中等，适合先验证 query-side layout。",
       "classification": "actual-source-based-analysis",
       "environment": "evidence-7c53d0f worktree; no implementation change"
+    },
+    {
+      "id": "R22",
+      "source": "tool-output-as-quoted-in-thread",
+      "thread": "opus",
+      "topic": "round13 受控窗口和随机覆盖",
+      "output": "[kill-summary] controlled_rounds=9 controlled_windows=5 controlled_rounds_per_window=flush_after:2,fsync_after:2,write_before:2,write_mid_frame_after_frame_37:1,write_to_fsync:2 random_rounds=12 random_rounds_not_covered=0 write_to_fsync_covered=true fsync_after_covered=true flush_after_covered=true\ncorrectness: PASS",
+      "classification": "actual-result",
+      "environment": "historical round13 worktree; macOS arm64; reference-only"
+    },
+    {
+      "id": "R23",
+      "source": "tool-output-as-quoted-in-thread",
+      "thread": "opus",
+      "topic": "scan variant comparison",
+      "output": "skeleton_search unfiltered_ms=369.176 filtered_ms=43.061\nC_float_16acc scan_topk_unfiltered_ms=57.715 scan_topk_filtered_ms=10.803 topk_mismatch=0/1000\nCD_double_16acc scan_topk_unfiltered_ms=119.590 scan_topk_filtered_ms=16.764 topk_mismatch=0/1000",
+      "classification": "actual-result",
+      "environment": "historical round9 worktree; macOS arm64; reference-only"
+    },
+    {
+      "id": "R24",
+      "source": "tool-output-as-quoted-in-thread",
+      "thread": "opus",
+      "topic": "L2 distance output and source provenance",
+      "output": "dist_probe exit=0: Neighbor::distance is double: 1; id=2 distance=25 hex=0x1.9p+4\nsource squared_distance() has no sqrt; repoA HEAD=42ec6476265371873760cecf91c0576efe7cc856; repoC main=7c53d0fb85cf58b0a460f36d029b7676873e92de",
+      "classification": "actual-result-and-source-audit",
+      "environment": "historical round9 worktrees; reference-only"
+    },
+    {
+      "id": "R25",
+      "source": "tool-output-as-quoted-in-thread",
+      "thread": "opus",
+      "topic": "batch=100 写入统计",
+      "output": "batch=100 frame_count=100 rows_per_frame=100 fsync_count=100 stat_size=5203200\nwrite_s median=0.065741208 min=0.0625205 max=0.071906875",
+      "classification": "actual-result",
+      "environment": "historical precise-runs worktree; macOS arm64; reference-only"
+    },
+    {
+      "id": "R26",
+      "source": "tool-output-as-quoted-in-thread",
+      "thread": "opus",
+      "topic": "准入缺口对优化优先级的影响",
+      "output": "源码审计结论：正式 stdin/stdout 入口、SQL、事务和 Docker 尚未完成；因此当前版本不能进入正式 MySQL case，更不能把 flat layout、SIMD 或 ANN 优化直接换算成有效赛事分数。",
+      "classification": "actual-source-audit",
+      "environment": "historical opus worktree; read-only audit"
+    },
+    {
+      "id": "R27",
+      "source": "tool-output-as-quoted-in-thread",
+      "thread": "opus",
+      "topic": "准入优先级审计摘录",
+      "output": "正式 stdin/stdout 入口、SQL、事务和 Docker 尚未完成；因此当前版本不能进入正式 MySQL case，更不能把 flat layout、SIMD 或 ANN 优化直接换算成有效赛事分数。",
+      "classification": "actual-source-audit",
+      "environment": "historical opus worktree; read-only audit"
     },
     {
       "id": "R09",
@@ -599,7 +693,7 @@
         "excerpt": "我自己核对的结果：磁盘数据没有被改，问题出在复制到对话时的删行、截断或重排。以后贴原始输出只能直接复制 cat 的文件内容，不能重新排版、补字段或截断。"
       },
       "result_evidence": {
-        "pointer": "/experiments/20/output",
+        "pointer": "/experiments/26/output",
         "excerpt": "756a9c8526ab5c033f8a6ecc36e52ed87826cdacdca80ca80c926d1481e3dec  new/run-1/stdout\nbcca898107cfea22ad6ce37926987c0ba38b99931053cd4b6edbb20a72b0f771  old/run-1/stderr"
       },
       "evidence_status": "independent-reproduction",
@@ -714,14 +808,94 @@
       "evidence_status": "tradeoff-analysis",
       "score_ceiling": 1.0,
       "reason": "学生把一个性能改动拆成两个隔离程度不同的方案，并要求同时考虑正确性、内存、I/O 和维护成本；审计结果支持选择更窄的 query-only 路线。"
+    },
+    {
+      "id": "U24",
+      "dimension": "问题理解与自主拆解",
+      "topic": "用正式协议准入约束优化顺序",
+      "student_evidence": {
+        "pointer": "/conversations/29/content",
+        "excerpt": "当前版本不是性能差导致低分，而是功能准入未完成会让总分为 0。完成正式协议、SQL、事务和恢复后，再谈 flat layout、SIMD 或 ANN。"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/24/output",
+        "excerpt": "正式 stdin/stdout 入口、SQL、事务和 Docker 尚未完成；因此当前版本不能进入正式 MySQL case，更不能把 flat layout、SIMD 或 ANN 优化直接换算成有效赛事分数。"
+      },
+      "evidence_status": "priority-audit",
+      "score_ceiling": 1.0,
+      "reason": "学生把评分硬门槛转成工程排序原则；只读审计给出协议、事务和超内存缺口，支持先补准入能力而非继续做 ANN。"
+    },
+    {
+      "id": "U25",
+      "dimension": "独立验证与质疑",
+      "topic": "质疑随机 marker 缺失时的错误等值判断",
+      "student_evidence": {
+        "pointer": "/conversations/26/content",
+        "excerpt": "S 和 b 使用的距离计算方式与 store.search 相同，不能拿 store.search 作为独立参考；只报告 a 和 c 相对于独立参考的误差。随机 marker 字段缺失时输出 random_last_unknown，不要把两个空值当成相等。"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/19/output",
+        "excerpt": "random_rounds_not_covered=0 write_to_fsync_covered=true fsync_after_covered=true flush_after_covered=true"
+      },
+      "evidence_status": "test-criteria-and-result",
+      "score_ceiling": 1.0,
+      "reason": "学生指出空值比较会制造假阳性，并区分非独立 store.search 一致性与独立参考精度证据；结果记录了窗口覆盖状态。"
+    },
+    {
+      "id": "U26",
+      "dimension": "实验与反馈迭代",
+      "topic": "从预测到 batch=100 实际写入结果",
+      "student_evidence": {
+        "pointer": "/conversations/28/content",
+        "excerpt": "stat 显示 bench 是一行调用一次 put_batch，一共写了 1 万个帧。题面要求每批 100 条后提交，请改成每批 100 行一次 put_batch、一次 flush；预期文件大小 5203200 字节、fsync 100 次。"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/22/output",
+        "excerpt": "batch=100 frame_count=100 rows_per_frame=100 fsync_count=100 stat_size=5203200\nwrite_s median=0.065741208 min=0.0625205 max=0.071906875"
+      },
+      "evidence_status": "prediction-and-retest",
+      "score_ceiling": 1.5,
+      "reason": "学生指出原 bench 把每行当成 frame，给出题面约束下的文件大小、帧数和 fsync 预测；实际 batch=100 结果与预测一致。当前没有学生在结果后继续修正同一链的独立原话，保守不宣称 2 分。"
+    },
+    {
+      "id": "U27",
+      "dimension": "独立验证与质疑",
+      "topic": "独立参考和 TopK 结果一致性对照",
+      "student_evidence": {
+        "pointer": "/conversations/26/content",
+        "excerpt": "S 和 b 使用的距离计算方式与 store.search 相同，不能拿 store.search 作为独立参考；只报告 a 和 c 相对于独立参考的误差。"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/20/output",
+        "excerpt": "C_float_16acc scan_topk_unfiltered_ms=57.715 scan_topk_filtered_ms=10.803 topk_mismatch=0/1000\nCD_double_16acc scan_topk_unfiltered_ms=119.590 scan_topk_filtered_ms=16.764 topk_mismatch=0/1000"
+      },
+      "evidence_status": "independent-reference-result",
+      "score_ceiling": 1.0,
+      "reason": "学生明确要求独立参考而不是复用 store.search；实际结果报告了 a/c 的 TopK mismatch=0/1000 和不同精度路径的耗时。该实例与早先 near_d8 边界实验不同，分别计为独立参考路线。"
+    },
+    {
+      "id": "U28",
+      "dimension": "取舍与反思",
+      "topic": "发现 L2_DISTANCE 输出平方值与题面欧氏距离冲突",
+      "student_evidence": {
+        "pointer": "/conversations/26/content",
+        "excerpt": "S 和 b 使用的距离计算方式与 store.search 相同，不能拿 store.search 作为独立参考；只报告 a 和 c 相对于独立参考的误差。"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/21/output",
+        "excerpt": "dist_probe exit=0: Neighbor::distance is double: 1; id=2 distance=25 hex=0x1.9p+4\nsource squared_distance() has no sqrt"
+      },
+      "evidence_status": "specification-risk-found",
+      "score_ceiling": 1.0,
+      "reason": "学生要求区分内部平方距离、独立参考和输出口径；源码探针显示输出仍是距离平方而题面要求欧氏距离，形成了可操作的规范风险。"
     }
   ],
   "rubric_coverage": {
-    "问题理解与自主拆解": ["U01", "U11", "U12", "U17", "U20", "U22"],
+    "问题理解与自主拆解": ["U01", "U11", "U12", "U17", "U20", "U22", "U24"],
     "技术理解与迁移": ["U03", "U09", "U10", "U18"],
-    "独立验证与质疑": ["U05", "U16", "U21"],
-    "实验与反馈迭代": ["U06", "U07", "U15"],
-    "取舍与反思": ["U08", "U19", "U23"]
+    "独立验证与质疑": ["U05", "U16", "U21", "U25", "U27"],
+    "实验与反馈迭代": ["U06", "U07", "U15", "U26"],
+    "取舍与反思": ["U08", "U19", "U23", "U28"]
   },
   "agent_and_tool_context": [
     {
