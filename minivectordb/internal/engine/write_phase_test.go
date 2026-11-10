@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"os"
@@ -39,7 +40,25 @@ func TestWritePhases(t *testing.T) {
 		}
 		batches = append(batches, b.String())
 	}
+	var lines [][]byte
+	for i, s := range batches {
+		l, _ := json.Marshal(map[string]any{"id": i, "op": "execute", "sql": s, "search_mode": "exact"})
+		lines = append(lines, append(l, '\n'))
+	}
 	t0 := time.Now()
+	for _, l := range lines {
+		var r struct {
+			ID         json.RawMessage `json:"id"`
+			Op         string          `json:"op"`
+			SQL        *string         `json:"sql"`
+			SearchMode string          `json:"search_mode"`
+		}
+		if err := json.Unmarshal(l, &r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	jsonDec := time.Since(t0)
+	t0 = time.Now()
 	for _, s := range batches {
 		if _, err := sp.Parse(s); err != nil {
 			t.Fatal(err)
@@ -57,6 +76,6 @@ func TestWritePhases(t *testing.T) {
 		mustExec(t, db, s)
 	}
 	exec := time.Since(t0)
-	fmt.Printf("WRITEPHASES batches=100 parse_ms=%.1f exec_ms=%.1f sql_bytes=%d\n",
-		float64(parse.Microseconds())/1000, float64(exec.Microseconds())/1000, len(strings.Join(batches, "")))
+	fmt.Printf("WRITEPHASES batches=100 json_ms=%.1f parse_ms=%.1f exec_ms=%.1f sql_bytes=%d\n",
+		float64(jsonDec.Microseconds())/1000, float64(parse.Microseconds())/1000, float64(exec.Microseconds())/1000, len(strings.Join(batches, "")))
 }

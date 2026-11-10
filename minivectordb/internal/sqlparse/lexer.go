@@ -172,6 +172,20 @@ func scanNumber(src string, i int) int {
 // scanString reads a quoted literal with MySQL escapes and doubled quotes.
 func scanString(src string, i int) (string, int, error) {
 	q := src[i]
+	// Fast path: no escapes or doubled quotes before the closing quote, so
+	// the literal is a substring of src and needs no copy.
+	for j := i + 1; j < len(src); j++ {
+		c := src[j]
+		if c == '\\' {
+			break
+		}
+		if c == q {
+			if j+1 < len(src) && src[j+1] == q {
+				break
+			}
+			return src[i+1 : j], j + 1, nil
+		}
+	}
 	var sb strings.Builder
 	j := i + 1
 	n := len(src)
