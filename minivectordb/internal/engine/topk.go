@@ -54,10 +54,15 @@ func (t *topK) bound() float64 {
 // that does not satisfy WHERE must not consume one of the TopK slots or make
 // a valid filtered row look too far away to enter.
 func (t *topK) offer(d float64, pk, off int64) {
-	c := hit{d, pk, off}
 	if t.pred != nil && !t.pred(t.db.rowBytes(off)) {
 		return
 	}
+	t.admit(d, pk, off)
+}
+
+// admit adds a candidate that is already known to satisfy WHERE.
+func (t *topK) admit(d float64, pk, off int64) {
+	c := hit{d, pk, off}
 	full := len(t.h) >= t.k
 	if full && !worse(t.h[0], c) {
 		return
@@ -118,12 +123,18 @@ func (db *DB) vectorTopK(t *Table, q []float32, pred func([]byte) bool, k int, a
 				return
 			}
 		}
+		// Evaluate WHERE before the distance: a filtered-out row costs one
+		// row lookup instead of a full distance computation.
+		off := x.off[s]
+		if pred != nil && !pred(db.rowBytes(off)) {
+			return
+		}
 		bd := tk.bound()
 		d := l2sqBound(q, x.vec(s), bd)
 		if d > bd {
 			return
 		}
-		tk.offer(d, pk, x.off[s])
+		tk.admit(d, pk, off)
 	}
 	// ANN only applies to an explicit, trained index. Filtered queries and
 	// queries inside a transaction with pending changes stay exact.

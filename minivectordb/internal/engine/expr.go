@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"math"
 	"strconv"
 	"strings"
@@ -21,6 +22,9 @@ type compiled struct {
 	konst *types.Value
 	// set when the expression is L2_DISTANCE(vector column, constant vector)
 	l2q []float32
+	// raw returns the stored bytes of a bare VARCHAR column without
+	// allocating; nil for other expressions.
+	raw func(b []byte) []byte
 }
 
 type scope struct {
@@ -75,6 +79,8 @@ func (sc *scope) compile(e sp.Expr) (*compiled, *types.SQLError) {
 			fn = func(b []byte) types.Value { return t.col(b, i) }
 		default:
 			fn = func(b []byte) types.Value { return types.Str(string(t.varBytes(b, i))) }
+			return &compiled{fn: fn, kind: kindOf(c.Type), col: i,
+				raw: func(b []byte) []byte { return t.varBytes(b, i) }}, nil
 		}
 		return &compiled{fn: fn, kind: kindOf(c.Type), col: i}, nil
 	case *sp.Func:
@@ -240,6 +246,17 @@ func cmpPred(op string, l, r *compiled) (func([]byte) bool, *types.SQLError) {
 	test := opTest(op)
 	lf, rf := l.fn, r.fn
 	if l.kind == types.KStr && r.kind == types.KStr {
+		// Column against a string constant: compare the stored bytes directly.
+		// bytes.Compare orders byte strings like strings.Compare, so the
+		// result is identical without converting each row to a string.
+		if l.raw != nil && r.konst != nil {
+			lr, k := l.raw, []byte(r.konst.S)
+			return func(b []byte) bool { return test(bytes.Compare(lr(b), k)) }, nil
+		}
+		if r.raw != nil && l.konst != nil {
+			rr, k := r.raw, []byte(l.konst.S)
+			return func(b []byte) bool { return test(bytes.Compare(k, rr(b))) }, nil
+		}
 		return func(b []byte) bool { return test(strings.Compare(lf(b).S, rf(b).S)) }, nil
 	}
 	if l.kind == types.KInt && r.kind == types.KInt {
