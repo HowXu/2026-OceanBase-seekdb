@@ -29,6 +29,7 @@ func testFilteredTopK(t *testing.T) {
 	const dim, n = 8, 600
 	cats := []string{"a", "b", "ab", "你好", "z"}
 	type row struct {
+		id  int64
 		cat string
 		v   []float32
 	}
@@ -50,7 +51,7 @@ func testFilteredTopK(t *testing.T) {
 	}
 	mustExec(t, db, fmt.Sprintf("CREATE TABLE docs (id BIGINT PRIMARY KEY, cat VARCHAR(8), e VECTOR(%d))", dim))
 	for i := int64(1); i <= n; i++ {
-		r := row{cats[rng.Intn(len(cats))], randVec()}
+		r := row{i, cats[rng.Intn(len(cats))], randVec()}
 		rows[i] = r
 		mustExec(t, db, fmt.Sprintf("INSERT INTO docs VALUES (%d,'%s','%s')", i, r.cat, vecLit(r.v)))
 	}
@@ -63,12 +64,12 @@ func testFilteredTopK(t *testing.T) {
 			mustExec(t, db, fmt.Sprintf("DELETE FROM docs WHERE id = %d", id))
 			delete(rows, id)
 		} else {
-			r := row{cats[rng.Intn(len(cats))], randVec()}
+			r := row{id, cats[rng.Intn(len(cats))], randVec()}
 			rows[id] = r
 			mustExec(t, db, fmt.Sprintf("UPDATE docs SET cat = '%s', e = '%s' WHERE id = %d", r.cat, vecLit(r.v), id))
 		}
 	}
-	ops := []string{"=", "<>", "<", ">="}
+	ops := []string{"=", "<>", "<", ">=", "=", "const=", "and"}
 	check := func(tag string) {
 		for qn := 0; qn < 60; qn++ {
 			q := randVec()
@@ -76,10 +77,23 @@ func testFilteredTopK(t *testing.T) {
 			where, keep := "", func(row) bool { return true }
 			if qn%3 != 0 {
 				op, c := ops[rng.Intn(len(ops))], cats[rng.Intn(len(cats))]
-				where = fmt.Sprintf(" WHERE cat %s '%s'", op, c)
-				keep = func(r row) bool {
-					cmp := strings.Compare(r.cat, c)
-					return map[string]bool{"=": cmp == 0, "<>": cmp != 0, "<": cmp < 0, ">=": cmp >= 0}[op]
+				if qn%11 == 0 {
+					c = "none" // matches no row
+				}
+				switch op {
+				case "const=":
+					where = fmt.Sprintf(" WHERE '%s' = cat", c)
+					keep = func(r row) bool { return r.cat == c }
+				case "and":
+					lim := int64(rng.Intn(n))
+					where = fmt.Sprintf(" WHERE id > %d AND cat = '%s'", lim, c)
+					keep = func(r row) bool { return r.id > lim && r.cat == c }
+				default:
+					where = fmt.Sprintf(" WHERE cat %s '%s'", op, c)
+					keep = func(r row) bool {
+						cmp := strings.Compare(r.cat, c)
+						return map[string]bool{"=": cmp == 0, "<>": cmp != 0, "<": cmp < 0, ">=": cmp >= 0}[op]
+					}
 				}
 			}
 			type cand struct {
@@ -125,7 +139,7 @@ func testFilteredTopK(t *testing.T) {
 	mustExec(t, db, "BEGIN")
 	for i := 0; i < 40; i++ {
 		id := int64(rng.Intn(n+50) + 1)
-		r := row{cats[rng.Intn(len(cats))], randVec()}
+		r := row{id, cats[rng.Intn(len(cats))], randVec()}
 		if _, ok := rows[id]; ok {
 			if i%3 == 0 {
 				mustExec(t, db, fmt.Sprintf("DELETE FROM docs WHERE id = %d", id))

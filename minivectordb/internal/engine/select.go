@@ -109,7 +109,13 @@ func (db *DB) execSelect(s *sp.Select) (*Result, error) {
 	var offs []int64
 	ok := false
 	if len(keys) == 1 && keys[0].c.l2q != nil && !keys[0].desc && want <= 1<<20 {
-		offs, ok = db.vectorTopK(t, keys[0].c.l2q, pred, int(want), s.Approx)
+		var eq *eqFilterSpec
+		if s.Where != nil {
+			if col, val, found := eqFilter(sc, s.Where); found {
+				eq = &eqFilterSpec{col, val}
+			}
+		}
+		offs, ok = db.vectorTopK(t, keys[0].c.l2q, pred, int(want), s.Approx, eq)
 	}
 	if !ok {
 		offs = db.scanSorted(t, pred, keys, want)

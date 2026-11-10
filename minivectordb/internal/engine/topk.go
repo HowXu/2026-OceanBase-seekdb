@@ -95,7 +95,9 @@ func (t *topK) result() []int64 {
 // vectorTopK answers ORDER BY L2_DISTANCE(col, q) LIMIT k from the vector
 // index. It returns false when no index can be used, in which case the
 // caller falls back to a generic sorted scan with identical semantics.
-func (db *DB) vectorTopK(t *Table, q []float32, pred func([]byte) bool, k int, approx bool) ([]int64, bool) {
+// cand, when non-nil, lists the only slots that can satisfy WHERE (from an
+// equality candidate set); pred is still evaluated on each of them.
+func (db *DB) vectorTopK(t *Table, q []float32, pred func([]byte) bool, k int, approx bool, eq *eqFilterSpec) ([]int64, bool) {
 	if t.Index == nil {
 		// Without CREATE VECTOR INDEX, keep an implicit in-memory copy so
 		// repeated TopK queries do not re-read rows from the log.
@@ -146,6 +148,17 @@ func (db *DB) vectorTopK(t *Table, q []float32, pred func([]byte) bool, k int, a
 	// queries inside a transaction with pending changes stay exact.
 	useIVF := ann && x.nlist > 0 && pred == nil &&
 		len(ov) == 0 && k <= x.live/16
+	var cand []int32
+	useCand := false
+	if eq != nil && !useIVF {
+		cand, useCand = x.eqSlots(db, t, eq.col, eq.val)
+	}
+	n := len(x.pks)
+	slot := func(i int) int32 { return int32(i) }
+	if useCand {
+		n = len(cand)
+		slot = func(i int) int32 { return cand[i] }
+	}
 	tk := &topK{k: k, pred: pred, db: db, h: make(hitHeap, 0, k+1)}
 	if useIVF {
 		for _, c := range x.probeOrder(q)[:x.nprobe()] {
@@ -153,7 +166,7 @@ func (db *DB) vectorTopK(t *Table, q []float32, pred func([]byte) bool, k int, a
 				visit(tk, s)
 			}
 		}
-	} else if workers := scanWorkers(len(x.pks)); workers > 1 {
+	} else if workers := scanWorkers(n); workers > 1 {
 		// Row bytes may be read concurrently only from the kernel mapping,
 		// so push buffered log bytes out first; View on flushed data is
 		// then read-only.
@@ -163,7 +176,6 @@ func (db *DB) vectorTopK(t *Table, q []float32, pred func([]byte) bool, k int, a
 		db.log.Prepare()
 		parts := make([]*topK, workers)
 		var wg sync.WaitGroup
-		n := len(x.pks)
 		for w := 0; w < workers; w++ {
 			lo, hi := n*w/workers, n*(w+1)/workers
 			p := &topK{k: k, pred: pred, db: db, h: make(hitHeap, 0, k+1)}
@@ -171,8 +183,8 @@ func (db *DB) vectorTopK(t *Table, q []float32, pred func([]byte) bool, k int, a
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				for s := lo; s < hi; s++ {
-					visit(p, int32(s))
+				for i := lo; i < hi; i++ {
+					visit(p, slot(i))
 				}
 			}()
 		}
@@ -185,8 +197,8 @@ func (db *DB) vectorTopK(t *Table, q []float32, pred func([]byte) bool, k int, a
 			}
 		}
 	} else {
-		for s := range x.pks {
-			visit(tk, int32(s))
+		for i := 0; i < n; i++ {
+			visit(tk, slot(i))
 		}
 	}
 	for pk, off := range ov {
@@ -195,6 +207,12 @@ func (db *DB) vectorTopK(t *Table, q []float32, pred func([]byte) bool, k int, a
 		}
 	}
 	return tk.result(), true
+}
+
+// eqFilterSpec is a WHERE conjunct "varchar_column = 'constant'".
+type eqFilterSpec struct {
+	col int
+	val string
 }
 
 func scanWorkers(slots int) int {

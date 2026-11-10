@@ -32,6 +32,10 @@ type VecIndex struct {
 	lists    [][]int32
 	slotList []int32
 	ivfBuilt int // live count when the IVF was trained
+
+	// gen changes whenever a slot changes; derived sets compare against it.
+	gen uint64
+	eq  map[int]*eqSet
 }
 
 const tombstone int64 = math.MinInt64
@@ -41,6 +45,7 @@ func newVecIndex(name string) *VecIndex {
 }
 
 func (x *VecIndex) rebuild(db *DB, t *Table) {
+	x.gen++
 	x.dim = t.Dim
 	x.Disabled = int64(len(t.rows))*int64(t.Dim)*4 > db.opts.IndexMemBytes
 	if x.Disabled {
@@ -68,6 +73,7 @@ func (x *VecIndex) upsert(db *DB, t *Table, pk, off int64) {
 	if x.Disabled {
 		return
 	}
+	x.gen++
 	if !x.has(pk) && int64(x.live+1)*int64(x.dim)*4 > db.opts.IndexMemBytes {
 		x.Disabled = true
 		x.pks, x.vecs, x.off, x.free, x.pos, x.live = nil, nil, nil, nil, map[int64]int32{}, 0
@@ -112,6 +118,7 @@ func (x *VecIndex) remove(pk int64) {
 	if !ok {
 		return
 	}
+	x.gen++
 	delete(x.pos, pk)
 	if x.slotList != nil {
 		x.unlist(s)
