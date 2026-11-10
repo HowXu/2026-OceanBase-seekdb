@@ -13,8 +13,17 @@ import (
 // against an independent brute-force reference: float64 squared distance over
 // the float32 vectors, ties by primary key, filter applied first. Rows change
 // through UPDATE/DELETE and an open transaction so the overlay path is
-// covered too.
+// covered too. It runs once with the serial scan and once with the scan split
+// across goroutines.
 func TestFilteredTopKMatchesReference(t *testing.T) {
+	for _, min := range []int{1 << 30, 1} {
+		parallelMinSlots = min
+		testFilteredTopK(t)
+	}
+	parallelMinSlots = 4096
+}
+
+func testFilteredTopK(t *testing.T) {
 	db := open(t, t.TempDir())
 	rng := rand.New(rand.NewSource(11))
 	const dim, n = 8, 600

@@ -3,10 +3,17 @@ package engine
 import (
 	"container/heap"
 	"math"
+	"runtime"
 	"sort"
+	"sync"
 )
 
 const ivfMinRows = 200000
+
+// parallelMinSlots is the smallest index for which the exact scan is split
+// across goroutines; below it the coordination costs more than it saves.
+// A variable so tests can force either path.
+var parallelMinSlots = 4096
 
 type hit struct {
 	d   float64
@@ -108,12 +115,11 @@ func (db *DB) vectorTopK(t *Table, q []float32, pred func([]byte) bool, k int, a
 	if ann && x.Explicit && x.live >= 2*x.ivfBuilt {
 		x.trainIVF() // first use, or the table has doubled since training
 	}
-	tk := &topK{k: k, pred: pred, db: db, h: make(hitHeap, 0, k+1)}
 	var ov map[int64]int64
 	if db.txn != nil {
 		ov = db.txn.overlay[t.ID]
 	}
-	visit := func(s int32) {
+	visit := func(tk *topK, s int32) {
 		pk := x.pks[s]
 		if pk == tombstone {
 			return
@@ -140,15 +146,47 @@ func (db *DB) vectorTopK(t *Table, q []float32, pred func([]byte) bool, k int, a
 	// queries inside a transaction with pending changes stay exact.
 	useIVF := ann && x.nlist > 0 && pred == nil &&
 		len(ov) == 0 && k <= x.live/16
+	tk := &topK{k: k, pred: pred, db: db, h: make(hitHeap, 0, k+1)}
 	if useIVF {
 		for _, c := range x.probeOrder(q)[:x.nprobe()] {
 			for _, s := range x.lists[c] {
-				visit(s)
+				visit(tk, s)
+			}
+		}
+	} else if workers := scanWorkers(len(x.pks)); workers > 1 {
+		// Row bytes may be read concurrently only from the kernel mapping,
+		// so push buffered log bytes out first; View on flushed data is
+		// then read-only.
+		if err := db.log.Flush(); err != nil {
+			panic(err)
+		}
+		db.log.Prepare()
+		parts := make([]*topK, workers)
+		var wg sync.WaitGroup
+		n := len(x.pks)
+		for w := 0; w < workers; w++ {
+			lo, hi := n*w/workers, n*(w+1)/workers
+			p := &topK{k: k, pred: pred, db: db, h: make(hitHeap, 0, k+1)}
+			parts[w] = p
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for s := lo; s < hi; s++ {
+					visit(p, int32(s))
+				}
+			}()
+		}
+		wg.Wait()
+		// Merging the per-part heaps with the same (distance, pk) order
+		// yields exactly the serial TopK.
+		for _, p := range parts {
+			for _, h := range p.h {
+				tk.admit(h.d, h.pk, h.off)
 			}
 		}
 	} else {
 		for s := range x.pks {
-			visit(int32(s))
+			visit(tk, int32(s))
 		}
 	}
 	for pk, off := range ov {
@@ -157,4 +195,15 @@ func (db *DB) vectorTopK(t *Table, q []float32, pred func([]byte) bool, k int, a
 		}
 	}
 	return tk.result(), true
+}
+
+func scanWorkers(slots int) int {
+	if slots < parallelMinSlots {
+		return 1
+	}
+	w := runtime.GOMAXPROCS(0)
+	if w > 2 {
+		w = 2
+	}
+	return w
 }

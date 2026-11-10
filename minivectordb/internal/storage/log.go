@@ -126,6 +126,10 @@ func (l *Log) Sync() error {
 
 // View returns n bytes at off without copying. The slice stays valid until
 // the next Truncate or Close; callers must not modify it.
+//
+// After Flush and Prepare, View on ranges below the flushed end does not
+// modify the Log and may be called from several goroutines until the next
+// write.
 func (l *Log) View(off int64, n int) []byte {
 	if off >= l.flushed {
 		s := off - l.flushed
@@ -145,6 +149,14 @@ func (l *Log) View(off int64, n int) []byte {
 		panic(err)
 	}
 	return b
+}
+
+// Prepare makes the mapping cover every flushed byte, so that later View
+// calls on flushed ranges never remap.
+func (l *Log) Prepare() {
+	if l.flushed > 0 {
+		l.m.view(l.f, l.flushed-1, 1, l.flushed)
+	}
 }
 
 // Truncate drops everything after n (used to cut an incomplete tail).
