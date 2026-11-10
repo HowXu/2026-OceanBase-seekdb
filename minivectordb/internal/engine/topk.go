@@ -3,8 +3,10 @@ package engine
 import (
 	"container/heap"
 	"math"
+	"os"
 	"runtime"
 	"sort"
+	"strconv"
 	"sync"
 )
 
@@ -216,13 +218,24 @@ type eqFilterSpec struct {
 	val string
 }
 
+// maxScanWorkers caps the goroutines used by one exact scan. 0 means
+// "use GOMAXPROCS"; MVDB_SCAN_WORKERS overrides it for experiments.
+var maxScanWorkers = envWorkers()
+
+func envWorkers() int {
+	if v, err := strconv.Atoi(os.Getenv("MVDB_SCAN_WORKERS")); err == nil && v > 0 {
+		return v
+	}
+	return 2
+}
+
 func scanWorkers(slots int) int {
 	if slots < parallelMinSlots {
 		return 1
 	}
 	w := runtime.GOMAXPROCS(0)
-	if w > 2 {
-		w = 2
+	if maxScanWorkers > 0 && w > maxScanWorkers {
+		w = maxScanWorkers
 	}
 	return w
 }

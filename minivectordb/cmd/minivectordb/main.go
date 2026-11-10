@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"runtime"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -41,6 +42,10 @@ func main() {
 		}
 		debug.SetMemoryLimit(lim * 6 / 10)
 		logf("cgroup memory limit %d MiB, vector budget %d MiB", lim>>20, opts.IndexMemBytes>>20)
+	}
+	if n := cgroupCPUs(); n > 0 && n < runtime.GOMAXPROCS(0) && os.Getenv("GOMAXPROCS") == "" {
+		runtime.GOMAXPROCS(n)
+		logf("cgroup CPU quota %d, GOMAXPROCS %d", n, n)
 	}
 	switch *sync {
 	case "none":
