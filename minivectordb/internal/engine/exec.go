@@ -15,6 +15,9 @@ type Result struct {
 	Kinds    []types.Kind
 	Rows     [][]types.Value
 	Affected int64
+	// HasAffected is set by INSERT, UPDATE and DELETE so the response carries
+	// affected_rows; other statements reply with a bare ok.
+	HasAffected bool
 }
 
 // ErrQuit is returned when the client asked to end the session.

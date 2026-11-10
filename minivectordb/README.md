@@ -17,34 +17,40 @@ Flags (each also has an environment variable):
 | Flag | Env | Default | Meaning |
 | --- | --- | --- | --- |
 | `--data-dir` | `MVDB_DATA_DIR` | `/data` | all data files |
-| `--mode` | `MVDB_SEARCH_MODE` | `exact` | `exact` or `ann` |
+| `--mode` | `MVDB_SEARCH_MODE` | `exact` | `exact` or `ann`, used only when a request omits `search_mode` |
 | `--sync` | `MVDB_SYNC` | `fdatasync` | `none` skips fdatasync (survives kill -9, not power loss) |
 | `--index-mem-mb` | `MVDB_INDEX_MEM_MB` | `256` | cap on in-memory vectors per table; also capped to 1/4 of the cgroup limit |
-| `--ready` | `MVDB_READY` | `READY` | line printed on stdout after recovery; empty disables it |
 
 ## Protocol
 
-The official driver had not been published when this was written, so the
-framing below is an assumption that is easy to adjust in `internal/proto` and
-`cmd/minivectordb`.
+JSON Lines over stdin/stdout, as specified in the repository root
+`STDIO_PROTOCOL.md`. Code: `internal/proto` and `cmd/minivectordb`.
 
-* After recovery and index rebuild, stdout gets one line `READY`.
-* Input: a statement ends at `;` outside quotes and comments, or at a newline
-  when the text is complete (one statement per line, as in `mysqltest/cases`).
-* Driver directives on their own line: `--mode exact|ann` switches the search
-  mode, `--restart` (or end of stdin, SIGTERM, SIGINT, `QUIT`) shuts down
-  cleanly: open transactions are rolled back and the log is synced.
-* Output: exactly one JSON line per statement, flushed immediately, using the
-  `.result` field names:
-  `{"columns":[...],"rows":[[...]]}`, `{"affected_rows":N}`, or
-  `{"error":"duplicate_key","code":1062,"sqlstate":"23000","message":"..."}`.
-  Logs go to stderr only.
-* `SET search_mode = 'ann'` and `ORDER BY ... APPROXIMATE` also select ANN.
+* After recovery and index rebuild, stdout gets `{"type":"ready"}` before the
+  first request is read.
+* Each stdin line is one request; each gets exactly one response line,
+  flushed immediately, echoing `id` with its JSON type:
+  * `{"id":1,"op":"execute","sql":"...","search_mode":"exact"}` runs the SQL
+    in `sql` with the given search mode (`exact` or `ann`).
+  * Query: `{"id":1,"ok":true,"columns":[...],"rows":[[...]]}`. Write:
+    `{"id":1,"ok":true,"affected_rows":N}`. Other statements: `{"id":1,"ok":true}`.
+  * Failure: `{"id":1,"ok":false,"error":{"code":"duplicate_key","message":"..."}}`;
+    the process keeps serving requests.
+  * `{"id":9,"op":"shutdown"}` rolls back an open transaction, closes the log,
+    replies `{"id":9,"ok":true}` and exits 0 with no further output.
+* End of stdin, SIGTERM and SIGINT also shut down cleanly (no reply).
+* BIGINT values are JSON integers, vectors are JSON arrays of float32 values
+  (shortest round-trip form), distances are finite JSON numbers.
+* Logs go to stderr only.
+* `ORDER BY ... APPROXIMATE` forces ANN for that query. Every request carries
+  its own `search_mode`, so `SET search_mode` has no effect beyond itself.
 
-Error names: `syntax_error`, `unsupported_sql`, `duplicate_key`,
+Error codes: `syntax_error`, `unsupported_sql`, `duplicate_key`,
 `dimension_mismatch`, `invalid_vector`, `data_too_long`, `out_of_range`,
 `invalid_value`, `table_exists`, `table_not_found`, `column_not_found`,
-`column_count_mismatch`, `missing_value`, `type_mismatch`, `transaction_error`.
+`column_count_mismatch`, `missing_value`, `type_mismatch`, `transaction_error`;
+protocol errors use `invalid_request` and `unsupported_op`. The message
+carries the MySQL error number and SQLSTATE.
 
 ## SQL subset
 
@@ -85,7 +91,7 @@ COMMIT is found, then truncate after the last complete committed record. This
 removes torn tails and uncommitted work, and replaying twice gives the same
 result, so a crash during recovery is harmless. If dead data exceeds both
 256 MiB and the live data, the log is rewritten to a temp file, synced and
-renamed. Vector indexes are rebuilt before `READY`.
+renamed. Vector indexes are rebuilt before the ready line.
 
 **Vector search.** Each table keeps a contiguous float32 copy of its committed
 vectors (within the memory budget). TopK scans it with a bounded max-heap,
@@ -103,17 +109,20 @@ budget, queries fall back to a heap scan over the log.
 ```bash
 cd minivectordb
 go test ./...                       # atomicity, rollback, crash at every byte offset, compaction
-python3 tools/run_cases.py --bin ./mvdb --cases ../mysqltest     # public cases
+python3 ../protocol_check/run.py --command '["./mvdb","--data-dir","{data_dir}"]' --output /tmp/pc-$(date +%s)   # public cases, official checker
 python3 tools/crash_test.py --bin ./mvdb --rounds 40             # kill -9 rounds, including during recovery
 python3 tools/bench.py --bin ./mvdb                              # local stand-in for the benchmark
 ```
+
+With Docker: `python3 protocol_check/run.py --image minivectordb:latest --output ...`
+from the repository root (see `protocol_check/README.md`).
 
 Local results (macOS arm64, reference only; the official run is Linux x86_64
 with cgroup v2 accounting):
 
 | Check | Result |
 | --- | --- |
-| public cases | 20 / 20 |
+| public cases (`protocol_check/run.py`, handshake + 20 cases) | 20 / 20 |
 | crash test, seeds 1-3, 40 rounds each | no lost commits, no partial or leaked transactions |
 | bench, uniform random data, exact | write 0.71 s, query 0.67 s, peak RSS 26 MB, log 5.2 MB, Recall@10 1.0 / 1.0 |
 | same, IVF nprobe = nlist/4 (before disabling it at 10k rows) | query 0.44 s, unfiltered Recall@10 0.61 |
@@ -126,8 +135,8 @@ close to the average.
 
 ## Known limits
 
-* The stdin/stdout framing, ready line and error names are assumptions until
-  the official driver is released.
+* The full error code mapping has not been published (`protocol_check/config.json`
+  has empty `error_codes`), so the semantic names above may need adjusting.
 * The primary key map stays in memory (about 50 bytes per row).
 * Single connection and at most one explicit transaction, as in the task.
 * DDL inside an explicit transaction commits that transaction first.

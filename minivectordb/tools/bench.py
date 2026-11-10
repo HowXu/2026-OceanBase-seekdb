@@ -51,13 +51,15 @@ def main():
     cats = ["c%d" % rng.randrange(a.cats) for _ in range(a.rows)]
     p = subprocess.Popen([a.bin, "--data-dir", d, "--mode", a.mode], stdin=subprocess.PIPE,
                          stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, bufsize=1 << 20)
-    assert p.stdout.readline().strip() == "READY"
+    assert json.loads(p.stdout.readline()) == {"type": "ready"}
+    seq = [0]
 
     def send(sql):
-        p.stdin.write(sql + "\n")
+        seq[0] += 1
+        p.stdin.write(json.dumps({"id": seq[0], "op": "execute", "sql": sql, "search_mode": a.mode}) + "\n")
         p.stdin.flush()
         r = json.loads(p.stdout.readline())
-        if "error" in r:
+        if r.get("ok") is not True or r.get("id") != seq[0]:
             raise RuntimeError("%s: %s" % (sql[:80], r))
         return r
 
@@ -87,8 +89,12 @@ def main():
     t0 = time.perf_counter()
     results = [send(s) for s in sqls]
     t_query = time.perf_counter() - t0
+    seq[0] += 1
+    p.stdin.write(json.dumps({"id": seq[0], "op": "shutdown"}) + "\n")
+    p.stdin.flush()
+    assert json.loads(p.stdout.readline()) == {"id": seq[0], "ok": True}
     p.stdin.close()
-    p.wait()
+    assert p.wait() == 0
     peak_kb = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
     if os.uname().sysname == "Darwin":
         peak_kb //= 1024

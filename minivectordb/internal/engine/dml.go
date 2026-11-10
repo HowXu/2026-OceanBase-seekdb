@@ -147,7 +147,7 @@ func (db *DB) execInsert(s *sp.Insert) (*Result, error) {
 	if err := db.write(chs); err != nil {
 		return nil, ioErr(err)
 	}
-	return &Result{Affected: int64(len(chs))}, nil
+	return &Result{Affected: int64(len(chs)), HasAffected: true}, nil
 }
 
 // match returns the visible (pk, offset) pairs satisfying where. A conjunct
@@ -261,7 +261,7 @@ func (db *DB) execUpdate(s *sp.Update) (*Result, error) {
 	if err := db.write(chs); err != nil {
 		return nil, ioErr(err)
 	}
-	return &Result{Affected: int64(len(pks))}, nil
+	return &Result{Affected: int64(len(pks)), HasAffected: true}, nil
 }
 
 func (db *DB) execDelete(s *sp.Delete) (*Result, error) {
@@ -280,5 +280,5 @@ func (db *DB) execDelete(s *sp.Delete) (*Result, error) {
 	if err := db.write(chs); err != nil {
 		return nil, ioErr(err)
 	}
-	return &Result{Affected: int64(len(pks))}, nil
+	return &Result{Affected: int64(len(pks)), HasAffected: true}, nil
 }

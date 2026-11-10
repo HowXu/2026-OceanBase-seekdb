@@ -1,5 +1,7 @@
-// Command minivectordb runs the database as a foreground process that reads
-// SQL from stdin and writes one JSON result line per statement to stdout.
+// Command minivectordb runs the database as a foreground process speaking the
+// JSONL protocol of STDIO_PROTOCOL.md: after recovery it prints
+// {"type":"ready"}, then answers each request line on stdin with exactly one
+// response line on stdout. Logs go to stderr only.
 package main
 
 import (
@@ -7,6 +9,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"runtime/debug"
@@ -22,14 +25,14 @@ import (
 
 func main() {
 	dataDir := flag.String("data-dir", envOr("MVDB_DATA_DIR", "/data"), "data directory")
-	mode := flag.String("mode", envOr("MVDB_SEARCH_MODE", "exact"), "vector search mode: exact or ann")
+	mode := flag.String("mode", envOr("MVDB_SEARCH_MODE", "exact"), "default vector search mode when a request has no search_mode: exact or ann")
 	sync := flag.String("sync", envOr("MVDB_SYNC", "fdatasync"), "commit durability: fdatasync or none")
 	indexMB := flag.Int64("index-mem-mb", envInt("MVDB_INDEX_MEM_MB", 256), "memory budget for in-memory vectors per table")
-	ready := flag.String("ready", envOr("MVDB_READY", "READY"), "line printed on stdout once recovery is done; empty to disable")
 	flag.Parse()
 
 	logf := func(format string, a ...any) { fmt.Fprintf(os.Stderr, "minivectordb: "+format+"\n", a...) }
-	opts := engine.Options{SearchMode: strings.ToLower(*mode), Logf: logf, IndexMemBytes: *indexMB << 20}
+	defaultMode := strings.ToLower(*mode)
+	opts := engine.Options{SearchMode: defaultMode, Logf: logf, IndexMemBytes: *indexMB << 20}
 	if lim := cgroupMemLimit(); lim > 0 {
 		// memory.peak includes page cache, so keep the heap well below the
 		// limit: vectors get at most a quarter, and the GC targets 60%.
@@ -45,7 +48,7 @@ func main() {
 	default:
 		opts.Sync = storage.SyncData
 	}
-	if opts.SearchMode != "exact" && opts.SearchMode != "ann" {
+	if defaultMode != "exact" && defaultMode != "ann" {
 		logf("invalid --mode %q", *mode)
 		os.Exit(2)
 	}
@@ -56,98 +59,123 @@ func main() {
 	}
 
 	out := bufio.NewWriterSize(os.Stdout, 1<<16)
-	shutdown := func(code int) {
-		out.Flush()
-		if err := db.Close(); err != nil {
-			logf("close: %v", err)
-			code = 1
-		}
-		os.Exit(code)
-	}
-	// SIGTERM/SIGINT are a normal shutdown: roll back and flush. Statements
-	// run on the main goroutine, so the signal is handled between statements.
+	// SIGTERM/SIGINT are a normal shutdown: roll back and close. Requests run
+	// on the main goroutine, so the signal is handled between requests.
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
 
-	type item struct {
-		s  string
-		ok bool
+	type line struct {
+		b   []byte
+		eof bool
 	}
-	in := make(chan item)
+	in := make(chan line)
 	go func() {
-		sp := proto.NewSplitter(os.Stdin)
+		r := bufio.NewReaderSize(os.Stdin, 1<<20)
 		for {
-			s, ok := sp.Next()
-			in <- item{s, ok}
-			if !ok {
+			b, err := r.ReadBytes('\n')
+			if len(b) > 0 {
+				in <- line{b: b}
+			}
+			if err != nil {
+				if err != io.EOF {
+					logf("read stdin: %v", err)
+				}
+				in <- line{eof: true}
 				return
 			}
 		}
 	}()
 
-	if *ready != "" {
-		fmt.Fprintln(out, *ready)
-	}
+	// Recovery and index rebuild are done inside engine.Open, so the
+	// handshake is sent only now, before the first request is read.
+	out.WriteString(proto.Ready)
 	out.Flush()
+
+	closeDB := func() int {
+		if err := db.Close(); err != nil {
+			logf("close: %v", err)
+			return 1
+		}
+		return 0
+	}
 	enc := &proto.Encoder{}
 	for {
-		var it item
+		var l line
 		select {
 		case <-sigs:
-			shutdown(0)
-		case it = <-in:
+			os.Exit(closeDB())
+		case l = <-in:
 		}
-		if !it.ok {
-			shutdown(0)
+		if l.eof {
+			os.Exit(closeDB())
 		}
-		if proto.IsDirective(it.s) {
-			if handleDirective(db, it.s, out, enc) {
-				shutdown(0)
-			}
+		if len(strings.TrimSpace(string(l.b))) == 0 {
 			continue
 		}
-		res, err := db.Exec(it.s)
+		req, perr := proto.ParseRequest(l.b)
+		if perr != nil {
+			logf("bad request: %v", perr)
+			out.Write(enc.Error(req.ID, "invalid_request", perr.Error()))
+			out.Flush()
+			continue
+		}
+		switch req.Op {
+		case "shutdown":
+			code := closeDB()
+			if code == 0 {
+				out.Write(enc.OK(req.ID))
+			} else {
+				out.Write(enc.Error(req.ID, "internal_error", "close failed"))
+			}
+			out.Flush()
+			os.Exit(code)
+		case "execute":
+		default:
+			out.Write(enc.Error(req.ID, "unsupported_op", "unsupported op "+strconv.Quote(req.Op)))
+			out.Flush()
+			continue
+		}
+		if req.SQL == nil {
+			out.Write(enc.Error(req.ID, "invalid_request", "missing sql"))
+			out.Flush()
+			continue
+		}
+		switch m := strings.ToLower(req.SearchMode); m {
+		case "":
+			db.SetSearchMode(defaultMode)
+		case "exact", "ann":
+			db.SetSearchMode(m)
+		default:
+			out.Write(enc.Error(req.ID, "invalid_request", "search_mode must be exact or ann"))
+			out.Flush()
+			continue
+		}
+		res, err := db.Exec(*req.SQL)
 		switch {
+		case err == nil && res.IsQuery, err == nil && res.HasAffected:
+			out.Write(enc.Result(req.ID, res))
 		case err == nil:
-			out.Write(enc.Result(res))
+			out.Write(enc.OK(req.ID))
 		case errors.Is(err, engine.ErrQuit):
-			shutdown(0)
+			// Ending the session is the driver's job (op shutdown), not SQL's.
+			out.Write(enc.SQLError(req.ID, types.ErrUnsupported("QUIT is not supported; use op shutdown")))
 		default:
 			var se *types.SQLError
 			var fe *engine.FatalError
 			if errors.As(err, &fe) {
+				// Durability can no longer be guaranteed: report and stop.
 				logf("%v", fe)
+				out.Write(enc.Error(req.ID, "internal_error", fe.Error()))
 				out.Flush()
 				os.Exit(1)
 			}
 			if !errors.As(err, &se) {
 				se = types.ErrInternal(err)
 			}
-			out.Write(enc.Error(se))
+			out.Write(enc.SQLError(req.ID, se))
 		}
 		out.Flush()
 	}
-}
-
-// handleDirective processes driver directives that reach the program. It
-// returns true when the process should shut down.
-func handleDirective(db *engine.DB, line string, out *bufio.Writer, enc *proto.Encoder) bool {
-	f := strings.Fields(strings.TrimPrefix(line, "--"))
-	if len(f) == 0 {
-		return false
-	}
-	switch strings.ToLower(f[0]) {
-	case "mode", "search_mode":
-		if len(f) > 1 {
-			m := strings.ToLower(f[1])
-			if m == "exact" || m == "ann" {
-				db.SetSearchMode(m)
-			}
-		}
-	case "restart", "shutdown", "exit", "quit":
-		return true
-	}
-	return false
 }
 
 func envInt(k string, def int64) int64 {

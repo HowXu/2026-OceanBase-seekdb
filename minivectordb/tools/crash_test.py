@@ -25,18 +25,24 @@ import time
 def start(binary, d):
     p = subprocess.Popen([binary, "--data-dir", d], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                          stderr=subprocess.DEVNULL, text=True, encoding="utf-8")
-    if p.stdout.readline().strip() != "READY":
-        raise RuntimeError("no READY")
+    if json.loads(p.stdout.readline() or "null") != {"type": "ready"}:
+        raise RuntimeError("no ready handshake")
     return p
 
 
+_seq = [0]
+
+
 def send(p, sql):
-    p.stdin.write(sql + "\n")
+    _seq[0] += 1
+    p.stdin.write(json.dumps({"id": _seq[0], "op": "execute", "sql": sql, "search_mode": "exact"}) + "\n")
     p.stdin.flush()
     line = p.stdout.readline()
     if not line:
         return None
-    return json.loads(line)
+    r = json.loads(line)
+    assert r.get("id") == _seq[0] and r.get("ok") is True, "unexpected response %r" % r
+    return r
 
 
 def vec(i):
