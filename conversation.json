@@ -1084,7 +1084,7 @@
     "要继续提高到更接近满分，需要用户在当前锁定版本上亲自写出预测、阅读实际结果、解释偏差、提出修正并完成新场景复测；本文件不预写这些尚未发生的内容。"
   ],
   "current_session": {
-    "note": "学生发言为原文；结果为平台页面或命令的实际输出。没有学生对这些结果的解释时，不构成计分实例。",
+    "note": "学生发言为原文；结果为平台页面或命令的实际输出。没有学生对这些结果的解释时，不构成计分实例。 T3-T5 是 Agent 按单变量对照完成的性能实验原始输出；预测、实现和解释都由 Agent 完成，不作为学生理解证据。",
     "student_messages": [
       {
         "id": "S1",
@@ -1115,6 +1115,11 @@
         "id": "S6",
         "source": "student",
         "content": "12.00前还有4次提测机会，充分利用，阶段性地去提测，而不是一直憋着做"
+      },
+      {
+        "id": "S7",
+        "source": "student",
+        "content": "ok，在等待提测结果出来之前开始优化性能吧"
       }
     ],
     "results": [
@@ -1129,6 +1134,27 @@
         "source": "platform",
         "commit": "89f6d54809f901ca2612ee27d9036340b97cb8e9",
         "output": "MySQL 正式用例：通过；此项为准入条件，不计排名分\n性能原始分：性能评测完成；原始指标 E = 1806.946812\nAgent Prompt 原始分：Prompt结果无效、待复核、超出平台0－100范围或缺少材料摘要"
+      },
+      {
+        "id": "T3",
+        "source": "tool",
+        "commit": "a97f6c4242617be1a6f98fd5a488cecc1da0a6ab",
+        "env": "macOS arm64, reference-only",
+        "output": "bench median write_s 0.707 query_s 0.656 mem 26.1MB io 5.19MB recall 1.0/1.0\nPHASES queries=1000 parse_ms=5.3 exec_ms=616.2 unfiltered500_ms=288.1 filtered500_ms=320.6\nflat 0.83s 59.29% engine.l2sqBound"
+      },
+      {
+        "id": "T4",
+        "source": "tool",
+        "commit": "72456f5",
+        "env": "macOS arm64, reference-only",
+        "output": "WHERE before distance: filtered500_ms=202.1 / 197.3 / 275.7\n+ byte compare: filtered500_ms=129.9 / 131.2 / 130.3 unfiltered500_ms=316.4 / 317.3 / 317.3\nbench median write_s 0.681 query_s 0.575 recall 1.0/1.0"
+      },
+      {
+        "id": "T5",
+        "source": "tool",
+        "commit": "f4977ec",
+        "env": "macOS arm64, reference-only",
+        "output": "2-goroutine exact scan: unfiltered500_ms=165.8 / 165.2 / 166.6 filtered500_ms=80.8 / 80.3 / 83.3\ngo test -race ./internal/engine ok\nbench median write_s 0.688 query_s 0.309 mem 26.9MB io 5.19MB recall 1.0/1.0"
       }
     ]
   },
