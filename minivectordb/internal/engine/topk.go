@@ -117,6 +117,7 @@ func (db *DB) vectorTopK(t *Table, q []float32, pred func([]byte) bool, k int, a
 	if ann && x.Explicit && x.live >= 2*x.ivfBuilt {
 		x.trainIVF() // first use, or the table has doubled since training
 	}
+	qw := widen(q)
 	var ov map[int64]int64
 	if db.txn != nil {
 		ov = db.txn.overlay[t.ID]
@@ -138,7 +139,7 @@ func (db *DB) vectorTopK(t *Table, q []float32, pred func([]byte) bool, k int, a
 			return
 		}
 		bd := tk.bound()
-		d := l2sqBound(q, x.vec(s), bd)
+		d := l2sqBound(qw, x.vec(s), bd)
 		if d > bd {
 			return
 		}

@@ -144,69 +144,79 @@ func (x *VecIndex) unlist(s int32) {
 	x.slotList[s] = -1
 }
 
-// l2sq is the squared Euclidean distance accumulated in float64 so that ties
-// and rounding match a straightforward reference computation.
-func l2sq(a, b []float32) float64 {
-	b = b[:len(a)]
-	var s0, s1, s2, s3 float64
-	i := 0
-	for ; i+4 <= len(a); i += 4 {
-		d0 := float64(a[i]) - float64(b[i])
-		d1 := float64(a[i+1]) - float64(b[i+1])
-		d2 := float64(a[i+2]) - float64(b[i+2])
-		d3 := float64(a[i+3]) - float64(b[i+3])
-		s0 += d0 * d0
-		s1 += d1 * d1
-		s2 += d2 * d2
-		s3 += d3 * d3
+// All distance kernels share one summation order, so a TopK ordering key and
+// the L2_DISTANCE value printed for the same row are bit-identical:
+// differences are taken in float64; element i of each 16-element block goes
+// to accumulator i%8; elements after the last full block go to accumulator 0
+// in order; the result is ((s0+s1)+(s2+s3))+((s4+s5)+(s6+s7)).
+
+// widen converts a query vector to float64 once per query.
+func widen(q []float32) []float64 {
+	w := make([]float64, len(q))
+	for i, f := range q {
+		w[i] = float64(f)
 	}
-	for ; i < len(a); i++ {
-		d := float64(a[i]) - float64(b[i])
-		s0 += d * d
-	}
-	return (s0 + s1) + (s2 + s3)
+	return w
 }
+
+// l2sq is the squared Euclidean distance in float64.
+func l2sq(a, b []float32) float64 { return l2sqBound(widen(a), b, math.Inf(1)) }
 
 func (x *VecIndex) vec(s int32) []float32 { return x.vecs[int(s)*x.dim : int(s+1)*x.dim] }
 
-// l2sqBound computes l2sq(a, b) but stops early once the partial sum exceeds
-// bound, returning a value > bound. Every term is non-negative, so the
-// partial sum only grows and the early exit never drops a true candidate.
-// When the full sum is computed it equals l2sq exactly.
-func l2sqBound(a, b []float32, bound float64) float64 {
+// l2sqBound computes the squared distance between the widened query a and
+// the stored vector b, but stops after a 16-element block once the partial
+// sum exceeds bound, returning a value > bound. Every term is non-negative,
+// so the partial sum only grows and the early exit never drops a true
+// candidate. When the full sum is computed it equals l2sq exactly.
+func l2sqBound(a []float64, b []float32, bound float64) float64 {
 	b = b[:len(a)]
-	var s0, s1, s2, s3 float64
+	var s0, s1, s2, s3, s4, s5, s6, s7 float64
 	i := 0
-	for i+16 <= len(a) {
-		for end := i + 16; i < end; i += 4 {
-			d0 := float64(a[i]) - float64(b[i])
-			d1 := float64(a[i+1]) - float64(b[i+1])
-			d2 := float64(a[i+2]) - float64(b[i+2])
-			d3 := float64(a[i+3]) - float64(b[i+3])
-			s0 += d0 * d0
-			s1 += d1 * d1
-			s2 += d2 * d2
-			s3 += d3 * d3
-		}
-		if p := (s0 + s1) + (s2 + s3); p > bound {
-			return p
-		}
-	}
-	for ; i+4 <= len(a); i += 4 {
-		d0 := float64(a[i]) - float64(b[i])
-		d1 := float64(a[i+1]) - float64(b[i+1])
-		d2 := float64(a[i+2]) - float64(b[i+2])
-		d3 := float64(a[i+3]) - float64(b[i+3])
+	for ; i+16 <= len(a); i += 16 {
+		x := (*[16]float64)(a[i:])
+		y := (*[16]float32)(b[i:])
+		d0 := x[0] - float64(y[0])
+		d1 := x[1] - float64(y[1])
+		d2 := x[2] - float64(y[2])
+		d3 := x[3] - float64(y[3])
+		d4 := x[4] - float64(y[4])
+		d5 := x[5] - float64(y[5])
+		d6 := x[6] - float64(y[6])
+		d7 := x[7] - float64(y[7])
 		s0 += d0 * d0
 		s1 += d1 * d1
 		s2 += d2 * d2
 		s3 += d3 * d3
+		s4 += d4 * d4
+		s5 += d5 * d5
+		s6 += d6 * d6
+		s7 += d7 * d7
+		d0 = x[8] - float64(y[8])
+		d1 = x[9] - float64(y[9])
+		d2 = x[10] - float64(y[10])
+		d3 = x[11] - float64(y[11])
+		d4 = x[12] - float64(y[12])
+		d5 = x[13] - float64(y[13])
+		d6 = x[14] - float64(y[14])
+		d7 = x[15] - float64(y[15])
+		s0 += d0 * d0
+		s1 += d1 * d1
+		s2 += d2 * d2
+		s3 += d3 * d3
+		s4 += d4 * d4
+		s5 += d5 * d5
+		s6 += d6 * d6
+		s7 += d7 * d7
+		if p := ((s0 + s1) + (s2 + s3)) + ((s4 + s5) + (s6 + s7)); p > bound {
+			return p
+		}
 	}
 	for ; i < len(a); i++ {
-		d := float64(a[i]) - float64(b[i])
+		d := a[i] - float64(b[i])
 		s0 += d * d
 	}
-	return (s0 + s1) + (s2 + s3)
+	return ((s0 + s1) + (s2 + s3)) + ((s4 + s5) + (s6 + s7))
 }
 
 func (x *VecIndex) nearestCentroid(v []float32) int {
