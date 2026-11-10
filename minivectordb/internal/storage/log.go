@@ -8,6 +8,7 @@ import (
 	"hash/crc32"
 	"io"
 	"os"
+	"time"
 )
 
 // Record layout: [u32 payloadLen][u32 crc][u8 type][u64 txn][payload].
@@ -42,6 +43,25 @@ type Log struct {
 	buf     []byte
 	mode    SyncMode
 	m       mapping
+	stats   Stats
+}
+
+// Stats counts write and sync system calls for diagnostics.
+type Stats struct {
+	SyncCalls    int64 `json:"sync_calls"`
+	SyncNs       int64 `json:"sync_ns"`
+	WriteCalls   int64 `json:"write_calls"`
+	BytesWritten int64 `json:"bytes_written"`
+}
+
+func (l *Log) Stats() Stats { return l.stats }
+
+func (l *Log) sync() error {
+	t := time.Now()
+	err := fdatasync(l.f)
+	l.stats.SyncCalls++
+	l.stats.SyncNs += int64(time.Since(t))
+	return err
 }
 
 const flushThreshold = 4 << 20
@@ -101,6 +121,8 @@ func (l *Log) Flush() error {
 	if _, err := l.f.WriteAt(l.buf, l.flushed); err != nil {
 		return err
 	}
+	l.stats.WriteCalls++
+	l.stats.BytesWritten += int64(len(l.buf))
 	l.flushed += int64(len(l.buf))
 	l.buf = l.buf[:0]
 	if cap(l.buf) > 2*flushThreshold {
@@ -117,7 +139,7 @@ func (l *Log) Sync() error {
 	if l.mode == SyncNone || l.synced == l.flushed {
 		return nil
 	}
-	if err := fdatasync(l.f); err != nil {
+	if err := l.sync(); err != nil {
 		return err
 	}
 	l.synced = l.flushed
@@ -169,7 +191,7 @@ func (l *Log) Truncate(n int64) error {
 		return err
 	}
 	l.size, l.flushed, l.synced = n, n, n
-	return fdatasync(l.f)
+	return l.sync()
 }
 
 func (l *Log) Close() error {

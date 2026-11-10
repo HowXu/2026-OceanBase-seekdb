@@ -208,7 +208,13 @@ func (db *DB) Close() error {
 	if db.txn != nil {
 		db.rollback()
 	}
-	return db.log.Close()
+	err := db.log.Close()
+	if os.Getenv("MVDB_SYNC_STATS") != "" {
+		if b, jerr := json.Marshal(db.log.Stats()); jerr == nil {
+			db.logf("syncstats %s", b)
+		}
+	}
+	return err
 }
 
 func (db *DB) SearchMode() string     { return db.opts.SearchMode }
