@@ -112,7 +112,7 @@ func (db *DB) execSelect(s *sp.Select) (*Result, error) {
 		var eq *eqFilterSpec
 		if s.Where != nil {
 			if col, val, found := eqFilter(sc, s.Where); found {
-				eq = &eqFilterSpec{col, val}
+				eq = &eqFilterSpec{col, val, eqCovers(s.Where)}
 			}
 		}
 		offs, ok = db.vectorTopK(t, keys[0].c.l2q, pred, int(want), s.Approx, eq)

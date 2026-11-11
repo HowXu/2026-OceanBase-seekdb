@@ -124,6 +124,12 @@ func (db *DB) vectorTopK(t *Table, q []float32, pred func([]byte) bool, k int, a
 	if db.txn != nil {
 		ov = db.txn.overlay[t.ID]
 	}
+	// When the candidate set comes from the only WHERE condition, every
+	// candidate already satisfies WHERE and the per-row check is skipped.
+	rowPred := pred
+	if eq != nil && eq.covers {
+		rowPred = nil
+	}
 	visit := func(tk *topK, s int32) {
 		pk := x.pks[s]
 		if pk == tombstone {
@@ -137,7 +143,7 @@ func (db *DB) vectorTopK(t *Table, q []float32, pred func([]byte) bool, k int, a
 		// Evaluate WHERE before the distance: a filtered-out row costs one
 		// row lookup instead of a full distance computation.
 		off := x.off[s]
-		if pred != nil && !pred(db.rowBytes(off)) {
+		if rowPred != nil && !rowPred(db.rowBytes(off)) {
 			return
 		}
 		bd := tk.bound()
@@ -161,6 +167,8 @@ func (db *DB) vectorTopK(t *Table, q []float32, pred func([]byte) bool, k int, a
 	if useCand {
 		n = len(cand)
 		slot = func(i int) int32 { return cand[i] }
+	} else {
+		rowPred = pred
 	}
 	tk := &topK{k: k, pred: pred, db: db, h: make(hitHeap, 0, k+1)}
 	if useIVF {
@@ -214,8 +222,9 @@ func (db *DB) vectorTopK(t *Table, q []float32, pred func([]byte) bool, k int, a
 
 // eqFilterSpec is a WHERE conjunct "varchar_column = 'constant'".
 type eqFilterSpec struct {
-	col int
-	val string
+	col    int
+	val    string
+	covers bool // the equality is the whole WHERE
 }
 
 // maxScanWorkers caps the goroutines used by one exact scan. 0 means

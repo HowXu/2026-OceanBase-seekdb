@@ -37,6 +37,13 @@ func (x *VecIndex) eqSlots(db *DB, t *Table, col int, v string) ([]int32, bool) 
 	return e.m[v], true
 }
 
+// eqCovers reports whether the candidate set alone decides WHERE: the whole
+// condition is the single equality on the set's column.
+func eqCovers(e sp.Expr) bool {
+	x, ok := e.(*sp.Cmp)
+	return ok && x.Op == "="
+}
+
 // eqFilter finds a conjunct "varchar_column = 'constant'" in WHERE. The full
 // WHERE is still evaluated on every candidate, so this only narrows the scan.
 func eqFilter(sc *scope, e sp.Expr) (col int, val string, ok bool) {
