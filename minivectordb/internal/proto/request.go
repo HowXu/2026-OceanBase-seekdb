@@ -20,6 +20,9 @@ type Request struct {
 // carries the id when it could be recovered, so the reply can echo it.
 func ParseRequest(line []byte) (*Request, error) {
 	line = bytes.TrimSpace(line)
+	if r, ok := parseFast(line); ok {
+		return r, nil
+	}
 	var r Request
 	if err := json.Unmarshal(line, &r); err != nil {
 		// Recover the id from an otherwise malformed object, if possible.
@@ -32,7 +35,9 @@ func ParseRequest(line []byte) (*Request, error) {
 		return &r, err
 	}
 	if len(r.ID) == 0 || bytes.Equal(r.ID, []byte("null")) {
-		return &r, errors.New("missing request id")
+		return &r, errMissingID
 	}
 	return &r, nil
 }
+
+var errMissingID = errors.New("missing request id")
