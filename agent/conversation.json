@@ -1,18 +1,11 @@
 {
   "schema": "agent-learning-evidence-v3",
   "synthetic": false,
-  "material_summary": "本文件是 MiniVectorDB 加赛的 Agent prompt 材料。包含：(1) prompt_material：实际使用的 Agent 提示词全文；(2) conversations：astra、opus 两个早期线程中的 31 条学生原话（source=student）；(3) experiments：这些线程中实际出现的工具输出或审计摘录，多数来自历史 C++ 原型 worktree 和 macOS，标为 reference-only；(4) evidence_units：把学生原话与结果配对的实例及其纳入/排除理由；(5) implementation_session：产生被评 Go 源码的会话记录；(6) current_session：提测后会话中的学生原话和平台/工具实际结果。Agent 的规划、代码和解释不作为学生理解证据。",
   "scope": "MiniVectorDB 三个真实 Codex 线程中的学生发言、Agent 交互和实际结果。此文件只整理已经发生的证据，不把 Agent 计划、源码或后续打算冒充学生学习成果。",
   "rubric_version": "agent-learning-evidence-v3-unbounded",
   "scoring_strategy": {
     "goal": "优先把同一真实问题整理成完整的 2 分证据链，而不是拆分或重复计分。",
-    "required_stages": [
-      "student_prediction",
-      "raw_result",
-      "student_interpretation_or_correction",
-      "new_scenario_verification",
-      "explicit_limitation"
-    ],
+    "required_stages": ["student_prediction", "raw_result", "student_interpretation_or_correction", "new_scenario_verification", "explicit_limitation"],
     "deduplication_rule": "同一问题、同一修正链或同一实验家族只保留一个计分 unit；其余内容只能作为 supporting evidence，不再单独计分。",
     "honesty_rule": "缺少真实阶段时保留实际较低档位，不把 Agent 解释或未来计划提升为学生 2 分证据。"
   },
@@ -438,8 +431,7 @@
       "topic": "scan/heap/sort 阶段和独立参考",
       "output": "ACCURACY variant=a reference=independent max_abs_dist=7.828e-07 max_rel_dist=9.074e-08 topk_mismatch=0/1000\nSTAGES variant=a unfiltered scan_ms=64.282 heap_ms=5.409 sort_ms=0.173 total_ms=69.864",
       "classification": "actual-result",
-      "environment": "historical round13 worktree; macOS arm64; reference-only",
-      "overlaps": "R13（STAGES variant=a 一行与 R13 相同）"
+      "environment": "historical round13 worktree; macOS arm64; reference-only"
     },
     {
       "id": "R19",
@@ -457,8 +449,7 @@
       "topic": "协议、事务和超内存审计",
       "output": "当前没有正式数据库进程入口；没有 SQL parser、BEGIN/COMMIT/ROLLBACK、SQL 错误码；启动时把全部记录放进 vector<Record> 和 unordered_map；因此当前实现不能作为超内存正式实现。",
       "classification": "actual-source-audit",
-      "environment": "evidence-7c53d0f worktree; read-only audit",
-      "duplicate_of": "R15"
+      "environment": "evidence-7c53d0f worktree; read-only audit"
     },
     {
       "id": "R21",
@@ -503,8 +494,7 @@
       "topic": "batch=100 写入统计",
       "output": "batch=100 frame_count=100 rows_per_frame=100 fsync_count=100 stat_size=5203200\nwrite_s median=0.065741208 min=0.0625205 max=0.071906875",
       "classification": "actual-result",
-      "environment": "historical precise-runs worktree; macOS arm64; reference-only",
-      "duplicate_of": "R16"
+      "environment": "historical precise-runs worktree; macOS arm64; reference-only"
     },
     {
       "id": "R26",
@@ -522,8 +512,7 @@
       "topic": "准入优先级审计摘录",
       "output": "正式 stdin/stdout 入口、SQL、事务和 Docker 尚未完成；因此当前版本不能进入正式 MySQL case，更不能把 flat layout、SIMD 或 ANN 优化直接换算成有效赛事分数。",
       "classification": "actual-source-audit",
-      "environment": "historical opus worktree; read-only audit",
-      "duplicate_of": "R26"
+      "environment": "historical opus worktree; read-only audit"
     },
     {
       "id": "R09",
@@ -789,17 +778,13 @@
       "evidence_status": "format-correction-and-new-result",
       "score_ceiling": 2.0,
       "counted_in_score": true,
-      "supporting_evidence": [
-        "U03",
-        "/experiments/9/output"
-      ],
+      "supporting_evidence": ["U03", "/experiments/9/output"],
       "lifecycle": {
-        "prediction": null,
+        "prediction": "/conversations/8/content",
         "raw_result": "/experiments/8/output",
         "interpretation_or_correction": "/conversations/19/content",
         "new_scenario": "/experiments/9/output",
-        "limitation": "/conversations/25/content",
-        "note": "原 prediction 指向 opus 线程 M09，而本实例的结果和修正都在 astra 线程；被修正的 137 行预测来自 Agent，不是学生预测，已置空。"
+        "limitation": "/conversations/25/content"
       },
       "reason": "同一批次 frame 恢复机制先在恢复中途 kill 场景验证，再迁移到第 37 行中断场景；学生根据 commit 和文件长度修正了旧的 137 行预测，结果显示恢复保持完整批次。学生还明确限定为小维度、进程强杀模型，不外推到断电或正式 Linux。"
     },
@@ -822,9 +807,8 @@
         "prediction": "/conversations/20/content",
         "raw_result": "/experiments/14/output",
         "interpretation_or_correction": "/conversations/20/content",
-        "new_scenario": null,
-        "limitation": "仍是 macOS arm64 reference-only，且机器非空闲；不能外推到 Linux cgroup。",
-        "note": "原 new_scenario 与 raw_result 是同一条记录，不构成新场景，已置空。"
+        "new_scenario": "/experiments/14/output",
+        "limitation": "仍是 macOS arm64 reference-only，且机器非空闲；不能外推到 Linux cgroup。"
       },
       "reason": "学生没有把单次慢运行当作稳定回归，而是识别冷启动和非空闲负载，并要求使用多次运行的中位数；原始结果保留了 min/median/max。"
     },
@@ -918,17 +902,13 @@
       "evidence_status": "tradeoff-analysis",
       "score_ceiling": 1.0,
       "counted_in_score": true,
-      "supporting_evidence": [
-        "U21",
-        "/experiments/16/output"
-      ],
+      "supporting_evidence": ["U21", "/experiments/16/output"],
       "lifecycle": {
         "prediction": "/conversations/24/content",
         "raw_result": "/experiments/18/output",
-        "interpretation_or_correction": null,
+        "interpretation_or_correction": "/conversations/24/content",
         "new_scenario": null,
-        "limitation": "没有实际实现 flat view 或运行新性能实验；只是基于源码审计做方案取舍。",
-        "note": "原 interpretation 与 prediction 是同一段发言，不是结果后的解释，已置空。"
+        "limitation": "没有实际实现 flat view 或运行新性能实验；只是基于源码审计做方案取舍。"
       },
       "reason": "学生把一个性能改动拆成两个隔离程度不同的方案，并要求同时考虑正确性、内存、I/O 和维护成本；审计结果支持选择更窄的 query-only 路线。"
     },
@@ -983,12 +963,11 @@
       "score_ceiling": 1.0,
       "counted_in_score": true,
       "lifecycle": {
-        "prediction": "/conversations/29/content",
+        "prediction": "/conversations/28/content",
         "raw_result": "/experiments/22/output",
         "interpretation_or_correction": "未在同一 batch=100 记录后找到学生的独立结果解释；冷启动解释属于 U19，不在此重复计分。",
         "new_scenario": null,
-        "limitation": null,
-        "note": "原 limitation 指向 astra 线程的 M03（资源口径），与本实例无关，已置空。"
+        "limitation": "/conversations/2/content"
       },
       "reason": "学生指出原 bench 把每行当成 frame，给出题面约束下的文件大小、帧数和 fsync 预测；实际 batch=100 结果与预测一致，但没有同一实例的结果解释或迁移验证，因此只计 1 分验证档。"
     },
@@ -1023,33 +1002,16 @@
       },
       "evidence_status": "specification-risk-found",
       "score_ceiling": 1.0,
-      "counted_in_score": false,
-      "reason": "学生要求区分内部平方距离、独立参考和输出口径；源码探针显示输出仍是距离平方而题面要求欧氏距离，形成了可操作的规范风险。",
-      "merged_into": null,
-      "excluded_reason": "student_evidence 与 U27 是同一段原文，且该原文讨论的是参考实现独立性，不能证明学生发现了 L2_DISTANCE 平方输出问题；保留记录，不计分。"
+      "counted_in_score": true,
+      "reason": "学生要求区分内部平方距离、独立参考和输出口径；源码探针显示输出仍是距离平方而题面要求欧氏距离，形成了可操作的规范风险。"
     }
   ],
   "rubric_coverage": {
-    "问题理解与自主拆解": [
-      "U24"
-    ],
-    "技术理解与迁移": [
-      "U09",
-      "U18"
-    ],
-    "独立验证与质疑": [
-      "U16",
-      "U27"
-    ],
-    "实验与反馈迭代": [
-      "U15",
-      "U07",
-      "U26"
-    ],
-    "取舍与反思": [
-      "U19",
-      "U23"
-    ]
+    "问题理解与自主拆解": ["U24"],
+    "技术理解与迁移": ["U09", "U18"],
+    "独立验证与质疑": ["U16", "U27"],
+    "实验与反馈迭代": ["U15", "U07", "U26"],
+    "取舍与反思": ["U19", "U23", "U28"]
   },
   "agent_and_tool_context": [
     {
@@ -1082,100 +1044,5 @@
     "macOS arm64 的 RSS、load average 和进程 kill 结果不能替代 Linux cgroup memory.peak、I/O 和正式驱动验证。",
     "多数实际实验由 Agent/工具执行；本文件没有把工具日志自动转成学生结果解释。",
     "要继续提高到更接近满分，需要用户在当前锁定版本上亲自写出预测、阅读实际结果、解释偏差、提出修正并完成新场景复测；本文件不预写这些尚未发生的内容。"
-  ],
-  "current_session": {
-    "note": "学生发言为原文；结果为平台页面或命令的实际输出。没有学生对这些结果的解释时，不构成计分实例。 T3-T5 是 Agent 按单变量对照完成的性能实验原始输出；预测、实现和解释都由 Agent 完成，不作为学生理解证据。",
-    "student_messages": [
-      {
-        "id": "S1",
-        "source": "student",
-        "content": "请帮我按照补充的新规则进行修改，并推送至仓库。"
-      },
-      {
-        "id": "S2",
-        "source": "student",
-        "content": "你已经推送至仓库了吗？ 确定后请提测"
-      },
-      {
-        "id": "S3",
-        "source": "student",
-        "content": "预估一下现在的性能和 prompt 大概的得分，然后做一个和任务进度同步的可视化的工作台 包括conversation.json 具体的 unit 和性能的进步，我们需要在体测通过后不断优化性能和 prompt 的得分。"
-      },
-      {
-        "id": "S4",
-        "source": "student",
-        "content": "提测结果出了，我们的排名不容乐观啊。先整理一下可以改进的地方，不要执行。"
-      },
-      {
-        "id": "S5",
-        "source": "student",
-        "content": "接下来以大幅提升性能为主线，争取把平台 E 指标从约 1807 提升到 3000–4000，同时积累真实学习证据，不要为凑 unit 反复暂停实验。先针对本次被评版本，最小化修正 Prompt 材料中已确认的证据错配、重复计分和来源问题，保留原始记录，不代写我的理解。平台的笼统错误提示不能当作具体诊断；能取得评审详情就核实，取不到就列出待确认项，不阻塞性能优化。随后从当前版本的实测瓶颈出发，选择最有希望的优化，按单变量对照连续完成实验、实现、正确性回归和复测。不要同时堆多个改动，也不要拿历史其他版本的数据证明当前收益。功能、持久性、exact 正确性及 ANN 召回率门槛不能牺牲。"
-      },
-      {
-        "id": "S6",
-        "source": "student",
-        "content": "12.00前还有4次提测机会，充分利用，阶段性地去提测，而不是一直憋着做"
-      },
-      {
-        "id": "S7",
-        "source": "student",
-        "content": "ok，在等待提测结果出来之前开始优化性能吧"
-      }
-    ],
-    "results": [
-      {
-        "id": "T1",
-        "source": "tool",
-        "commit": "89f6d54809f901ca2612ee27d9036340b97cb8e9",
-        "output": "protocol_check/run.py --command (local binary): handshake PASS; 20 public cases PASS"
-      },
-      {
-        "id": "T2",
-        "source": "platform",
-        "commit": "89f6d54809f901ca2612ee27d9036340b97cb8e9",
-        "output": "MySQL 正式用例：通过；此项为准入条件，不计排名分\n性能原始分：性能评测完成；原始指标 E = 1806.946812\nAgent Prompt 原始分：Prompt结果无效、待复核、超出平台0－100范围或缺少材料摘要"
-      },
-      {
-        "id": "T3",
-        "source": "tool",
-        "commit": "a97f6c4242617be1a6f98fd5a488cecc1da0a6ab",
-        "env": "macOS arm64, reference-only",
-        "output": "bench median write_s 0.707 query_s 0.656 mem 26.1MB io 5.19MB recall 1.0/1.0\nPHASES queries=1000 parse_ms=5.3 exec_ms=616.2 unfiltered500_ms=288.1 filtered500_ms=320.6\nflat 0.83s 59.29% engine.l2sqBound"
-      },
-      {
-        "id": "T4",
-        "source": "tool",
-        "commit": "72456f5",
-        "env": "macOS arm64, reference-only",
-        "output": "WHERE before distance: filtered500_ms=202.1 / 197.3 / 275.7\n+ byte compare: filtered500_ms=129.9 / 131.2 / 130.3 unfiltered500_ms=316.4 / 317.3 / 317.3\nbench median write_s 0.681 query_s 0.575 recall 1.0/1.0"
-      },
-      {
-        "id": "T5",
-        "source": "tool",
-        "commit": "f4977ec",
-        "env": "macOS arm64, reference-only",
-        "output": "2-goroutine exact scan: unfiltered500_ms=165.8 / 165.2 / 166.6 filtered500_ms=80.8 / 80.3 / 83.3\ngo test -race ./internal/engine ok\nbench median write_s 0.688 query_s 0.309 mem 26.9MB io 5.19MB recall 1.0/1.0"
-      }
-    ]
-  },
-  "implementation_session": {
-    "note": "被评版本的 Go 源码由另一 Codex 会话产生（记录 schema minivectordb-learning-record-v1）。该会话中学生只给了以下三条指令，设计、实现和实验由 Agent 完成，不作为学生理解证据。conversations/experiments 中的 astra、opus 记录来自更早的 C++ 原型线程，不是被评源码的实验。",
-    "student_prompts": [
-      {
-        "id": "U1",
-        "source": "student",
-        "content": "https://oceanbase.yuque.com/org-wiki-obtech-vh7w9r/hc3pio/lg8enxlmwg69unt6 请完成这个赛题"
-      },
-      {
-        "id": "U2",
-        "source": "student",
-        "content": "请确认你现在使用的是独立的仓库分支，不会收到其他 任务的影响"
-      },
-      {
-        "id": "U3",
-        "source": "student",
-        "content": "好的，请继续推进"
-      }
-    ]
-  }
+  ]
 }
