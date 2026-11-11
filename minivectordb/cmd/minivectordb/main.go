@@ -79,22 +79,26 @@ func main() {
 		b   []byte
 		eof bool
 	}
-	in := make(chan line)
-	go func() {
-		r := bufio.NewReaderSize(os.Stdin, 1<<20)
-		for {
-			b, err := r.ReadBytes('\n')
-			if len(b) > 0 {
-				in <- line{b: b}
+	// Requests are read on the main goroutine, one at a time, so a request
+	// is handled without a goroutine hand-off. SIGTERM/SIGINT are checked
+	// between requests; a signal that arrives while blocked on stdin is
+	// handled by a watcher that closes stdin, which ends the read with EOF.
+	rd := bufio.NewReaderSize(os.Stdin, 1<<20)
+	next := func() line {
+		b, err := rd.ReadBytes('\n')
+		if len(b) == 0 && err != nil {
+			if err != io.EOF && !errors.Is(err, os.ErrClosed) {
+				logf("read stdin: %v", err)
 			}
-			if err != nil {
-				if err != io.EOF {
-					logf("read stdin: %v", err)
-				}
-				in <- line{eof: true}
-				return
-			}
+			return line{eof: true}
 		}
+		return line{b: b}
+	}
+	stop := make(chan struct{})
+	go func() {
+		<-sigs
+		close(stop)
+		os.Stdin.Close()
 	}()
 
 	// Recovery and index rebuild are done inside engine.Open, so the
@@ -111,12 +115,12 @@ func main() {
 	}
 	enc := &proto.Encoder{}
 	for {
-		var l line
 		select {
-		case <-sigs:
+		case <-stop:
 			os.Exit(closeDB())
-		case l = <-in:
+		default:
 		}
+		l := next()
 		if l.eof {
 			os.Exit(closeDB())
 		}
