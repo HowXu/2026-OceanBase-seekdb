@@ -28,6 +28,7 @@ struct BoundExpression {
   Cell literal = std::int64_t{0};
   ColumnType type;
   std::optional<std::vector<float>> query;
+  bool operator==(const BoundExpression&) const = default;
   ResultCell evaluate(const Row& row, bool squared = false) const {
     if (query) {
       const auto distance = l2_distance_squared(std::get<std::vector<float>>(row[*column]), *query);
@@ -285,7 +286,7 @@ ResultSet select_rows(const Select& statement, const TableEntry& entry, RootStor
     if (auto c = std::get_if<ColumnRef>(&item.expression)) {
       for (std::size_t i = 0; i < result.columns.size(); ++i)
         if (result.columns[i] == c->name) {
-          if (bound) semantic("ambiguous_column", "ambiguous ordering alias");
+          if (bound && *bound != projection[i]) semantic("ambiguous_column", "ambiguous ordering alias");
           bound = projection[i];
         }
     }

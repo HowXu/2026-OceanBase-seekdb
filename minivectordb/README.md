@@ -7,10 +7,13 @@ database engine. Pins: Python 3.12.10, SQLGlot 30.31.0, pybind11 3.1.0,
 pytest 9.2.0 (`requirements*.txt`).
 
 **2026-11-11 LOCAL result: original public driver 20/20 cases (95 SQL), all PASS.**
-Actual Docker is unavailable: image build/runtime/read-only verification and full
-Task10/Task11/M3 acceptance remain **BLOCKED**, not silently skipped. Hidden cases,
-formal resource/ANN admission and performance are unverified. See the genuine
-record `docs/superpowers/experiments/2026-11-11-minivectordb-public-baseline.md`.
+Actual Docker 28.5.2 has now passed a clean-source, no-cache image build, default
+entrypoint/read-only-root checks, original `--image` handshake and 20/20 public
+cases. The duplicate-projection ORDER BY fix also has focused and full-suite
+regressions. This does **not** establish formal admission: hidden cases, formal
+resource admission and performance remain unverified. Initial baseline history is
+in `docs/superpowers/experiments/2026-11-11-minivectordb-public-baseline.md`; current
+evidence is in `docs/superpowers/experiments/2026-11-11-minivectordb-sql-order-docker.md`.
 
 ## Local build and focused checks
 
@@ -147,7 +150,7 @@ command="[\"$PWD/.venv/bin/python\",\"-m\",\"minivectordb\",\"--data-dir\",\"{da
   --report "$out/local/result.json" --manifest mysqltest/manifest.json
 ```
 
-**Outstanding actual-Docker checks (not successful on this host):**
+**Actual-Docker verification commands:**
 
 ```bash
 docker build -t minivectordb:round2 .
@@ -164,7 +167,8 @@ VECTORDB_IMAGE=minivectordb:round2 .venv/bin/python -m pytest \
 No Podman substitute or skip/xfail counts as Docker acceptance. Dockerfile uses
 multi-stage compilation, no runtime installs/network, direct JSONL entrypoint,
 `/data` storage/temp files and disabled production fault injection. Its behavior
-still requires actual Docker evidence.
+has actual Docker evidence for the scopes recorded above, not hidden-case or
+formal platform approval.
 
 ## Storage, correctness and bounded limitations
 

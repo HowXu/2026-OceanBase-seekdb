@@ -59,6 +59,47 @@ def test_comparisons_and_stable_sort_limit(db, tmp_path):
     assert set((tmp_path/'objects').iterdir()) == objects
 
 
+@pytest.mark.parametrize('projection,columns,order,ascending,descending', [
+    ('id,id', ['id','id'], 'id', [[1,1],[2,2],[3,3]], [[3,3],[2,2],[1,1]]),
+    ('*,id', ['id','n','s','v','id'], 'id',
+     [[1,2,'z',[3.,4.],1],[2,1,'a',[0.,0.],2],[3,1,'a',[0.,0.],3]],
+     [[3,1,'a',[0.,0.],3],[2,1,'a',[0.,0.],2],[1,2,'z',[3.,4.],1]]),
+    ('s,s,id', ['s','s','id'], 's',
+     [['a','a',2],['a','a',3],['z','z',1]], [['z','z',1],['a','a',2],['a','a',3]]),
+    ('n AS k,n AS k,id', ['k','k','id'], 'k',
+     [[1,1,2],[1,1,3],[2,2,1]], [[2,2,1],[1,1,2],[1,1,3]]),
+    ("L2_DISTANCE(v,'[0,0]') AS d,L2_DISTANCE(v,'[0,0]') AS d,id", ['d','d','id'], 'd',
+     [[0.,0.,2],[0.,0.,3],[5.,5.,1]], [[5.,5.,1],[0.,0.,2],[0.,0.,3]]),
+    ('id,1 AS k,1 AS k', ['id','k','k'], 'k',
+     [[1,1,1],[2,1,1],[3,1,1]], [[1,1,1],[2,1,1],[3,1,1]]),
+])
+@pytest.mark.parametrize('limit', [None, 2, 0])
+@pytest.mark.parametrize('desc', [False, True])
+def test_equivalent_projections_can_share_order_name(db, projection, columns, order, ascending, descending, limit, desc):
+    db('CREATE TABLE dup (id BIGINT PRIMARY KEY,n BIGINT,s VARCHAR(4),v VECTOR(2))')
+    db("INSERT INTO dup VALUES (3,1,'a','[0,0]'),(1,2,'z','[3,4]'),(2,1,'a','[0,0]')")
+    suffix = (' DESC' if desc else '') + (f' LIMIT {limit}' if limit is not None else '')
+    expected = descending if desc else ascending
+    if limit is not None:
+        expected = expected[:limit]
+    assert db(f'SELECT {projection} FROM dup ORDER BY {order}{suffix}') == {
+        'columns': columns, 'rows': expected}
+
+
+@pytest.mark.parametrize('projection', [
+    'id AS k,n AS k', '1 AS k,2 AS k',
+    "L2_DISTANCE(v,'[0,0]') AS k,L2_DISTANCE(v,'[1,0]') AS k",
+])
+@pytest.mark.parametrize('state', ['empty', 'rows', 'limit0'])
+def test_distinct_projections_with_same_order_name_remain_ambiguous(db, projection, state):
+    db('CREATE TABLE dup (id BIGINT PRIMARY KEY,n BIGINT,v VECTOR(2))')
+    if state != 'empty':
+        # Equal current values do not make different source expressions identical.
+        db("INSERT INTO dup VALUES (1,1,'[0,0]')")
+    suffix = ' LIMIT 0' if state == 'limit0' else ''
+    fails(db, f'SELECT {projection} FROM dup ORDER BY k{suffix}', 'ambiguous_column')
+
+
 def test_failed_candidates_are_invisible(db, tmp_path):
     db('CREATE TABLE safe (id BIGINT PRIMARY KEY, n BIGINT, s VARCHAR(2))')
     db("INSERT INTO safe VALUES (1,1,'x'),(4,4,'y')")
