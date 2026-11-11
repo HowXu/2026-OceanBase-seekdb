@@ -1,0 +1,197 @@
+#pragma once
+
+#include "types.hpp"
+#include <bit>
+#include <filesystem>
+#include <fstream>
+#include <limits>
+
+// Internal format primitives. All integers and IEEE float bits are little
+// endian.
+namespace minivectordb::storage {
+static_assert(sizeof(float) == 4 && std::numeric_limits<float>::is_iec559,
+              "storage format requires IEEE binary32");
+[[noreturn]] inline void fail(const char *message) {
+  throw DbError("storage_error", message);
+}
+class Output {
+public:
+  explicit Output(const std::filesystem::path &path) {
+    std::error_code ec;
+    auto status = std::filesystem::symlink_status(path, ec);
+    if (ec && ec != std::errc::no_such_file_or_directory)
+      fail("cannot inspect output");
+    if (std::filesystem::exists(status)) {
+      if (!std::filesystem::is_regular_file(status))
+        fail("output must be a regular file");
+      auto size = std::filesystem::file_size(path, ec);
+      if (ec || size != 0)
+        fail("cannot overwrite immutable object");
+    }
+    stream_.open(path, std::ios::binary | std::ios::trunc);
+    if (!stream_)
+      fail("cannot open output");
+  }
+  void bytes(const char *p, std::size_t n) {
+    stream_.write(p, n);
+    if (!stream_)
+      fail("write failed");
+  }
+  void u8(std::uint8_t n) {
+    char c = static_cast<char>(n);
+    bytes(&c, 1);
+  }
+  void u64(std::uint64_t n) {
+    for (int i = 0; i < 8; ++i) {
+      u8(n & 255);
+      n >>= 8;
+    }
+  }
+  void u32(std::uint32_t n) {
+    for (int i = 0; i < 4; ++i) {
+      u8(n & 255);
+      n >>= 8;
+    }
+  }
+  void text(const std::string &s) {
+    u64(s.size());
+    bytes(s.data(), s.size());
+  }
+  void finish() {
+    stream_.flush();
+    if (!stream_)
+      fail("flush failed");
+    stream_.close();
+    if (stream_.fail())
+      fail("close failed");
+  }
+
+private:
+  std::ofstream stream_;
+};
+class Input {
+public:
+  explicit Input(const std::filesystem::path &path)
+      : stream_(path, std::ios::binary) {
+    if (!stream_)
+      fail("cannot open input");
+    stream_.seekg(0, std::ios::end);
+    auto n = stream_.tellg();
+    if (n < 0)
+      fail("cannot size input");
+    left_ = static_cast<std::uint64_t>(n);
+    stream_.seekg(0);
+  }
+  std::uint64_t remaining() const { return left_; }
+  void bytes(char *p, std::size_t n) {
+    if (n > left_)
+      fail("truncated input");
+    stream_.read(p, n);
+    if (!stream_)
+      fail("read failed");
+    left_ -= n;
+  }
+  std::uint8_t u8() {
+    char c;
+    bytes(&c, 1);
+    return static_cast<unsigned char>(c);
+  }
+  std::uint64_t u64() {
+    std::uint64_t n = 0;
+    for (int i = 0; i < 8; ++i)
+      n |= std::uint64_t(u8()) << (8 * i);
+    return n;
+  }
+  std::uint32_t u32() {
+    std::uint32_t n = 0;
+    for (int i = 0; i < 4; ++i)
+      n |= std::uint32_t(u8()) << (8 * i);
+    return n;
+  }
+  std::string text() {
+    auto n = u64();
+    if (n > left_ || n > std::string{}.max_size())
+      fail("invalid string length");
+    std::string s(static_cast<std::size_t>(n), '\0');
+    bytes(s.data(), s.size());
+    return s;
+  }
+  void magic(const std::string &expected) {
+    std::string value(expected.size(), '\0');
+    bytes(value.data(), value.size());
+    if (value != expected)
+      fail("invalid file format");
+  }
+  void end() {
+    if (left_ != 0)
+      fail("trailing bytes");
+  }
+
+private:
+  std::ifstream stream_;
+  std::uint64_t left_ = 0;
+};
+inline void write_schema(Output &out, const TableSchema &s) {
+  out.text(s.name);
+  out.u64(s.columns.size());
+  for (const auto &c : s.columns) {
+    out.text(c.name);
+    out.u8(c.type == ColumnType::BigInt    ? 1
+           : c.type == ColumnType::Varchar ? 2
+                                           : 3);
+    out.u64(c.length.value_or(0));
+    out.u8(c.primary_key ? 1 : 0);
+  }
+}
+inline TableSchema read_schema(Input &in) {
+  TableSchema s;
+  s.name = in.text();
+  auto n = in.u64();
+  if (n > in.remaining() / 19)
+    fail("invalid column count");
+  for (std::uint64_t i = 0; i < n; ++i) {
+    auto name = in.text();
+    auto tag = in.u8();
+    auto length = in.u64();
+    auto pk = in.u8();
+    if (tag < 1 || tag > 3 || pk > 1 || (tag == 1 && length != 0))
+      fail("invalid column encoding");
+    s.columns.push_back(
+        {name,
+         tag == 1   ? ColumnType::BigInt
+         : tag == 2 ? ColumnType::Varchar
+                    : ColumnType::Vector,
+         tag == 1 ? std::nullopt : std::optional<std::uint64_t>(length),
+         pk == 1});
+  }
+  validate_schema(s);
+  return s;
+}
+inline bool same_schema(const TableSchema &a, const TableSchema &b) {
+  if (a.name != b.name || a.columns.size() != b.columns.size())
+    return false;
+  for (std::size_t i = 0; i < a.columns.size(); ++i) {
+    const auto &x = a.columns[i];
+    const auto &y = b.columns[i];
+    if (x.name != y.name || x.type != y.type || x.length != y.length ||
+        x.primary_key != y.primary_key)
+      return false;
+  }
+  return true;
+}
+inline void validate_reference(const std::string &ref,
+                               const std::string &directory,
+                               const std::string &extension) {
+  const std::string prefix = directory + "/";
+  if (!ref.starts_with(prefix))
+    fail("invalid object directory");
+  auto leaf = ref.substr(prefix.size());
+  if (leaf.size() <= extension.size() || !leaf.ends_with(extension))
+    fail("invalid object extension");
+  auto stem = leaf.substr(0, leaf.size() - extension.size());
+  for (char c : stem)
+    if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+          (c >= '0' && c <= '9') || c == '-' || c == '_'))
+      fail("unsafe object reference");
+}
+} // namespace minivectordb::storage
