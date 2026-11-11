@@ -44,6 +44,7 @@ func BenchmarkScan(b *testing.B) {
 // float64 sum: equal within rounding for every vector and dimension, and the
 // bounded, unbounded and encoded-bytes paths bit-identical to each other.
 func TestKernelMatchesReference(t *testing.T) {
+	t.Logf("useSIMD=%v", useSIMD)
 	q, vs, n, dim := kernelData()
 	qw := widen(q)
 	for s := 0; s < n; s++ {
@@ -81,6 +82,31 @@ func TestKernelMatchesReference(t *testing.T) {
 		}
 		if got := l2sq(a, b); got != ref {
 			t.Fatalf("dim %d: %v vs %v", d, got, ref)
+		}
+	}
+}
+
+// TestKernelPathsAgree compares the portable and the SIMD kernel (when the
+// CPU has one) on random data of many lengths.
+func TestKernelPathsAgree(t *testing.T) {
+	if !useSIMD {
+		t.Skip("no SIMD kernel on this CPU")
+	}
+	rng := rand.New(rand.NewSource(3))
+	for it := 0; it < 2000; it++ {
+		n := rng.Intn(300)
+		a := make([]float32, n)
+		b := make([]float32, n)
+		for i := range a {
+			a[i] = float32(rng.NormFloat64() * 10)
+			b[i] = float32(rng.NormFloat64() * 10)
+		}
+		simd := l2sqSIMD(widen(a), b)
+		useSIMD = false
+		scalar := l2sq(a, b)
+		useSIMD = true
+		if math.Abs(simd-scalar) > 1e-12*math.Max(1, scalar) {
+			t.Fatalf("n=%d simd %v scalar %v", n, simd, scalar)
 		}
 	}
 }

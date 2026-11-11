@@ -171,6 +171,11 @@ func (x *VecIndex) vec(s int32) []float32 { return x.vecs[int(s)*x.dim : int(s+1
 // candidate. When the full sum is computed it equals l2sq exactly.
 func l2sqBound(a []float64, b []float32, bound float64) float64 {
 	b = b[:len(a)]
+	if useSIMD {
+		// The vector kernel has no early exit; it is faster than the
+		// scalar loop even when the scalar loop stops early.
+		return l2sqSIMD(a, b)
+	}
 	var s0, s1, s2, s3, s4, s5, s6, s7 float64
 	i := 0
 	for ; i+16 <= len(a); i += 16 {
