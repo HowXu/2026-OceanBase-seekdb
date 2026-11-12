@@ -117,7 +117,7 @@ func (db *DB) vectorTopK(t *Table, q []float32, pred func([]byte) bool, k int, a
 	// "ann" mode answers with the exact scan.
 	ann = ann && x.live >= ivfMinRows
 	if ann && x.Explicit && x.live >= 2*x.ivfBuilt {
-		x.trainIVF() // first use, or the table has doubled since training
+		x.trainIVF(db, t) // first use, or the table has doubled since training
 	}
 	qw := widen(q)
 	var ov map[int64]int64
@@ -130,6 +130,17 @@ func (db *DB) vectorTopK(t *Table, q []float32, pred func([]byte) bool, k int, a
 	if eq != nil && eq.covers {
 		rowPred = nil
 	}
+	// The scan reads the vectors straight out of the log. Push the buffered
+	// bytes to the kernel first, so the whole table is in the read-only
+	// mapping, then take that mapping once: every row is a slice of it and
+	// the scan needs no call into the log at all.
+	if err := db.log.Flush(); err != nil {
+		panic(err)
+	}
+	db.log.Prepare()
+	base := db.log.Map()
+	vecLen := int64(4 * t.Dim)
+	vecOff := int64(t.vecOff)
 	visit := func(tk *topK, s int32) {
 		pk := x.pks[s]
 		if pk == tombstone {
@@ -141,13 +152,21 @@ func (db *DB) vectorTopK(t *Table, q []float32, pred func([]byte) bool, k int, a
 			}
 		}
 		// Evaluate WHERE before the distance: a filtered-out row costs one
-		// row lookup instead of a full distance computation.
+		// row lookup instead of a full distance computation. The row bytes
+		// are read once and used for both.
 		off := x.off[s]
 		if rowPred != nil && !rowPred(db.rowBytes(off)) {
 			return
 		}
+		at := off + vecOff
+		var vb []byte
+		if base != nil {
+			vb = base[at : at+vecLen]
+		} else {
+			vb = db.log.View(at, int(vecLen))
+		}
 		bd := tk.bound()
-		d := l2sqBound(qw, x.vec(s), bd)
+		d := l2sqBytesBound(qw, vb, bd)
 		if d > bd {
 			return
 		}
@@ -178,13 +197,6 @@ func (db *DB) vectorTopK(t *Table, q []float32, pred func([]byte) bool, k int, a
 			}
 		}
 	} else if workers := scanWorkers(n); workers > 1 {
-		// Row bytes may be read concurrently only from the kernel mapping,
-		// so push buffered log bytes out first; View on flushed data is
-		// then read-only.
-		if err := db.log.Flush(); err != nil {
-			panic(err)
-		}
-		db.log.Prepare()
 		parts := make([]*topK, workers)
 		var wg sync.WaitGroup
 		for w := 0; w < workers; w++ {

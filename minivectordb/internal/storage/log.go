@@ -181,6 +181,17 @@ func (l *Log) Prepare() {
 	}
 }
 
+// Map returns the read-only mapping of the flushed part of the log, or nil
+// when the log is not mapped. The slice holds the log bytes from offset
+// zero, so a caller that knows where a record starts can read it without
+// going through View. The slice stays valid until the next write.
+func (l *Log) Map() []byte {
+	if l.m.bad || l.flushed == 0 || int64(len(l.m.data)) < l.flushed {
+		return nil
+	}
+	return l.m.data[:l.flushed]
+}
+
 // Truncate drops everything after n (used to cut an incomplete tail).
 func (l *Log) Truncate(n int64) error {
 	if err := l.Flush(); err != nil {

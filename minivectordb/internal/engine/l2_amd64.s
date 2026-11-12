@@ -18,9 +18,10 @@ TEXT ·xgetbv0(SB), NOSPLIT, $0-4
 	MOVL AX, ret+0(FP)
 	RET
 
-// func l2sqBlocksAVX2(a *float64, b *float32, blocks int) float64
+// func l2sqBlocksAVX2(a *float64, b *byte, blocks int) float64
 //
-// Sum over blocks of 16 elements of (b[i]-a[i])^2 in float64. Element i of
+// Sum over blocks of 16 elements of (b[i]-a[i])^2 in float64, where b points
+// at little-endian float32 values. Element i of
 // a block goes to lane i%4 of accumulator (i/4)%4; the result is
 // ((acc0+acc1)+(acc2+acc3)) reduced as (lane0+lane2)+(lane1+lane3).
 TEXT ·l2sqBlocksAVX2(SB), NOSPLIT, $0-32

@@ -8,20 +8,22 @@ import (
 	"minivectordb/internal/types"
 )
 
-// VecIndex keeps a contiguous in-memory copy of the committed vectors of one
-// table. Exact search scans it linearly; ANN search uses an IVF partition
-// built over the same slots. It is derived state: recovery rebuilds it from
-// the log, so it is never persisted.
+// VecIndex keeps the slot layout of the committed vectors of one table:
+// the primary key and the log offset of every row, plus the derived sets the
+// query path needs. The vectors themselves are not copied: they are read
+// straight from the log, which is mapped read-only, so the peak memory of the
+// process does not hold a second copy of the table. Exact search scans the
+// mapping; ANN search uses an IVF partition over the same slots. It is
+// derived state: recovery rebuilds it from the log, so it is never persisted.
 type VecIndex struct {
 	Name     string
 	Explicit bool // created by CREATE VECTOR INDEX
-	// Disabled is set when the vectors do not fit in the memory budget; the
+	// Disabled is set when the slots do not fit in the memory budget; the
 	// index then holds nothing and queries scan the log instead.
 	Disabled bool
 	dim      int
 	pks      []int64
-	vecs     []float32 // len(pks)*dim
-	off      []int64   // row offset of each slot
+	off      []int64 // row offset of each slot
 	pos      map[int64]int32
 	free     []int32
 	live     int
@@ -38,6 +40,11 @@ type VecIndex struct {
 	eq  map[int]*eqSet
 }
 
+// indexBytesPerRow is the in-memory cost of one indexed row once the vectors
+// are read from the log on demand: the primary key, the row offset and the
+// primary key map entry.
+const indexBytesPerRow = 64
+
 const tombstone int64 = math.MinInt64
 
 func newVecIndex(name string) *VecIndex {
@@ -47,21 +54,32 @@ func newVecIndex(name string) *VecIndex {
 func (x *VecIndex) rebuild(db *DB, t *Table) {
 	x.gen++
 	x.dim = t.Dim
-	x.Disabled = int64(len(t.rows))*int64(t.Dim)*4 > db.opts.IndexMemBytes
+	x.Disabled = int64(len(t.rows))*indexBytesPerRow > db.opts.IndexMemBytes
 	if x.Disabled {
-		x.pks, x.vecs, x.off, x.free, x.pos, x.live = nil, nil, nil, nil, map[int64]int32{}, 0
+		x.pks, x.off, x.free, x.pos, x.live = nil, nil, nil, map[int64]int32{}, 0
 		x.resetIVF()
 		return
 	}
-	x.pks, x.vecs, x.off, x.free = nil, nil, nil, nil
+	x.pks, x.off, x.free = nil, nil, nil
 	x.pos = make(map[int64]int32, len(t.rows))
 	x.live = 0
 	x.resetIVF()
 	x.pks = make([]int64, 0, len(t.rows))
-	x.vecs = make([]float32, 0, len(t.rows)*t.Dim)
 	x.off = make([]int64, 0, len(t.rows))
+	// The slots follow the log order. The scan then walks the log from the
+	// oldest row to the newest and reads the mapped file sequentially; with
+	// an arbitrary order every row would be a separate random access.
+	type rowRef struct {
+		pk  int64
+		off int64
+	}
+	rows := make([]rowRef, 0, len(t.rows))
 	for pk, off := range t.rows {
-		x.upsert(db, t, pk, off)
+		rows = append(rows, rowRef{pk, off})
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].off < rows[j].off })
+	for _, r := range rows {
+		x.upsert(db, t, r.pk, r.off)
 	}
 }
 
@@ -74,13 +92,12 @@ func (x *VecIndex) upsert(db *DB, t *Table, pk, off int64) {
 		return
 	}
 	x.gen++
-	if !x.has(pk) && int64(x.live+1)*int64(x.dim)*4 > db.opts.IndexMemBytes {
+	if !x.has(pk) && int64(x.live+1)*indexBytesPerRow > db.opts.IndexMemBytes {
 		x.Disabled = true
-		x.pks, x.vecs, x.off, x.free, x.pos, x.live = nil, nil, nil, nil, map[int64]int32{}, 0
+		x.pks, x.off, x.free, x.pos, x.live = nil, nil, nil, map[int64]int32{}, 0
 		x.resetIVF()
 		return
 	}
-	b := db.rowBytes(off)
 	s, ok := x.pos[pk]
 	if !ok {
 		if n := len(x.free); n > 0 {
@@ -90,7 +107,6 @@ func (x *VecIndex) upsert(db *DB, t *Table, pk, off int64) {
 			s = int32(len(x.pks))
 			x.pks = append(x.pks, 0)
 			x.off = append(x.off, 0)
-			x.vecs = append(x.vecs, make([]float32, x.dim)...)
 			if x.slotList != nil {
 				x.slotList = append(x.slotList, -1)
 			}
@@ -102,13 +118,23 @@ func (x *VecIndex) upsert(db *DB, t *Table, pk, off int64) {
 	}
 	x.pks[s] = pk
 	x.off[s] = off
-	v := x.vecs[int(s)*x.dim : int(s+1)*x.dim]
-	types.DecodeVecInto(v, b[t.vecOff:])
 	if x.slotList != nil {
-		c := x.nearestCentroid(v)
+		c := x.nearestCentroidBytes(db, t, off)
 		x.lists[c] = append(x.lists[c], s)
 		x.slotList[s] = int32(c)
 	}
+}
+
+// decodeInto reads the vector stored at the given log offset into dst.
+func (x *VecIndex) decodeInto(dst []float32, db *DB, t *Table, off int64) {
+	types.DecodeVecInto(dst, db.rowBytes(off)[t.vecOff:])
+}
+
+// decode returns the vector stored at the given log offset.
+func (x *VecIndex) decode(db *DB, t *Table, off int64) []float32 {
+	v := make([]float32, x.dim)
+	x.decodeInto(v, db, t, off)
+	return v
 }
 
 func (x *VecIndex) has(pk int64) bool { _, ok := x.pos[pk]; return ok }
@@ -161,8 +187,6 @@ func widen(q []float32) []float64 {
 
 // l2sq is the squared Euclidean distance in float64.
 func l2sq(a, b []float32) float64 { return l2sqBound(widen(a), b, math.Inf(1)) }
-
-func (x *VecIndex) vec(s int32) []float32 { return x.vecs[int(s)*x.dim : int(s+1)*x.dim] }
 
 // l2sqBound computes the squared distance between the widened query a and
 // the stored vector b, but stops after a 16-element block once the partial
@@ -234,8 +258,14 @@ func (x *VecIndex) nearestCentroid(v []float32) int {
 	return best
 }
 
+// nearestCentroidBytes returns the index of the centroid closest to the
+// vector stored at the given log offset.
+func (x *VecIndex) nearestCentroidBytes(db *DB, t *Table, off int64) int {
+	return x.nearestCentroid(x.decode(db, t, off))
+}
+
 // trainIVF runs a few k-means iterations on a sample of live vectors.
-func (x *VecIndex) trainIVF() {
+func (x *VecIndex) trainIVF(db *DB, t *Table) {
 	x.resetIVF()
 	if x.live < 2048 {
 		return
@@ -261,15 +291,16 @@ func (x *VecIndex) trainIVF() {
 	d := x.dim
 	cents := make([]float32, nlist*d)
 	for c, j := range rng.Perm(len(sample))[:nlist] {
-		copy(cents[c*d:], x.vec(sample[j]))
+		copy(cents[c*d:], x.decode(db, t, x.off[sample[j]]))
 	}
 	x.cents, x.nlist = cents, nlist
 	assign := make([]int, len(sample))
 	sums := make([]float64, nlist*d)
 	counts := make([]int, nlist)
+	scratch := make([]float32, d)
 	for iter := 0; iter < 8; iter++ {
 		for i, s := range sample {
-			assign[i] = x.nearestCentroid(x.vec(s))
+			assign[i] = x.nearestCentroidBytes(db, t, x.off[s])
 		}
 		for i := range sums {
 			sums[i] = 0
@@ -280,13 +311,14 @@ func (x *VecIndex) trainIVF() {
 		for i, s := range sample {
 			c := assign[i]
 			counts[c]++
-			for k, f := range x.vec(s) {
+			x.decodeInto(scratch, db, t, x.off[s])
+			for k, f := range scratch {
 				sums[c*d+k] += float64(f)
 			}
 		}
 		for c := 0; c < nlist; c++ {
 			if counts[c] == 0 {
-				copy(cents[c*d:], x.vec(sample[rng.Intn(len(sample))]))
+				copy(cents[c*d:], x.decode(db, t, x.off[sample[rng.Intn(len(sample))]]))
 				continue
 			}
 			for k := 0; k < d; k++ {
@@ -300,7 +332,7 @@ func (x *VecIndex) trainIVF() {
 		x.slotList[i] = -1
 	}
 	for _, s := range slots {
-		c := x.nearestCentroid(x.vec(s))
+		c := x.nearestCentroidBytes(db, t, x.off[s])
 		x.lists[c] = append(x.lists[c], s)
 		x.slotList[s] = int32(c)
 	}

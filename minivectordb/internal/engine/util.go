@@ -21,3 +21,24 @@ func l2sqBytes(q []float32, b []byte) float64 {
 	}
 	return l2sq(q, v)
 }
+
+// l2sqBytesBound is l2sqBound against an encoded little-endian float32
+// vector. a is the already widened query. The result is bit-identical to the
+// path that reads a decoded float32 slice, because the kernel converts the
+// stored floats in the same order.
+func l2sqBytesBound(a []float64, b []byte, bound float64) float64 {
+	if useSIMD {
+		return l2sqSIMDBytes(a, b)
+	}
+	var buf [256]float32
+	var v []float32
+	if len(a) <= len(buf) {
+		v = buf[:len(a)]
+	} else {
+		v = make([]float32, len(a))
+	}
+	for i := range v {
+		v[i] = math.Float32frombits(binary.LittleEndian.Uint32(b[4*i:]))
+	}
+	return l2sqBound(a, v, bound)
+}

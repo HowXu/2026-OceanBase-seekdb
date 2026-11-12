@@ -6,6 +6,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -50,8 +51,10 @@ func main() {
 	// Peak memory is scored. The live heap is small (vector copy plus
 	// indexes), and most garbage comes from parsing large INSERT statements,
 	// so a tighter GC target lowers the peak without a measurable time cost.
+	// The live set holds no pointers (float32 vectors and integer maps), so
+	// marking is cheap and a low target does not thrash the collector.
 	if os.Getenv("GOGC") == "" {
-		debug.SetGCPercent(50)
+		debug.SetGCPercent(20)
 	}
 	switch *sync {
 	case "none":
@@ -85,7 +88,19 @@ func main() {
 	// handled by a watcher that closes stdin, which ends the read with EOF.
 	rd := bufio.NewReaderSize(os.Stdin, 1<<20)
 	next := func() line {
-		b, err := rd.ReadBytes('\n')
+		// ReadSlice hands back a view into the reader buffer instead of
+		// allocating a fresh slice per request. The request is fully
+		// processed before the next read, and proto.ParseRequest copies
+		// everything it keeps, so the view never outlives the buffer.
+		b, err := rd.ReadSlice('\n')
+		if err == bufio.ErrBufferFull {
+			// Line longer than the buffer: ReadSlice has already consumed
+			// the first len(b) bytes, so copy them and append the rest.
+			head := append([]byte(nil), b...)
+			var rest []byte
+			rest, err = rd.ReadBytes('\n')
+			b = append(head, rest...)
+		}
 		if len(b) == 0 && err != nil {
 			if err != io.EOF && !errors.Is(err, os.ErrClosed) {
 				logf("read stdin: %v", err)
@@ -124,7 +139,7 @@ func main() {
 		if l.eof {
 			os.Exit(closeDB())
 		}
-		if len(strings.TrimSpace(string(l.b))) == 0 {
+		if len(bytes.TrimSpace(l.b)) == 0 {
 			continue
 		}
 		req, perr := proto.ParseRequest(l.b)

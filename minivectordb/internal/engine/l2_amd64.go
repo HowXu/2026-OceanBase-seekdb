@@ -1,12 +1,22 @@
 package engine
 
-import "os"
+import (
+	"encoding/binary"
+	"math"
+	"os"
+	"unsafe"
+)
 
 func cpuid(eax, ecx uint32) (a, b, c, d uint32)
 func xgetbv0() uint32
 
+// l2sqBlocksAVX2 sums the squared distance over blocks of 16 elements.
+// The second operand points at the stored little-endian float32 values;
+// it is declared as a byte pointer so the kernel can also be fed the
+// encoded vector straight out of the log, without a decode step.
+//
 //go:noescape
-func l2sqBlocksAVX2(a *float64, b *float32, blocks int) float64
+func l2sqBlocksAVX2(a *float64, b *byte, blocks int) float64
 
 // hasAVX2FMA reports whether the CPU and OS support AVX2 and FMA, so the
 // vector kernel can be used. MVDB_NO_SIMD=1 forces the portable kernel.
@@ -39,10 +49,29 @@ func l2sqSIMD(a []float64, b []float32) float64 {
 	blocks := n / 16
 	var s float64
 	if blocks > 0 {
-		s = l2sqBlocksAVX2(&a[0], &b[0], blocks)
+		// The kernel reads the stored float32 values as bytes; the two
+		// views describe the same little-endian words.
+		s = l2sqBlocksAVX2(&a[0], (*byte)(unsafe.Pointer(&b[0])), blocks)
 	}
 	for i := blocks * 16; i < n; i++ {
 		d := a[i] - float64(b[i])
+		s += d * d
+	}
+	return s
+}
+
+// l2sqSIMDBytes is l2sqSIMD against an encoded little-endian float32 vector.
+// The kernel converts the stored floats itself, so the encoded bytes are read
+// straight from the log with no decode step and no copy.
+func l2sqSIMDBytes(a []float64, b []byte) float64 {
+	n := len(a)
+	blocks := n / 16
+	var s float64
+	if blocks > 0 {
+		s = l2sqBlocksAVX2(&a[0], &b[0], blocks)
+	}
+	for i := blocks * 16; i < n; i++ {
+		d := a[i] - float64(math.Float32frombits(binary.LittleEndian.Uint32(b[4*i:])))
 		s += d * d
 	}
 	return s

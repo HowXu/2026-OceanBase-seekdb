@@ -174,16 +174,16 @@ func scanString(src string, i int) (string, int, error) {
 	q := src[i]
 	// Fast path: no escapes or doubled quotes before the closing quote, so
 	// the literal is a substring of src and needs no copy.
-	for j := i + 1; j < len(src); j++ {
-		c := src[j]
-		if c == '\\' {
-			break
-		}
-		if c == q {
-			if j+1 < len(src) && src[j+1] == q {
-				break
-			}
-			return src[i+1 : j], j + 1, nil
+	//
+	// The closing quote is located with strings.IndexByte, which is
+	// vectorised, and the escape check is a second vectorised scan over the
+	// same range. A byte-at-a-time loop costs one cycle per character, which
+	// dominates the insert path: a row carries a whole vector literal.
+	rest := src[i+1:]
+	if j := strings.IndexByte(rest, q); j >= 0 {
+		if strings.IndexByte(rest[:j], '\\') < 0 &&
+			!(j+1 < len(rest) && rest[j+1] == q) {
+			return rest[:j], i + 1 + j + 1, nil
 		}
 	}
 	var sb strings.Builder

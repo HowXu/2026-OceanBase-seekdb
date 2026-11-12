@@ -68,6 +68,17 @@ func TestKernelMatchesReference(t *testing.T) {
 		if l2sqBytes(q, enc) != want {
 			t.Fatalf("slot %d: bytes kernel differs", s)
 		}
+		// The bounded kernel over encoded bytes must be bit-identical to
+		// the bounded kernel over a decoded slice: the TopK ordering key
+		// and the printed distance of one row have to agree exactly.
+		if got := l2sqBytesBound(qw, enc, math.Inf(1)); got != want {
+			t.Fatalf("slot %d: bounded bytes kernel %v != %v", s, got, want)
+		}
+		for _, bd := range []float64{0, want * 0.5, want, want * 2} {
+			if got, exp := l2sqBytesBound(qw, enc, bd), l2sqBound(qw, v, bd); got != exp {
+				t.Fatalf("slot %d: bound %v: bytes %v != slice %v", s, bd, got, exp)
+			}
+		}
 	}
 	for _, d := range []int{0, 1, 3, 4, 7, 15, 16, 17, 31, 33, 100, 300} {
 		a := make([]float32, d)

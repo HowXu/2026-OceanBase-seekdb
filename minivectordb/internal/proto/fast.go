@@ -49,18 +49,19 @@ func parseFast(b []byte) (*Request, bool) {
 	}
 	i++
 	var r Request
-	seen := map[string]bool{}
+	// The only keys the fast path accepts are op, sql, search_mode and id,
+	// so four flags replace a map that had to be allocated per request.
+	var seenOp, seenSQL, seenMode, seenID bool
 	for {
 		ws()
-		if i < n && b[i] == '}' && len(seen) == 0 {
+		if i < n && b[i] == '}' && !seenOp && !seenSQL && !seenMode && !seenID {
 			i++
 			break
 		}
 		k, ok := str()
-		if !ok || seen[k] {
+		if !ok {
 			return nil, false
 		}
-		seen[k] = true
 		ws()
 		if i >= n || b[i] != ':' {
 			return nil, false
@@ -68,20 +69,41 @@ func parseFast(b []byte) (*Request, bool) {
 		i++
 		ws()
 		switch k {
-		case "op", "sql", "search_mode":
+		case "op":
+			if seenOp {
+				return nil, false
+			}
+			seenOp = true
 			v, ok := str()
 			if !ok {
 				return nil, false
 			}
-			switch k {
-			case "op":
-				r.Op = v
-			case "sql":
-				r.SQL = &v
-			default:
-				r.SearchMode = v
+			r.Op = v
+		case "sql":
+			if seenSQL {
+				return nil, false
 			}
+			seenSQL = true
+			v, ok := str()
+			if !ok {
+				return nil, false
+			}
+			r.SQL = &v
+		case "search_mode":
+			if seenMode {
+				return nil, false
+			}
+			seenMode = true
+			v, ok := str()
+			if !ok {
+				return nil, false
+			}
+			r.SearchMode = v
 		case "id":
+			if seenID {
+				return nil, false
+			}
+			seenID = true
 			start := i
 			if i < n && b[i] == '"' {
 				if _, ok := str(); !ok {
