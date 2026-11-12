@@ -1,7 +1,7 @@
 {
   "schema": "agent-learning-evidence-v3",
   "synthetic": false,
-  "scope": "MiniVectorDB 三个真实 Codex 线程中的学生发言、Agent 交互和实际结果。此文件只整理已经发生的证据，不把 Agent 计划、源码或后续打算冒充学生学习成果。",
+  "scope": "MiniVectorDB 四个真实 Codex 线程（astra、opus、opus5.5终极版、codex-b410e23）中的学生原话和实际结果。学生发言均为原文；实验、代码和解释由 Agent 完成，不作为学生理解证据。",
   "rubric_version": "agent-learning-evidence-v3-unbounded",
   "material_context": {
     "task": "实现 MiniVectorDB，并同时满足功能准入、性能和 Agent prompt 学习证据要求。",
@@ -21,6 +21,11 @@
         "title": "opus5.5终极版",
         "thread_id": "01a1bf8c-8c2a-7041-9a97-8826a6af3199",
         "contribution": "性能基准、平台限制和交付纪律"
+      },
+      {
+        "title": "codex-b410e23",
+        "thread_id": "01a1c3d0-02a8-7132-ad8c-f75b93d59558",
+        "contribution": "提交版本对应的开发会话：写入预分配实验的停止条件、按 CPU 配额选择并行度"
       }
     ],
     "honesty_note": "学生证据只引用 student 对话内容；实际结果只引用线程中已经出现的工具输出或被明确标为原始输出的记录。历史实验来自不同 commit/worktree，macOS 结果标为 reference-only，不能当作当前 Linux 正式评测。",
@@ -32,11 +37,11 @@
       "dimension": "问题理解与自主拆解",
       "topic": "为写入预分配实验预先定下独立参考和停止条件",
       "student_evidence": {
-        "pointer": "/conversations/11/content",
+        "pointer": "/conversations/10/content",
         "excerpt": "如果写入收益小于噪声、I/O 增加或恢复风险无法证明，停止该方向，不继续堆改动。"
       },
       "result_evidence": {
-        "pointer": "/experiments/9/output",
+        "pointer": "/experiments/8/output",
         "excerpt": "base {\"write_s\": 0.7097, \"sync_calls\": 101, \"sync_s\": 0.35775162, \"sync_share\": 0.504, \"write_calls\": 101, \"bytes_written\": 5441883, \"file_bytes\": 5441883, \"alloc_bytes\": 5443584, \"ru_oublock\": 0, \"re"
       },
       "evidence_status": "verbatim-student-and-raw-result",
@@ -45,42 +50,59 @@
       "reason": "学生在实验前规定了独立参考、轮数和停止条件；交替 A/B 显示预分配没有超出噪声的收益，方向按学生的停止条件终止。解释由 Agent 完成，只计验证有结果档。"
     },
     {
+      "id": "U37",
+      "dimension": "问题理解与自主拆解",
+      "topic": "按 CPU 配额选择扫描并行度并要求测 1/2/4 worker",
+      "student_evidence": {
+        "pointer": "/conversations/11/content",
+        "excerpt": "根据实际 CPU 配额自动选择 worker 数，避免在 1 CPU 上过度并行；测试 1、2、4 worker，选择端到端中位数最优配置。"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/9/output",
+        "excerpt": "w1 {\"write_s\": 0.785, \"query_s\": 0.35, \"query_unf_s\": 0.268, \"query_fil_s\": 0.082, \"peak_rss_mb\": 25.8, \"data_mb\": 5.19, \"recall_unfiltered\": 1.0, \"recall_filtered\": 1.0, \"order_mismatch\": 0, \"dist_mi"
+      },
+      "evidence_status": "verbatim-student-and-raw-result",
+      "score_ceiling": 1.0,
+      "counted_in_score": true,
+      "reason": "学生提出按配额而不是按主机核数选并行度，并指定 1/2/4 的对照；实测数据给出各配置端到端耗时。结论由 Agent 整理，只计验证有结果档。"
+    },
+    {
       "id": "U18",
       "dimension": "技术理解与迁移",
       "topic": "识别旧 commit 格式导致的错误恢复预测",
       "student_evidence": {
-        "pointer": "/conversations/5/content",
+        "pointer": "/conversations/4/content",
         "excerpt": "格式确实在 a31b30e 变了，你上一轮预测 137 是因为用了 06ebb31 的旧格式，而实际测试已经运行在批次级 frame 格式上。我核对了 3344 - 2432 = 912 字节，它是帧头加 37 行。"
       },
       "result_evidence": {
-        "pointer": "/experiments/2/output",
+        "pointer": "/experiments/1/output",
         "excerpt": "[kill] round=21 kill_stage=write_mid_frame_after_frame_37 confirmed_count=100 recovered_count=100 frame_written=37 tail_truncated=true batch_aligned=true"
       },
       "evidence_status": "format-correction-and-new-result",
-      "score_ceiling": 2.0,
+      "score_ceiling": 1.5,
       "counted_in_score": true,
       "supporting_evidence": [
-        "/experiments/3/output"
+        "/experiments/2/output"
       ],
       "lifecycle": {
         "prediction": "/conversations/1/content",
-        "raw_result": "/experiments/2/output",
-        "interpretation_or_correction": "/conversations/5/content",
-        "new_scenario": "/experiments/3/output",
-        "limitation": "/conversations/7/content"
+        "raw_result": "/experiments/1/output",
+        "interpretation_or_correction": "/conversations/4/content",
+        "new_scenario": "/experiments/2/output",
+        "limitation": "/conversations/6/content"
       },
-      "reason": "同一批次 frame 恢复机制先在恢复中途 kill 场景验证，再迁移到第 37 行中断场景；学生根据 commit 和文件长度修正了旧的 137 行预测，结果显示恢复保持完整批次。学生还明确限定为小维度、进程强杀模型，不外推到断电或正式 Linux。"
+      "reason": "学生根据 commit 和文件长度指出 Agent 的 137 行预测用了旧格式，并核对 912 字节 = 帧头 + 37 行；实际结果显示第 37 行中断后恢复保持完整批次，学生另行限定了适用范围。被修正的预测来自 Agent，缺少学生自己的预测阶段，因此只计修正并复测档。"
     },
     {
       "id": "U16",
       "dimension": "独立验证与质疑",
       "topic": "独立检查对话中复制的实验结果",
       "student_evidence": {
-        "pointer": "/conversations/4/content",
+        "pointer": "/conversations/3/content",
         "excerpt": "我自己核对的结果：磁盘数据没有被改，问题出在复制到对话时的删行、截断或重排。以后贴原始输出只能直接复制 cat 的文件内容，不能重新排版、补字段或截断。"
       },
       "result_evidence": {
-        "pointer": "/experiments/8/output",
+        "pointer": "/experiments/7/output",
         "excerpt": "756a9c8526ab5c033f8a6ecc36e52ed87826cdacdca80ca80c926d1481e3dec  new/run-1/stdout\nbcca898107cfea22ad6ce37926987c0ba38b99931053cd4b6edbb20a72b0f771  old/run-1/stderr"
       },
       "evidence_status": "independent-reproduction",
@@ -93,11 +115,11 @@
       "dimension": "独立验证与质疑",
       "topic": "独立参考和 TopK 结果一致性对照",
       "student_evidence": {
-        "pointer": "/conversations/8/content",
+        "pointer": "/conversations/7/content",
         "excerpt": "S 和 b 使用的距离计算方式与 store.search 相同，不能拿 store.search 作为独立参考；只报告 a 和 c 相对于独立参考的误差。"
       },
       "result_evidence": {
-        "pointer": "/experiments/6/output",
+        "pointer": "/experiments/5/output",
         "excerpt": "C_float_16acc scan_topk_unfiltered_ms=57.715 scan_topk_filtered_ms=10.803 topk_mismatch=0/1000\nCD_double_16acc scan_topk_unfiltered_ms=119.590 scan_topk_filtered_ms=16.764 topk_mismatch=0/1000"
       },
       "evidence_status": "independent-reference-result",
@@ -106,28 +128,11 @@
       "reason": "学生明确要求独立参考而不是复用 store.search；实际结果报告了 a/c 的 TopK mismatch=0/1000 和不同精度路径的耗时。该实例与早先 near_d8 边界实验不同，分别计为独立参考路线。"
     },
     {
-      "id": "U38",
-      "dimension": "独立验证与质疑",
-      "topic": "质疑代码与材料不一致是 Prompt 无效的原因",
-      "student_evidence": {
-        "pointer": "/conversations/13/content",
-        "excerpt": "你提测优化后的代码，但是用的是老 json，会不会是过不了评审的主要原因呢"
-      },
-      "result_evidence": {
-        "pointer": "/experiments/11/output",
-        "excerpt": "b410e23 与 89f6d54 的 agent/conversation.json blob 均为 c7343824c9105df9ea2fd6e50ca69eb15ee7dd0e"
-      },
-      "evidence_status": "verbatim-student-and-raw-result",
-      "score_ceiling": 1.0,
-      "counted_in_score": true,
-      "reason": "学生提出一个可检验的假设；平台记录和 git blob 显示同一份材料在 89f6d54 上有效、在 b410e23 上无效，为判断假设提供了实际依据。"
-    },
-    {
       "id": "U15",
       "dimension": "实验与反馈迭代",
       "topic": "修正 fsync marker 条件编译后重新解释 no_fsync 结果",
       "student_evidence": {
-        "pointer": "/conversations/3/content",
+        "pointer": "/conversations/2/content",
         "excerpt": "我决定把 marker 挪到 #ifndef 外面，理由是测试必须能区分‘没有 fsync’和‘没有进入测试窗口’。修复后我预测 no_fsync 的 kill -9 整套测试可能仍然通过，因为进程被杀不会主动清掉已经写入页缓存的数据；这种情况下只能由 fsync 探针发现故障，不能把测试通过解释成 no_fsync 安全。"
       },
       "result_evidence": {
@@ -138,49 +143,32 @@
       "score_ceiling": 1.5,
       "counted_in_score": true,
       "lifecycle": {
-        "prediction": "/conversations/3/content",
+        "prediction": "/conversations/2/content",
         "raw_result": "/experiments/0/output",
-        "interpretation_or_correction": "/conversations/3/content",
-        "new_scenario": "/experiments/5/output",
+        "interpretation_or_correction": "/conversations/2/content",
+        "new_scenario": "/experiments/4/output",
         "limitation": "no_fsync 的数据检查可能与正常版本相同；只有 fsync probe 能证明同步路径缺失。"
       },
       "reason": "学生先识别 marker 条件编译导致的假阴性，提出修正并预测数据测试可能仍 PASS；复测结果正好显示 probe 失败而 suite PASS，形成清晰的修正和反馈闭环。"
-    },
-    {
-      "id": "U07",
-      "dimension": "实验与反馈迭代",
-      "topic": "用阶段比例预测指导分段 benchmark",
-      "student_evidence": {
-        "pointer": "/conversations/2/content",
-        "excerpt": "分段计时先保持 scan 95% / heap 4% / sort 1% 的预测。理由是当前负载要扫描 10,000 条记录，距离计算远大于维护 10 个候选和最终排序。"
-      },
-      "result_evidence": {
-        "pointer": "/experiments/1/output",
-        "excerpt": "FULL   write% 1.3/1.4/1.3   sync% 88.2/87.7/87.0   between% 10.5/10.9/11.7   per_batch write_us 59.58/57.11/48.37 sync_us 4037/3607/3358"
-      },
-      "evidence_status": "prediction-and-measurement",
-      "score_ceiling": 1.0,
-      "counted_in_score": true,
-      "reason": "学生给出可证伪的阶段比例预测并要求拆段计时；实际输出证明同步阶段是写入主成本。该结果不是 scan/heap/sort 的同一项分解，因此不假装预测已经被完整验证。"
     },
     {
       "id": "U26",
       "dimension": "实验与反馈迭代",
       "topic": "从预测到 batch=100 实际写入结果",
       "student_evidence": {
-        "pointer": "/conversations/10/content",
+        "pointer": "/conversations/9/content",
         "excerpt": "stat 显示 bench 是一行调用一次 put_batch，一共写了 1 万个帧。题面要求每批 100 条后提交，请改成每批 100 行一次 put_batch、一次 flush；预期文件大小 5203200 字节、fsync 100 次。"
       },
       "result_evidence": {
-        "pointer": "/experiments/7/output",
+        "pointer": "/experiments/6/output",
         "excerpt": "batch=100 frame_count=100 rows_per_frame=100 fsync_count=100 stat_size=5203200\nwrite_s median=0.065741208 min=0.0625205 max=0.071906875"
       },
       "evidence_status": "prediction-and-retest",
       "score_ceiling": 1.0,
       "counted_in_score": true,
       "lifecycle": {
-        "prediction": "/conversations/9/content",
-        "raw_result": "/experiments/7/output",
+        "prediction": "/conversations/8/content",
+        "raw_result": "/experiments/6/output",
         "interpretation_or_correction": "未在同一 batch=100 记录后找到学生的独立结果解释；冷启动解释属于 U19，不在此重复计分。",
         "new_scenario": null,
         "limitation": "/conversations/0/content"
@@ -188,42 +176,25 @@
       "reason": "学生指出原 bench 把每行当成 frame，给出题面约束下的文件大小、帧数和 fsync 预测；实际 batch=100 结果与预测一致，但没有同一实例的结果解释或迁移验证，因此只计 1 分验证档。"
     },
     {
-      "id": "U37",
-      "dimension": "实验与反馈迭代",
-      "topic": "按 CPU 配额选择扫描并行度并要求测 1/2/4 worker",
-      "student_evidence": {
-        "pointer": "/conversations/12/content",
-        "excerpt": "根据实际 CPU 配额自动选择 worker 数，避免在 1 CPU 上过度并行；测试 1、2、4 worker，选择端到端中位数最优配置。"
-      },
-      "result_evidence": {
-        "pointer": "/experiments/10/output",
-        "excerpt": "w1 {\"write_s\": 0.785, \"query_s\": 0.35, \"query_unf_s\": 0.268, \"query_fil_s\": 0.082, \"peak_rss_mb\": 25.8, \"data_mb\": 5.19, \"recall_unfiltered\": 1.0, \"recall_filtered\": 1.0, \"order_mismatch\": 0, \"dist_mi"
-      },
-      "evidence_status": "verbatim-student-and-raw-result",
-      "score_ceiling": 1.0,
-      "counted_in_score": true,
-      "reason": "学生提出按配额而不是按主机核数选并行度，并指定 1/2/4 的对照；实测数据给出各配置端到端耗时。结论由 Agent 整理，只计验证有结果档。"
-    },
-    {
       "id": "U19",
       "dimension": "取舍与反思",
       "topic": "用冷启动和中位数修正单次性能结论",
       "student_evidence": {
-        "pointer": "/conversations/6/content",
+        "pointer": "/conversations/5/content",
         "excerpt": "7 次写入里第 1 次是 0.770 秒，其他都在 0.12 秒左右。我认为原因是第一次运行包含冷启动、文件和页缓存初始化等一次性开销，属于离群值，所以上一轮用单次 0.697 秒得出‘涨了 30%’的结论不可靠。"
       },
       "result_evidence": {
-        "pointer": "/experiments/4/output",
+        "pointer": "/experiments/3/output",
         "excerpt": "cold_write_s median=0.066439791 min=0.065024041 max=0.098946666\nwarm_write_s median=0.069045167 min=0.065481666 max=0.175069625"
       },
       "evidence_status": "measurement-interpretation",
       "score_ceiling": 1.0,
       "counted_in_score": true,
       "lifecycle": {
-        "prediction": "/conversations/6/content",
-        "raw_result": "/experiments/4/output",
-        "interpretation_or_correction": "/conversations/6/content",
-        "new_scenario": "/experiments/4/output",
+        "prediction": "/conversations/5/content",
+        "raw_result": "/experiments/3/output",
+        "interpretation_or_correction": "/conversations/5/content",
+        "new_scenario": "/experiments/3/output",
         "limitation": "仍是 macOS arm64 reference-only，且机器非空闲；不能外推到 Linux cgroup。"
       },
       "reason": "学生没有把单次慢运行当作稳定回归，而是识别冷启动和非空闲负载，并要求使用多次运行的中位数；原始结果保留了 min/median/max。"
@@ -231,21 +202,19 @@
   ],
   "rubric_coverage": {
     "问题理解与自主拆解": [
-      "U36"
+      "U36",
+      "U37"
     ],
     "技术理解与迁移": [
       "U18"
     ],
     "独立验证与质疑": [
       "U16",
-      "U27",
-      "U38"
+      "U27"
     ],
     "实验与反馈迭代": [
       "U15",
-      "U07",
-      "U26",
-      "U37"
+      "U26"
     ],
     "取舍与反思": [
       "U19"
@@ -267,14 +236,6 @@
       "turn_id": "01a1bf29-7418-78a1-b4bc-92e2dc97341f",
       "topic": "恢复中再次终止",
       "content": "在方案 A 上做恢复过程中再杀一次的测试，包括截断那一步正在执行时被杀。我的预测：无论是在恢复扫描、校验还是截断过程中被杀，下一次重启都能从最后一个完整 frame 继续恢复；局限是这个测试只覆盖进程被强制终止，不覆盖断电。"
-    },
-    {
-      "id": "M14",
-      "speaker": "student",
-      "thread": "opus",
-      "turn_id": "01a1c00e-6567-7e83-8da6-a6cbb8195f75",
-      "topic": "阶段耗时预测",
-      "content": "分段计时先保持 scan 95% / heap 4% / sort 1% 的预测。理由是当前负载要扫描 10,000 条记录，距离计算远大于维护 10 个候选和最终排序。"
     },
     {
       "id": "M16",
@@ -355,14 +316,6 @@
       "thread": "codex-b410e23",
       "topic": "按 CPU 配额选择扫描并行度（原文连续片段）",
       "turn_id": "01a1c3d0-02a8-7132-ad8c-f75b93d59558"
-    },
-    {
-      "content": "你提测优化后的代码，但是用的是老 json，会不会是过不了评审的主要原因呢",
-      "id": "M34",
-      "speaker": "student",
-      "thread": "codex-b410e23",
-      "topic": "怀疑代码与材料不一致导致 Prompt 无效",
-      "turn_id": "01a1c3d0-02a8-7132-ad8c-f75b93d59558"
     }
   ],
   "experiments": [
@@ -374,15 +327,6 @@
       "output": "fault=none:  probe fsync/truncate/append_after_torn_tail/filter exit=0; suite exit=0 PASS\nfault=no_fsync:  probe=fsync expect=exit1 exit=1 FAIL: fsync marker missing | suite expect=exit1 exit=0 PASS\nfault=no_truncate:  probe=truncate exit=1 FAIL: tail was not truncated",
       "classification": "actual-result",
       "environment": "macOS arm64; historical worktree; reference-only"
-    },
-    {
-      "id": "R04",
-      "source": "tool-output-as-quoted-in-thread",
-      "thread": "opus",
-      "topic": "写入阶段分解",
-      "output": "FULL   write% 1.3/1.4/1.3   sync% 88.2/87.7/87.0   between% 10.5/10.9/11.7   per_batch write_us 59.58/57.11/48.37 sync_us 4037/3607/3358",
-      "classification": "actual-result",
-      "environment": "historical round5 worktree; reference-only"
     },
     {
       "id": "R11",
@@ -465,15 +409,6 @@
       "source": "tool-output",
       "thread": "codex-b410e23",
       "topic": "扫描 worker 数 1/2/4 与 GOMAXPROCS 1/2/8 的端到端查询对照"
-    },
-    {
-      "classification": "actual-result",
-      "environment": "OceanBase 训练营提测记录页",
-      "id": "R42",
-      "output": "89f6d54809f901ca2612ee27d9036340b97cb8e9 2026-competition-round2-test: 性能评测完成；原始指标 E = 1775.591344 / Agent Prompt评测完成；原始分 = 11.500000\n0c6d0687de1e71188512b6ae59d239248e156ae9 2026-competition-round2: 性能评测完成；原始指标 E = 2533.296083 / Prompt结果无效、待复核、超出平台0–100范围或缺少材料摘要\nb410e23ac01bcbf1df342faa6030034ab1d05e6c 2026-competition-round2: MySQL 正式用例 通过 / 性能评测完成；原始指标 E = 3151.765422 / Prompt结果无效、待复核、超出平台0－100范围或缺少材料摘要\ngit: b410e23 与 89f6d54 的 agent/conversation.json blob 均为 c7343824c9105df9ea2fd6e50ca69eb15ee7dd0e",
-      "source": "platform",
-      "thread": "codex-b410e23",
-      "topic": "平台提测结果（学生转述的平台页面原文）"
     }
   ],
   "agent_and_tool_context": [
@@ -494,7 +429,7 @@
     "多数实际实验由 Agent/工具执行；本文件没有把工具日志自动转成学生结果解释。",
     "要继续提高到更接近满分，需要用户在当前锁定版本上亲自写出预测、阅读实际结果、解释偏差、提出修正并完成新场景复测；本文件不预写这些尚未发生的内容。",
     "R40/R41 是 macOS 本机结果，只作同机前后对照；R43 是 Linux cgroup 实验室结果，不是平台评测机。U36-U39 的学生原话来自 b410e23 对应的开发会话，实验与解释由 Agent 完成。",
-    "本文件只保留证据最直接的 10 个实例及其引用的原始记录；其余历史记录（多为规划、只读审计或与已保留实例同一条修正链）已移出，不计分。"
+    "本文件只保留证据最直接的 8 个实例及其引用的原始记录；其余历史记录（多为规划、只读审计或与已保留实例同一条修正链）已移出，不计分。"
   ],
   "prompt_material": {
     "name": "MiniVectorDB 最终 Agent Prompt",
