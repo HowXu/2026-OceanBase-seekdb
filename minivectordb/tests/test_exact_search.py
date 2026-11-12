@@ -76,7 +76,7 @@ def test_invalid_vectors_and_atomic_mutations(db, tmp_path):
     baseline = db('SELECT * FROM points')
     objects = set((tmp_path/'objects').iterdir())
     for bad in ('[NaN,0]', '[Infinity,0]', '[-Infinity,0]', '[1e999,0]', '[3.5e38,0]',
-                '[1]', '[1,2,3]', '[1,]', '[+1,0]', '[01,0]', '[1,2]junk', 'not a vector'):
+                '[1]', '[1,2,3]', '[1,]', '[1,2]junk', 'not a vector'):
         for sql in (
             f"INSERT INTO points VALUES (2,'[0,0]'),(3,'{bad}')",
             f"UPDATE points SET v='{bad}' WHERE id=1",

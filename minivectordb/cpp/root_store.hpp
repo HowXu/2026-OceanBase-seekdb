@@ -1,6 +1,7 @@
 #pragma once
 #include "catalog.hpp"
 #include <filesystem>
+#include <set>
 #include <vector>
 #ifdef MINIVECTORDB_TESTING
 #include <functional>
@@ -40,6 +41,7 @@ public:
 private:
   std::filesystem::path data_dir_;
   bool poisoned_ = false;
+  std::set<std::string> committed_objects_;
   std::string current_reference() const;
   void checkpoint(const std::string& name) const;
 #ifdef MINIVECTORDB_TESTING

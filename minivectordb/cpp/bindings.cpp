@@ -69,6 +69,10 @@ Expression expression(py::handle value) {
   auto kind = text(d["kind"]);
   if (kind == "column") { object(d, {"kind", "name"}); return ColumnRef{name(d["name"])}; }
   if (kind == "star") { object(d, {"kind"}); return Star{}; }
+  if (kind == "ordinal") {
+    object(d, {"kind", "position"});
+    return OrderPosition{unsigned_integer(d["position"])};
+  }
   if (kind == "integer" || kind == "string") return literal(d);
   if (kind == "l2_distance") {
     object(d, {"kind", "column", "vector"});
@@ -143,10 +147,18 @@ Statement bind_statement(py::handle value) {
     object(d, {"op", "table", "projections"}, {"where", "order_by", "limit"});
     Select result{name(d["table"]), {}, conditions(d), {}, std::nullopt};
     for (auto value : array(d["projections"])) {
-      auto item = object(value, {"expression"}, {"alias"});
+      auto item = object(value, {"expression"}, {"alias", "display_text"});
       std::optional<std::string> alias;
+      std::optional<std::string> display;
       if (item.contains("alias")) alias = name(item["alias"]);
-      result.projections.push_back({expression(item["expression"]), alias});
+      if (item.contains("display_text")) {
+        if (alias) invalid("aliased projection cannot have display_text");
+        display = text(item["display_text"]);
+        if (display->empty() || display->find('\0') != std::string::npos)
+          invalid("invalid projection display text");
+        utf8_codepoints(*display);
+      }
+      result.projections.push_back({expression(item["expression"]), alias, display});
     }
     if (d.contains("order_by")) for (auto value : array(d["order_by"])) {
       auto item = object(value, {"expression"}, {"descending"});

@@ -42,16 +42,16 @@ void recovery_reclamation_test(bool fail_sync) {
     rejects([&] { reopened.recover(); });
     check(!synced && !removed);
     check(std::filesystem::exists(d.path / previous_catalog));
-    check(std::filesystem::exists(store.object_path(previous.find("docs").object)));
-    check(std::filesystem::exists(store.object_path(replacement.find("docs").object)));
+    check(std::filesystem::exists(store.object_path(previous.find("docs").objects.at(0))));
+    check(std::filesystem::exists(store.object_path(replacement.find("docs").objects.at(0))));
     // A later successful startup can finish recovery and safely reclaim A.
     reopened.set_test_hook({});
   }
-  check(reopened.recover().find("docs").object == replacement.find("docs").object);
+  check(reopened.recover().find("docs").objects.at(0) == replacement.find("docs").objects.at(0));
   if (!fail_sync) check(synced && removed);
   check(!std::filesystem::exists(d.path / previous_catalog));
-  check(!std::filesystem::exists(store.object_path(previous.find("docs").object)));
-  check(std::filesystem::exists(store.object_path(replacement.find("docs").object)));
+  check(!std::filesystem::exists(store.object_path(previous.find("docs").objects.at(0))));
+  check(std::filesystem::exists(store.object_path(replacement.find("docs").objects.at(0))));
 }
 void publication_tests() {
   TestDir d;
@@ -87,9 +87,10 @@ void publication_tests() {
   check(!std::filesystem::exists(d.path / unused_catalog));
   for (const auto* root : {&committed, &transaction, &candidate})
     for (const auto& [name, entry] : root->tables())
-      check(std::filesystem::exists(store.object_path(entry.object)));
+      for (const auto& object : entry.objects)
+        check(std::filesystem::exists(store.object_path(object)));
   store.collect_garbage();
-  check(!std::filesystem::exists(store.object_path(transaction.find("docs").object)));
+  check(!std::filesystem::exists(store.object_path(transaction.find("docs").objects.at(0))));
   check(std::distance(std::filesystem::directory_iterator(d.path/"objects"),
                       std::filesystem::directory_iterator{}) == 2);
   Catalog replacement = committed;
@@ -101,7 +102,7 @@ void publication_tests() {
       if (event == stage) throw DbError("storage_error", "injected");
     });
     rejects([&] { store.publish(replacement); });
-    check(store.load_root().find("docs").object == committed.find("docs").object);
+    check(store.load_root().find("docs").objects.at(0) == committed.find("docs").objects.at(0));
   }
   // A real failed rename, not a thrown checkpoint exception, poisons the
   // publishing instance and forbids both another publish and reclamation.
@@ -121,7 +122,7 @@ void publication_tests() {
     rejects([&] { failing.collect_garbage(); });
     std::filesystem::remove(d.path / "CURRENT");
     std::filesystem::rename(d.path / "saved-current", d.path / "CURRENT");
-    check(RootStore(d.path).load_root().find("docs").object == committed.find("docs").object);
+    check(RootStore(d.path).load_root().find("docs").objects.at(0) == committed.find("docs").objects.at(0));
   }
   // Once CURRENT may have changed, continuing to serve any root is forbidden.
   store.set_test_hook([](const std::string& event) {
@@ -134,11 +135,11 @@ void publication_tests() {
   rejects([&] { store.publish(committed); });
   RootStore reopened(d.path);
   check(reopened.load_root().tables().size() == 2);
-  check(reopened.load_root().find("docs").object == replacement.find("docs").object);
-  check(reopened.load_root().find("second").object == committed.find("second").object);
+  check(reopened.load_root().find("docs").objects.at(0) == replacement.find("docs").objects.at(0));
+  check(reopened.load_root().find("second").objects.at(0) == committed.find("second").objects.at(0));
   // Recovery validates all references before any orphan is reclaimed.
   auto evidence = reopened.create_object();
-  std::filesystem::remove(reopened.object_path(replacement.find("docs").object));
+  std::filesystem::remove(reopened.object_path(replacement.find("docs").objects.at(0)));
   rejects([&] { reopened.recover(); });
   check(std::filesystem::exists(reopened.object_path(evidence)));
 }
@@ -172,7 +173,7 @@ int main(int argc, char** argv) {
   }
   Catalog c;
   c.add(s, ref);
-  check(c.find("docs").object == ref);
+  check(c.find("docs").objects == std::vector<std::string>{ref});
   rejects([&] { c.add(s, other); });
   auto root = store.write_catalog(c);
   auto loaded = store.read_catalog(root);
@@ -181,7 +182,7 @@ int main(int argc, char** argv) {
     std::ofstream f(d.path / "CURRENT");
     f << root << '\n';
   }
-  check(store.load_root().find("docs").object == ref);
+  check(store.load_root().find("docs").objects == std::vector<std::string>{ref});
   for (auto name : {"../escape", "/tmp/escape", "objects/../x",
                     "objects/sub/x.tbl", "objects/x.tbl/", "objects/x.bin"})
     rejects([&] { store.object_path(name); });
@@ -189,7 +190,7 @@ int main(int argc, char** argv) {
   sql.name = "../../sql-name";
   Catalog sqlcat;
   sqlcat.add(sql, other);
-  check(sqlcat.find(sql.name).object == other);
+  check(sqlcat.find(sql.name).objects == std::vector<std::string>{other});
   std::filesystem::create_symlink(d.path / "CURRENT",
                                   d.path / "objects" / "link.tbl");
   rejects([&] { store.object_path("objects/link.tbl"); });

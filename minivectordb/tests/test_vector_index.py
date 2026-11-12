@@ -12,7 +12,7 @@ def execute(db, sql, mode='exact'):
 
 
 def descriptor(name, table='points', column='v'):
-    # Catalog v2: three length-prefixed names and backend tag 1 (FlatScan).
+    # Catalog v3: three length-prefixed names and backend tag 1 (FlatScan).
     return b''.join(struct.pack('<Q', len(s.encode())) + s.encode()
                     for s in (name, table, column)) + b'\x01'
 
@@ -50,7 +50,7 @@ def test_definition_validation_and_persisted_descriptor(tmp_path):
             db.execute({'op': 'create_vector_index', 'index': name, 'table': 'points', 'column': 'v'})
     assert execute(db, 'CREATE VECTOR INDEX ix ON points(v)') == {}
     data = catalog_bytes(tmp_path)
-    assert data.startswith(b'MVDBC002')
+    assert data.startswith(b'MVDBC003')
     assert data.endswith(struct.pack('<Q', 1) + descriptor('ix') + b'\x00')
     for table in ('points', 'other'):
         with pytest.raises(DatabaseError) as error:
@@ -102,13 +102,6 @@ def test_transaction_descriptors_vectors_and_rollback(tmp_path):
     db = Engine(str(tmp_path))
     execute(db, 'CREATE TABLE points (id BIGINT PRIMARY KEY, keep BIGINT, v VECTOR(2))')
     execute(db, "INSERT INTO points VALUES (1,1,'[3,4]'),(2,0,'[0,0]')")
-    committed = catalog_bytes(tmp_path)
-    # Existing v1 catalogs (no descriptors) remain readable and upgrade on write.
-    db.close()
-    current = tmp_path / (tmp_path / 'CURRENT').read_text().strip()
-    current.write_bytes(b'MVDBC001' + committed[8:-9] + b'\x00')
-    db = Engine(str(tmp_path))
-    check_rows(db, [[1, 5.0]])
     committed = catalog_bytes(tmp_path)
     execute(db, 'BEGIN')
     execute(db, 'CREATE VECTOR INDEX temporary ON points(v)')

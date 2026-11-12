@@ -35,6 +35,72 @@ def test_crud_projection_and_affected_rows(db):
     assert db('SELECT s FROM notes WHERE id=99') == {'columns': ['s'], 'rows': []}
 
 
+@pytest.mark.parametrize('suffix,expected', [
+    ('1,id', [[10,2],[20,1],[20,3]]),
+    ('1 DESC,id', [[20,1],[20,3],[10,2]]),
+    ('2 DESC', [[20,3],[10,2],[20,1]]),
+])
+def test_order_by_projection_ordinal(db, suffix, expected):
+    db('CREATE TABLE ord (id BIGINT PRIMARY KEY,n BIGINT)')
+    db('INSERT INTO ord VALUES (1,20),(2,10),(3,20)')
+    assert db(f'SELECT n,id FROM ord ORDER BY {suffix}')['rows'] == expected
+
+
+@pytest.mark.parametrize('position', ['0','2','18446744073709551616'])
+@pytest.mark.parametrize('suffix', ['', ' LIMIT 0'])
+def test_invalid_order_ordinal_is_rejected_before_scan(db, position, suffix):
+    db('CREATE TABLE ord (id BIGINT PRIMARY KEY)')
+    fails(db, f'SELECT id FROM ord ORDER BY {position}{suffix}', 'type_error')
+
+
+def test_parentheses_and_unaliased_expression_display_text(db):
+    db('CREATE TABLE disp (id BIGINT PRIMARY KEY,v VECTOR(2))')
+    db("INSERT INTO disp VALUES (1,'[3,4]')")
+    assert db("SELECT l2_distance(v,'[0,0]'), (id) FROM disp") == {
+        'columns': ["l2_distance(v,'[0,0]')", '(id)'],
+        'rows': [[5.0,1]],
+    }
+
+
+def test_ascii_case_insensitive_names_preserve_display_spelling(db):
+    db('CREATE TABLE Docs (ID BIGINT PRIMARY KEY,N BIGINT,V VECTOR(2))')
+    db("INSERT INTO docs (id,n,v) VALUES (2,10,'[0,2]'),(1,20,'[3,4]')")
+    db("UPDATE DOCS SET n=11 WHERE Id=2")
+    assert db('SELECT docs.ID AS Out,n AS Score FROM DOCS ORDER BY SCORE DESC,out') == {
+        'columns':['Out','Score'], 'rows':[[1,20],[2,11]]}
+    db('CREATE VECTOR INDEX IX ON docs(v)')
+    fails(db, 'CREATE VECTOR INDEX ix ON DOCS(V)', 'index_exists')
+    fails(db, 'DELETE FROM Docs WHERE MISSING=1', 'unknown_column')
+
+
+def test_table_primary_key_and_case_duplicate_names(db):
+    db('CREATE TABLE tablepk (id BIGINT,n BIGINT,PRIMARY KEY(ID))')
+    db('INSERT INTO TABLEPK VALUES (1,7)')
+    assert db('SELECT * FROM tablepk') == {'columns':['id','n'],'rows':[[1,7]]}
+    fails(db, 'CREATE TABLE dup (id BIGINT PRIMARY KEY,ID BIGINT)', 'type_error')
+    fails(db, 'CREATE TABLE dup (id BIGINT PRIMARY KEY,n BIGINT,PRIMARY KEY(id))', 'type_error')
+    fails(db, 'CREATE TABLE dup (id BIGINT,n VARCHAR(4),PRIMARY KEY(n))', 'type_error')
+
+
+def test_wrong_qualifier_is_not_silently_ignored(db):
+    db('CREATE TABLE t (id BIGINT PRIMARY KEY)')
+    fails(db, 'SELECT wrong.id FROM t', 'unknown_column')
+    fails(db, 'SELECT a.id FROM t AS b', 'unknown_column')
+
+
+def test_vector_decimal_spelling_and_underflow_across_paths(db):
+    db('CREATE TABLE vec (id BIGINT PRIMARY KEY,v VECTOR(2))')
+    db("INSERT INTO vec VALUES (1,'[+1,01]'),(2,'[1e-46,-1e-50]')")
+    assert db('SELECT id,v FROM vec ORDER BY id')['rows'] == [
+        [1,[1.0,1.0]], [2,[0.0,-0.0]]]
+    assert db("UPDATE vec SET v='[.5,1.]' WHERE id=1") == {'affected_rows':1}
+    assert db('SELECT v FROM vec WHERE id=1')['rows'] == [[[0.5,1.0]]]
+    assert db("SELECT id,L2_DISTANCE(v,'[1e-999,0]') AS d FROM vec WHERE id=2") == {
+        'columns':['id','d'], 'rows':[[2,0.0]]}
+    fails(db, "UPDATE vec SET v='[1e39,0]' WHERE id=1", 'type_error')
+    assert db('SELECT v FROM vec WHERE id=1')['rows'] == [[[0.5,1.0]]]
+
+
 def test_comparisons_and_stable_sort_limit(db, tmp_path):
     db('CREATE TABLE ranks (id BIGINT PRIMARY KEY, n BIGINT, s VARCHAR(8))')
     db("INSERT INTO ranks VALUES (4,2,'z'),(2,1,'é'),(3,2,'a'),(1,1,'中')")

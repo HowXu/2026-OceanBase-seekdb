@@ -3,6 +3,7 @@
 #include <cmath>
 #include "storage_codec.hpp"
 #include "table_file.hpp"
+#include "table_segments.hpp"
 #include <algorithm>
 #include <array>
 #include <functional>
@@ -17,11 +18,16 @@ namespace {
 }
 std::size_t column_index(const TableSchema& schema, const std::string& name) {
   for (std::size_t i = 0; i < schema.columns.size(); ++i)
-    if (schema.columns[i].name == name) return i;
+    if (same_name(schema.columns[i].name, name)) return i;
   semantic("unknown_column", "column does not exist");
 }
 std::int64_t key(const Row& row, const TableSchema& schema) {
   return std::get<std::int64_t>(row[schema.primary_key_index]);
+}
+std::vector<std::filesystem::path> table_paths(const TableEntry& entry, RootStore& store) {
+  std::vector<std::filesystem::path> paths;
+  for (const auto& object : entry.objects) paths.push_back(store.object_path(object));
+  return paths;
 }
 struct BoundExpression {
   std::optional<std::size_t> column;
@@ -267,6 +273,7 @@ ResultSet select_rows(const Select& statement, const TableEntry& entry, RootStor
     } else {
       projection.push_back(bind_expression(p.expression, schema));
       if (p.alias) result.columns.push_back(*p.alias);
+      else if (p.display_text) result.columns.push_back(*p.display_text);
       else if (auto c = std::get_if<ColumnRef>(&p.expression)) result.columns.push_back(c->name);
       else if (auto distance = std::get_if<L2Distance>(&p.expression))
         result.columns.push_back("L2_DISTANCE(" + distance->column + ", '" + distance->vector + "')");
@@ -283,9 +290,13 @@ ResultSet select_rows(const Select& statement, const TableEntry& entry, RootStor
   std::vector<SortItem> order;
   for (const auto& item : statement.order_by) {
     std::optional<BoundExpression> bound;
-    if (auto c = std::get_if<ColumnRef>(&item.expression)) {
+    if (auto position = std::get_if<OrderPosition>(&item.expression)) {
+      if (position->position == 0 || position->position > projection.size())
+        semantic("type_error", "ORDER BY position is outside the projection");
+      bound = projection.at(position->position - 1);
+    } else if (auto c = std::get_if<ColumnRef>(&item.expression)) {
       for (std::size_t i = 0; i < result.columns.size(); ++i)
-        if (result.columns[i] == c->name) {
+        if (same_name(result.columns[i], c->name)) {
           if (bound && *bound != projection[i]) semantic("ambiguous_column", "ambiguous ordering alias");
           bound = projection[i];
         }
@@ -302,7 +313,7 @@ ResultSet select_rows(const Select& statement, const TableEntry& entry, RootStor
       std::visit([&](const auto& value) { output.emplace_back(value); }, p.evaluate(row));
     result.rows.push_back(std::move(output));
   };
-  TableFileReader reader(store.object_path(entry.object), schema);
+  LogicalTableReader reader(table_paths(entry, store), schema);
   Row row;
   RowLess less{&order, &schema};
   if (order.empty()) {
@@ -329,7 +340,8 @@ ResultSet select_rows(const Select& statement, const TableEntry& entry, RootStor
 }
 
 QueryResult create_table(const CreateTable& statement, Catalog& candidate, RootStore& store) {
-  if (candidate.tables().contains(statement.table)) semantic("table_exists", "table already exists");
+  for (const auto& [name, entry] : candidate.tables())
+    if (same_name(name, statement.table)) semantic("table_exists", "table already exists");
   TableSchema schema{statement.table, statement.columns};
   validate_schema(schema);
   OwnedObjects owned(store);
@@ -339,6 +351,46 @@ QueryResult create_table(const CreateTable& statement, Catalog& candidate, RootS
   candidate.add(schema, ref);
   owned.release(ref);
   return EmptyResult{};
+}
+void append_delta_or_compact(const std::string& table,
+                             const std::vector<DeltaRecord>& changes,
+                             Catalog& candidate, RootStore& store) {
+  if (changes.empty()) return;
+  const auto entry = candidate.find(table);
+  const auto& schema = entry.schema;
+  OwnedObjects owned(store);
+  auto ref = owned.create();
+  if (entry.objects.size() <= 64) {
+    DeltaFileWriter writer(store.object_path(ref), schema);
+    for (const auto& change : changes) writer.append(change);
+    writer.finish();
+    auto objects = entry.objects;
+    objects.push_back(ref);
+    candidate.replace_objects(table, std::move(objects));
+  } else {
+    // One base plus 64 deltas is the read fan-out limit. The next actual
+    // modification folds the logical table and this statement into a new base.
+    TableFileWriter writer(store.object_path(ref), schema);
+    LogicalTableReader reader(table_paths(entry, store), schema);
+    Row row;
+    std::size_t i = 0;
+    auto emit = [&](const DeltaRecord& change) {
+      if (!change.deleted) writer.append(change.row);
+    };
+    while (reader.next(row)) {
+      auto current_key = key(row, schema);
+      while (i < changes.size() && changes[i].key < current_key) emit(changes[i++]);
+      if (i < changes.size() && changes[i].key == current_key) {
+        emit(changes[i++]);
+        continue;
+      }
+      writer.append(row);
+    }
+    while (i < changes.size()) emit(changes[i++]);
+    writer.finish();
+    candidate.replace_object(table, ref);
+  }
+  owned.release(ref);
 }
 QueryResult insert_rows(const Insert& statement, Catalog& candidate, RootStore& store) {
   const auto entry = candidate.find(statement.table);
@@ -366,22 +418,19 @@ QueryResult insert_rows(const Insert& statement, Catalog& candidate, RootStore& 
   for (std::size_t i = 1; i < additions.size(); ++i)
     if (key(additions[i-1],schema) == key(additions[i],schema))
       semantic("duplicate_key", "duplicate primary key in insert request");
-  OwnedObjects owned(store);
-  auto ref = owned.create();
-  TableFileWriter writer(store.object_path(ref), schema);
-  TableFileReader reader(store.object_path(entry.object), schema);
+  LogicalTableReader reader(table_paths(entry, store), schema);
   Row row;
   std::size_t i = 0;
   while (reader.next(row)) {
-    while (i < additions.size() && less(additions[i], row)) writer.append(additions[i++]);
+    while (i < additions.size() && less(additions[i], row)) ++i;
     if (i < additions.size() && key(additions[i],schema) == key(row,schema))
       semantic("duplicate_key", "duplicate primary key");
-    writer.append(row);
   }
-  while (i < additions.size()) writer.append(additions[i++]);
-  writer.finish();
-  candidate.replace_object(statement.table, ref);
-  owned.release(ref);
+  std::vector<DeltaRecord> changes;
+  changes.reserve(additions.size());
+  for (const auto& addition : additions)
+    changes.push_back({key(addition, schema), false, addition});
+  append_delta_or_compact(statement.table, changes, candidate, store);
   return AffectedRows{static_cast<std::uint64_t>(additions.size())};
 }
 template<class Mutation>
@@ -400,23 +449,22 @@ QueryResult rewrite_rows(const Mutation& statement, Catalog& candidate, RootStor
       assignments.emplace_back(i, bind_literal(assignment.value, schema.columns[i]));
     }
   }
-  OwnedObjects owned(store);
-  auto ref = owned.create();
-  TableFileWriter writer(store.object_path(ref), schema);
-  TableFileReader reader(store.object_path(entry.object), schema);
+  LogicalTableReader reader(table_paths(entry, store), schema);
   Row row;
   std::uint64_t count = 0;
+  std::vector<DeltaRecord> changes;
   while (reader.next(row)) {
-    if (matches(row, where)) {
-      ++count;
-      if constexpr (std::is_same_v<Mutation,Delete>) continue;
-      else for (const auto& [i,value] : assignments) row[i] = value;
+    if (!matches(row, where)) continue;
+    ++count;
+    auto current_key = key(row, schema);
+    if constexpr (std::is_same_v<Mutation,Delete>) {
+      changes.push_back({current_key, true, {}});
+    } else {
+      for (const auto& [i,value] : assignments) row[i] = value;
+      changes.push_back({current_key, false, std::move(row)});
     }
-    writer.append(row);
   }
-  writer.finish();
-  candidate.replace_object(statement.table, ref);
-  owned.release(ref);
+  append_delta_or_compact(statement.table, changes, candidate, store);
   return AffectedRows{count};
 }
 }  // namespace

@@ -66,7 +66,8 @@ def test_rollback_scalar_vector_and_transaction_boundaries(tmp_path):
         sql(engine, 'SELECT * FROM transient')
     assert caught.value.code == 'unknown_table'
     assert (tmp_path/'CURRENT').read_bytes() == before
-    assert len(list((tmp_path/'objects').iterdir())) == 1
+    # Base plus committed INSERT delta; the transaction candidate was reclaimed.
+    assert len(list((tmp_path/'objects').iterdir())) == 2
     sql(engine, 'BEGIN')
     sql(engine, 'COMMIT')
     engine.close()
@@ -91,7 +92,8 @@ def test_failed_statements_discard_only_candidate(tmp_path):
     engine.close()
     reopened = Engine(str(tmp_path))
     visible(reopened, 11)
-    assert len(list((tmp_path/'objects').iterdir())) == 1
+    # Base, INSERT delta and committed UPDATE delta remain live.
+    assert len(list((tmp_path/'objects').iterdir())) == 3
     reopened.close()
 
 
@@ -126,7 +128,7 @@ def test_close_shutdown_eof_rollback(tmp_path, ending):
         if ending == 'shutdown':
             assert responses[-1] == {'id': 5, 'ok': True}
     # Cleanup must already have occurred, not merely on the next recovery.
-    assert len(list((tmp_path/'objects').iterdir())) == 1
+    assert len(list((tmp_path/'objects').iterdir())) == 2
     assert len(list((tmp_path/'catalogs').iterdir())) == 1
     assert not list((tmp_path/'staging').iterdir())
     reopened = Engine(str(tmp_path))

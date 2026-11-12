@@ -1,6 +1,6 @@
 #include "root_store.hpp"
 #include "storage_codec.hpp"
-#include "table_file.hpp"
+#include "table_segments.hpp"
 #include <atomic>
 #include <cerrno>
 #include <chrono>
@@ -14,7 +14,7 @@
 
 namespace minivectordb {
 namespace {
-const std::string magic = "MVDBC002";
+const std::string magic = "MVDBC003";
 void ensure_directory(const std::filesystem::path &path) {
   std::error_code ec;
   auto status = std::filesystem::symlink_status(path, ec);
@@ -102,7 +102,8 @@ std::string RootStore::write_catalog(const Catalog &catalog) {
   for (const auto &[name, entry] : catalog.tables()) {
     auto schema = entry.schema;
     validate_schema(schema);
-    object_path(entry.object);
+    if (entry.objects.empty()) storage::fail("table has no objects");
+    for (const auto& object : entry.objects) object_path(object);
   }
   auto ref = reserve("catalogs", ".bin");
   storage::Output out(checked_path(ref, "catalogs", ".bin"));
@@ -110,7 +111,10 @@ std::string RootStore::write_catalog(const Catalog &catalog) {
   out.u64(catalog.tables().size());
   for (const auto &[name, entry] : catalog.tables()) {
     storage::write_schema(out, entry.schema);
-    out.text(entry.object);
+    if (entry.objects.empty()) storage::fail("table has no objects");
+    out.text(entry.objects.front());
+    out.u64(entry.objects.size() - 1);
+    for (std::size_t i = 1; i < entry.objects.size(); ++i) out.text(entry.objects[i]);
   }
   out.u64(catalog.vector_indexes().size());
   for (const auto &[name, index] : catalog.vector_indexes()) {
@@ -127,19 +131,27 @@ Catalog RootStore::read_catalog(const std::string &ref) const {
   storage::Input in(checked_path(ref, "catalogs", ".bin"));
   std::string version(8, '\0');
   in.bytes(version.data(), version.size());
-  if (version != magic && version != "MVDBC001")
-    storage::fail("invalid catalog magic");
+  if (version != magic) storage::fail("invalid catalog magic");
   auto count = in.u64();
   if (count > in.remaining() / 20)
     storage::fail("invalid table count");
   Catalog c;
   for (std::uint64_t i = 0; i < count; ++i) {
     auto schema = storage::read_schema(in);
-    auto object = in.text();
-    object_path(object);
-    c.add(std::move(schema), object);
+    auto base = in.text();
+    object_path(base);
+    auto delta_count = in.u64();
+    if (delta_count > in.remaining() / 8) storage::fail("invalid delta count");
+    std::vector<std::string> objects{base};
+    for (std::uint64_t i = 0; i < delta_count; ++i) {
+      auto delta = in.text();
+      object_path(delta);
+      objects.push_back(std::move(delta));
+    }
+    c.add(schema, base);
+    c.replace_objects(schema.name, std::move(objects));
   }
-  if (version == magic) {
+  {
     auto indexes = in.u64();
     if (indexes > in.remaining() / 25) storage::fail("invalid index count");
     for (std::uint64_t i = 0; i < indexes; ++i) {
@@ -182,10 +194,9 @@ Catalog RootStore::load_root() const {
   if (ref.empty()) return {};
   auto catalog = read_catalog(ref);
   for (const auto &[name, entry] : catalog.tables()) {
-    TableFileReader reader(object_path(entry.object), entry.schema);
-    Row row;
-    while (reader.next(row)) {
-    }
+    std::vector<std::filesystem::path> paths;
+    for (const auto& object : entry.objects) paths.push_back(object_path(object));
+    validate_table_objects(paths, entry.schema);
   }
   return catalog;
 }
@@ -202,6 +213,9 @@ void RootStore::checkpoint(const std::string& name) const {
 }
 Catalog RootStore::recover() {
   auto root = load_root();
+  committed_objects_.clear();
+  for (const auto& [name, entry] : root.tables())
+    for (const auto& object : entry.objects) committed_objects_.insert(object);
   // CURRENT may be visible after an unacknowledged rename. Make that choice
   // durable before reclaiming the previous root's catalog or table objects.
   checkpoint("before_recovery_dir_sync");
@@ -215,11 +229,15 @@ void RootStore::publish(const Catalog& candidate) {
   bool replacing = false;
   try {
     for (const auto& [name, entry] : candidate.tables()) {
-      // Validate by streaming; do not publish missing, unfinished or corrupt files.
-      TableFileReader reader(object_path(entry.object), entry.schema);
-      Row row;
-      while (reader.next(row)) {}
-      sync_path(object_path(entry.object));
+      // Old committed objects were validated during recovery or an earlier
+      // publication. Only new immutable segments need another scan and fsync.
+      for (std::size_t i = 0; i < entry.objects.size(); ++i) {
+        const auto& object = entry.objects[i];
+        if (committed_objects_.contains(object)) continue;
+        auto path = object_path(object);
+        validate_table_segment(path, entry.schema, i != 0);
+        sync_path(path);
+      }
     }
     checkpoint("objects_synced");
     sync_path(data_dir_ / "objects", true);
@@ -246,6 +264,10 @@ void RootStore::publish(const Catalog& candidate) {
     checkpoint("current_replaced");
     sync_path(data_dir_, true);
     checkpoint("data_dir_synced");
+    std::set<std::string> published;
+    for (const auto& [name, entry] : candidate.tables())
+      for (const auto& object : entry.objects) published.insert(object);
+    committed_objects_.swap(published);
   } catch (...) {
     if (replacing) {
       poisoned_ = true;
@@ -259,8 +281,10 @@ void RootStore::collect_garbage(const std::vector<Catalog>& protected_roots) {
   std::set<std::string> live;
   auto protect = [&](const Catalog& root) {
     for (const auto& [name, entry] : root.tables()) {
-      object_path(entry.object);
-      live.insert(entry.object);
+      for (const auto& object : entry.objects) {
+        object_path(object);
+        live.insert(object);
+      }
     }
   };
   auto current = current_reference();

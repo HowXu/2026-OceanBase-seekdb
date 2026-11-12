@@ -15,6 +15,15 @@ resource admission and performance remain unverified. Initial baseline history i
 in `docs/superpowers/experiments/2026-11-11-minivectordb-public-baseline.md`; current
 evidence is in `docs/superpowers/experiments/2026-11-11-minivectordb-sql-order-docker.md`.
 
+**2026-11-12 five-fix update:** ordinal ORDER BY, case-insensitive name binding,
+table-level primary keys, original expression column labels, float32 underflow,
+and incremental table segments have focused regressions. A fresh Docker image
+passes the original 20/20 driver. The 8,000-row/64-UPDATE diagnostic reduced
+update-stage device writes from 312,475,648 to 5,656,576 bytes; the generated
+2,112 MiB/2 GiB recovery probe also passed. See
+`docs/superpowers/experiments/2026-11-12-minivectordb-five-fixes-verification.md`.
+These are local results, not formal hidden-case approval.
+
 ## Local build and focused checks
 
 From the repository root, using a Python 3.12.10 `.venv` with
@@ -173,16 +182,23 @@ formal platform approval.
 ## Storage, correctness and bounded limitations
 
 - Single process/client and at most one explicit transaction. Supported MySQL-style
-  subset: scalar CRUD, AND comparisons, deterministic ordering/LIMIT, vector L2,
-  vector-index descriptors, BEGIN/COMMIT/ROLLBACK. Unsupported syntax is rejected.
-- Native immutable tables are streamed in primary-key order. Each mutation may
-  rewrite the entire affected table: O(table size) I/O, not a performance design.
+  subset: scalar CRUD, AND comparisons, deterministic ordering/LIMIT (including
+  1-based projection ordinals), vector L2, vector-index descriptors and
+  BEGIN/COMMIT/ROLLBACK. Table/column/index/alias lookup is ASCII case-insensitive;
+  original spelling is retained for output. Inline and table-level single BIGINT
+  primary keys, validated single-table qualifiers/aliases and redundant
+  parentheses are accepted. Unsupported syntax is rejected.
+- A logical table has one immutable PK-sorted base plus at most 64 ordered delta
+  segments. INSERT/UPDATE/DELETE write only new rows/full replacement rows or
+  tombstones; the next actual modification beyond the limit compacts the logical
+  table into a new base. Readers merge segments by PK and newest segment wins.
   Catalog/transaction snapshots copy metadata, not whole tables. Input batches
   and a single oversized row still require memory proportional to their sizes.
-- Publication syncs immutable objects/catalog, atomically replaces one CURRENT
-  for all tables and fsyncs the data directory before success. Recovery validates
-  only CURRENT, syncs it before GC, rejects missing/corrupt committed references
-  and reclaims unreachable owned files. Shutdown/EOF rolls back active work.
+- Publication validates/syncs only new segments, writes a new catalog and
+  atomically replaces one CURRENT for all tables before success. Recovery
+  validates the complete logical tables reachable from CURRENT, syncs CURRENT
+  before GC, rejects any missing/corrupt committed segment and reclaims
+  unreachable owned files. Shutdown/EOF rolls back active work.
 - Exact search scans visible records and filters before bounded O(K) TopK;
   `ann` uses the same exact fallback, not approximate index acceleration.
   Unbounded scalar sorting uses disk runs/merges; final result rows and JSON
@@ -193,5 +209,5 @@ formal platform approval.
   process-crash evidence. Real failed rename is tested. SIGKILL is not physical
   power loss, nor coverage of every hardware/fsync fault.
 - Local public success does not establish hidden-case correctness, formal ANN
-  structure/resource admission or platform acceptance. No stress/performance run,
-  benchmark scores or Task12 optimization has been executed in this delivery.
+  structure/resource admission or platform acceptance. Generated resource probes
+  are not official workloads; no formal T/B/M benchmark score is claimed.

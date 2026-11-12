@@ -4,6 +4,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -29,8 +30,13 @@ using Literal = std::variant<std::int64_t, std::string>;
 struct ColumnRef { std::string name; };
 struct Star {};
 struct L2Distance { std::string column; std::string vector; };
-using Expression = std::variant<ColumnRef, Star, Literal, L2Distance>;
-struct Projection { Expression expression; std::optional<std::string> alias; };
+struct OrderPosition { std::uint64_t position; bool operator==(const OrderPosition&) const = default; };
+using Expression = std::variant<ColumnRef, Star, Literal, L2Distance, OrderPosition>;
+struct Projection {
+  Expression expression;
+  std::optional<std::string> alias;
+  std::optional<std::string> display_text;
+};
 enum class CompareOperator { Equal, Less, LessEqual, Greater, GreaterEqual };
 struct Comparison { Expression left; CompareOperator op; Expression right; };
 struct OrderItem { Expression expression; bool descending = false; };
@@ -69,6 +75,10 @@ class DbError : public std::runtime_error {
   const std::string code;
 };
 // Semantic validation is native and independent of the parser/binding boundary.
+std::string normalized_name(std::string_view name);
+inline bool same_name(std::string_view a, std::string_view b) {
+  return normalized_name(a) == normalized_name(b);
+}
 std::size_t utf8_codepoints(const std::string& text);
 void validate_schema(TableSchema& schema);
 std::vector<float> parse_vector(const std::string& text, std::uint64_t dimension);

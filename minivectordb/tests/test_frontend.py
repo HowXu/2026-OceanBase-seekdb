@@ -52,6 +52,17 @@ def test_statement_families():
         assert parse_statement(sql) == {"op": op}
 
 
+def test_order_ordinal_parentheses_and_display_text():
+    assert parse_statement("SELECT l2_distance(v,'[0,0]'), (id) FROM notes ORDER BY 1") == {
+        "op": "select", "table": "notes", "projections": [
+            {"expression": {"kind": "l2_distance", "column": "v",
+                            "vector": string("[0,0]")},
+             "display_text": "l2_distance(v,'[0,0]')"},
+            {"expression": column("id"), "display_text": "(id)"}],
+        "order_by": [{"expression": {"kind": "ordinal", "position": 1},
+                      "descending": False}]}
+
+
 def test_literal_precision_and_escaping():
     assert parse_statement(r"INSERT INTO `odd;table` VALUES (9007199254740993, -9223372036854775808, 9223372036854775807, '中文;it''s', 'a\nb', '[1,2]');")["rows"] == [[
         integer("9007199254740993"), integer("-9223372036854775808"),
@@ -75,7 +86,7 @@ def test_vector_index_token_grammar():
     "SELECT id FROM notes WHERE id != 1", "SELECT mystery(id) FROM notes",
     "SELECT L2_DISTANCE(v, '[1]', 2) FROM notes", "SELECT L2_DISTANCE(id+1, '[1]') FROM notes",
     "SELECT id+1 FROM notes", "SELECT NULL FROM notes", "SELECT 1.5 FROM notes",
-    "SELECT t.id FROM notes t", "SELECT id FROM notes ORDER BY id COLLATE utf8_bin",
+    "SELECT id FROM notes ORDER BY -1", "SELECT id FROM notes ORDER BY id COLLATE utf8_bin",
     "SELECT id FROM notes FOR UPDATE", "SELECT id FROM notes ORDER BY id NULLS LAST",
     "SELECT id FROM notes ORDER BY id DESC NULLS FIRST", "INSERT IGNORE INTO notes VALUES (1)",
     "INSERT INTO notes SELECT * FROM other", "UPDATE notes SET id=id+1", "DELETE FROM notes LIMIT 1",

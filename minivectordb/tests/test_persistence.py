@@ -31,7 +31,9 @@ def test_multitable_reopen_encoding_and_gc(tmp_path):
         'columns': ['s', 'id', 'v'],
         'rows': [['中文', 9007199254740993, [struct.unpack('f', struct.pack('f', .1))[0], -2.0]]]}
     assert sql(reopened, 'SELECT * FROM b')['rows'] == [[1, 2]]
-    assert len(list((tmp_path/'objects').iterdir())) == 2
+    # Every retained segment is reachable: a has base+INSERT; b has base plus
+    # INSERT, UPDATE, DELETE and three further UPDATE deltas.
+    assert len(list((tmp_path/'objects').iterdir())) == 9
     assert len(list((tmp_path/'catalogs').iterdir())) == 1
     assert (tmp_path/'CURRENT').read_text().startswith('catalogs/')
     reopened.close()

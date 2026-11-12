@@ -18,7 +18,15 @@ int main() {
   auto v = std::get<std::vector<float>>(
       bind_literal(Literal{std::string("[0.1, -2e1]")}, s.columns[2]));
   check(v[0] == 0.1f && v[1] == -20.f);
-  for (auto text : {"[NaN,0]", "[1e100,0]", "[1,]", "[+1,2]", "[01,2]",
+  for (const auto* text : {"[+1,01]", "[.5,1.]", "[1e-46,-1e-50]", "[1e-999,0]"}) {
+    auto value = parse_vector(text, 2);
+    check(value.size() == 2);
+    for (float x : value) check(std::isfinite(x));
+  }
+  check(std::bit_cast<std::uint32_t>(parse_vector("[1e-46,0]",2)[0]) == 0);
+  check(std::bit_cast<std::uint32_t>(parse_vector("[-1e-50,0]",2)[0]) == 0x80000000u);
+  for (auto text : {"[NaN,0]", "[1e100,0]", "[1e39,0]", "[1e309,0]", "[Inf,0]",
+                    "[+.,0]", "[1e,0]", "[1e+,0]", "[1,]", "[1 2,0]",
                     "[1,2]x", "[1]", "[1 2]"})
     rejects([&] { parse_vector(text, 2); });
   rejects([&] { bind_literal(Literal{std::string("1")}, s.columns[1]); });

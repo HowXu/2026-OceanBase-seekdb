@@ -143,7 +143,25 @@ def test_actual_cleanup_interrupted_then_reentered(tmp_path, sessions):
     recovered.ready()
     assert state(recovered) == (10, 10)
     assert all(not p.exists() for p in orphans)
-    assert len(list((tmp_path / 'objects').iterdir())) == 2
+    # Two tables, each with one base and one committed INSERT delta.
+    assert len(list((tmp_path / 'objects').iterdir())) == 4
+
+
+def test_missing_committed_delta_never_ready(tmp_path, sessions):
+    seed(sessions, tmp_path)
+    original = set((tmp_path / 'objects').iterdir())
+    s = sessions(tmp_path)
+    s.ready()
+    s.sql('UPDATE a SET n=20')
+    s.sql('UPDATE a SET n=21')
+    s.kill()
+    deltas = set((tmp_path / 'objects').iterdir()) - original
+    assert len(deltas) == 2
+    deltas.pop().unlink()
+    recovered = sessions(tmp_path)
+    assert recovered.p.wait(timeout=5) == 1
+    assert recovered.p.stdout.read() == ''
+    assert recovered.p.stderr.read()
 
 
 def test_real_rename_failure_is_fatal_and_never_serves_next(tmp_path, sessions):

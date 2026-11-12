@@ -1,7 +1,9 @@
 #include "types.hpp"
 
+#include <cerrno>
 #include <charconv>
 #include <cmath>
+#include <cstdlib>
 #include <set>
 #include <string_view>
 
@@ -17,6 +19,12 @@ void name_valid(const std::string &name) {
 }
 bool digit(char c) { return c >= '0' && c <= '9'; }
 } // namespace
+std::string normalized_name(std::string_view name) {
+  std::string result(name);
+  for (char &c : result)
+    if (c >= 'A' && c <= 'Z') c += 'a' - 'A';
+  return result;
+}
 std::size_t utf8_codepoints(const std::string &text) {
   std::size_t count = 0;
   for (std::size_t i = 0; i < text.size(); ++count) {
@@ -59,7 +67,7 @@ void validate_schema(TableSchema &schema) {
   for (std::size_t i = 0; i < schema.columns.size(); ++i) {
     const auto &c = schema.columns[i];
     name_valid(c.name);
-    if (!names.insert(c.name).second)
+    if (!names.insert(normalized_name(c.name)).second)
       invalid("duplicate column");
     switch (c.type) {
     case ColumnType::BigInt:
@@ -107,23 +115,22 @@ std::vector<float> parse_vector(const std::string &text,
     while (true) {
       ws();
       auto start = p;
-      if (p < text.size() && text[p] == '-')
+      if (p < text.size() && (text[p] == '+' || text[p] == '-'))
         ++p;
-      if (p == text.size() || !digit(text[p]))
-        invalid("invalid vector number");
-      if (text[p] == '0')
+      std::size_t digits = 0;
+      while (p < text.size() && digit(text[p])) {
         ++p;
-      else
-        while (p < text.size() && digit(text[p]))
-          ++p;
+        ++digits;
+      }
       if (p < text.size() && text[p] == '.') {
         ++p;
-        auto begin = p;
-        while (p < text.size() && digit(text[p]))
+        while (p < text.size() && digit(text[p])) {
           ++p;
-        if (begin == p)
-          invalid("invalid vector fraction");
+          ++digits;
+        }
       }
+      if (digits == 0)
+        invalid("invalid vector number");
       if (p < text.size() && (text[p] == 'e' || text[p] == 'E')) {
         ++p;
         if (p < text.size() && (text[p] == '+' || text[p] == '-'))
@@ -134,12 +141,28 @@ std::vector<float> parse_vector(const std::string &text,
         if (begin == p)
           invalid("invalid vector exponent");
       }
-      float value;
-      auto [end, ec] = std::from_chars(text.data() + start, text.data() + p,
+      std::string_view number(text.data() + start, p - start);
+      if (number.front() == '+') number.remove_prefix(1);
+      double value = 0;
+      auto [end, ec] = std::from_chars(number.data(), number.data() + number.size(),
                                        value, std::chars_format::general);
-      if (ec != std::errc{} || end != text.data() + p || !std::isfinite(value))
+      if (ec == std::errc::result_out_of_range) {
+        // from_chars does not distinguish overflow from underflow. strtod
+        // provides a finite zero for the latter; both are checked explicitly.
+        std::string token(number);
+        char* parse_end = nullptr;
+        errno = 0;
+        value = std::strtod(token.c_str(), &parse_end);
+        if (parse_end != token.c_str() + token.size() || !std::isfinite(value))
+          invalid("nonfinite or out-of-range float32");
+      } else if (ec != std::errc{} || end != number.data() + number.size() ||
+                 !std::isfinite(value)) {
         invalid("nonfinite or out-of-range float32");
-      result.push_back(value);
+      }
+      float stored = static_cast<float>(value);
+      if (!std::isfinite(stored))
+        invalid("nonfinite or out-of-range float32");
+      result.push_back(stored);
       if (result.size() > dimension)
         invalid("vector dimension mismatch");
       ws();
