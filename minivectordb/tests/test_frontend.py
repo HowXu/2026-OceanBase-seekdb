@@ -107,6 +107,44 @@ def test_rejects_unrepresented_syntax(sql):
     assert caught.value.message
 
 
+def test_native_insert_fast_path_and_fallback(tmp_path):
+    from _minivectordb import Engine
+    engine = Engine(str(tmp_path))
+    engine.execute(parse_statement("CREATE TABLE n (id BIGINT PRIMARY KEY, s VARCHAR(20), v VECTOR(2))"))
+    assert engine.try_execute_insert(
+        "INSERT INTO n VALUES (1,'it''s','[1,2]'),(2,'中😀','[3,4]')", 'exact') == {
+            'affected_rows': 2}
+    assert engine.execute(parse_statement('SELECT * FROM n ORDER BY id'))['rows'] == [
+        [1, "it's", [1.0, 2.0]], [2, '中😀', [3.0, 4.0]]]
+    assert engine.try_execute_insert('SELECT * FROM n', 'exact') is None
+    assert engine.try_execute_insert('INSERT INTO n(id,s,v) VALUES (3,\'x\',\'[0,0]\')', 'exact') is None
+    with pytest.raises(DatabaseError) as caught:
+        engine.try_execute_insert("INSERT INTO n VALUES (4,'bad','[1,2]'),(1,'duplicate','[0,0]')", 'exact')
+    assert caught.value.code == 'duplicate_key'
+    assert engine.execute(parse_statement('SELECT id FROM n ORDER BY id'))['rows'] == [[1], [2]]
+    with pytest.raises(DatabaseError):
+        engine.try_execute_insert("INSERT INTO n VALUES (3,'x','[0,0]'),;", 'exact')
+    engine.close()
+
+
+def test_fast_path_fallback_preserves_supported_insert_syntax(tmp_path):
+    from _minivectordb import Engine
+    from minivectordb.__main__ import execute_request
+    engine = Engine(str(tmp_path))
+    engine.execute(parse_statement('CREATE TABLE n (id BIGINT PRIMARY KEY,s VARCHAR(4),v VECTOR(2))'))
+    statements = [
+        "INSERT INTO n VALUES (- 1,'a','[0,0]')",
+        "INSERT INTO n VALUES (0,'a','[0,0]' /* comment */)",
+        "INSERT INTO n VALUES (1,\"a\",'[0,0]')",
+        "INSERT INTO n VALUES (2,'a','[0,0]') /* tail */",
+    ]
+    for sql in statements:
+        assert execute_request(engine, {'sql': sql}) == {'affected_rows': 1}
+    assert engine.execute(parse_statement('SELECT id,s FROM n ORDER BY id'))['rows'] == [
+        [-1,'a'],[0,'a'],[1,'a'],[2,'a']]
+    engine.close()
+
+
 def test_parsed_ir_reaches_real_binding(tmp_path):
     from _minivectordb import Engine
     engine = Engine(str(tmp_path))
@@ -137,6 +175,9 @@ def test_execute_request_parses_and_passes_payload_and_mode():
     from minivectordb.__main__ import execute_request
 
     class RecordingEngine:
+        def try_execute_insert(self, sql, mode):
+            return None
+
         def execute(self, statement, mode):
             assert statement == {"op": "delete", "table": "notes"}
             assert mode == "ann"

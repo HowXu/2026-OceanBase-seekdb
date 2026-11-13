@@ -8,6 +8,7 @@ class Engine {
  public:
   explicit Engine(const std::filesystem::path& data_dir);
   QueryResult execute(const Statement& statement, SearchMode mode);
+  std::optional<QueryResult> try_execute_insert(std::string_view sql, SearchMode mode);
   void close();
  private:
   RootStore store_;

@@ -23,17 +23,20 @@ private:
 };
 class DeltaFileReader {
 public:
-  DeltaFileReader(const std::filesystem::path& path, TableSchema expected_schema);
+  DeltaFileReader(const std::filesystem::path& path, TableSchema expected_schema,
+                  RowValidation validation = RowValidation::Full);
   bool next(DeltaRecord& record);
 private:
   TableSchema schema_;
   storage::Input in_;
+  RowValidation validation_;
   std::optional<std::int64_t> last_key_;
   bool ended_ = false;
 };
 class LogicalTableReader {
 public:
-  LogicalTableReader(const std::vector<std::filesystem::path>& paths, TableSchema schema);
+  LogicalTableReader(const std::vector<std::filesystem::path>& paths, TableSchema schema,
+                     RowValidation validation = RowValidation::Full);
   ~LogicalTableReader();
   LogicalTableReader(LogicalTableReader&&) noexcept;
   LogicalTableReader& operator=(LogicalTableReader&&) noexcept;

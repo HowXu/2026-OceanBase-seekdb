@@ -2,6 +2,7 @@
 #include "storage_codec.hpp"
 
 namespace minivectordb {
+enum class RowValidation { Full, StructureOnly };
 // A writer produces one candidate file, never a visible root. finish is
 // mandatory; destruction closes but deliberately leaves an unfinished file
 // invalid.
@@ -20,7 +21,8 @@ private:
 class TableFileReader {
 public:
   TableFileReader(const std::filesystem::path &path,
-                  TableSchema expected_schema);
+                  TableSchema expected_schema,
+                  RowValidation validation = RowValidation::Full);
   // Retains only one decoded row; false requires a valid end marker and EOF.
   bool next(Row &row);
   const TableSchema &schema() const { return schema_; }
@@ -28,6 +30,7 @@ public:
 private:
   TableSchema schema_;
   storage::Input in_;
+  RowValidation validation_;
   std::optional<std::int64_t> last_key_;
   bool ended_ = false;
 };

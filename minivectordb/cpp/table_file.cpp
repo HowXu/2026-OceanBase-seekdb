@@ -48,9 +48,10 @@ void TableFileWriter::append(const Row &row) {
       out_.u64(std::bit_cast<std::uint64_t>(*n));
     else if (auto s = std::get_if<std::string>(&cell))
       out_.text(*s);
-    else
-      for (float x : std::get<std::vector<float>>(cell))
-        out_.u32(std::bit_cast<std::uint32_t>(x));
+    else {
+      const auto& vector = std::get<std::vector<float>>(cell);
+      out_.floats(vector.data(), vector.size());
+    }
   }
   last_key_ = key;
 }
@@ -62,8 +63,9 @@ void TableFileWriter::finish() {
   finished_ = true;
 }
 TableFileReader::TableFileReader(const std::filesystem::path &path,
-                                 TableSchema expected_schema)
-    : schema_(std::move(expected_schema)), in_(path) {
+                                 TableSchema expected_schema,
+                                 RowValidation validation)
+    : schema_(std::move(expected_schema)), in_(path), validation_(validation) {
   validate_schema(schema_);
   in_.magic(magic);
   auto actual = storage::read_schema(in_);
@@ -86,28 +88,33 @@ bool TableFileReader::next(Row &row) {
   if (length >= in_.remaining())
     storage::fail("invalid row length or missing footer");
   auto after = in_.remaining() - length;
-  Row decoded;
-  for (const auto &c : schema_.columns) {
-    if (c.type == ColumnType::BigInt)
-      decoded.emplace_back(std::bit_cast<std::int64_t>(in_.u64()));
-    else if (c.type == ColumnType::Varchar)
-      decoded.emplace_back(in_.text());
-    else {
+  row.resize(schema_.columns.size());
+  for (std::size_t i = 0; i < schema_.columns.size(); ++i) {
+    const auto& c = schema_.columns[i];
+    if (c.type == ColumnType::BigInt) {
+      row[i] = std::bit_cast<std::int64_t>(in_.u64());
+    } else if (c.type == ColumnType::Varchar) {
+      row[i] = in_.text();
+    } else {
       if (*c.length > in_.remaining() / 4)
         storage::fail("truncated vector");
-      std::vector<float> v(static_cast<std::size_t>(*c.length));
-      in_.floats(v.data(), *c.length);
-      decoded.emplace_back(std::move(v));
+      if (auto vector = std::get_if<std::vector<float>>(&row[i])) {
+        vector->resize(static_cast<std::size_t>(*c.length));
+        in_.floats(vector->data(), *c.length);
+      } else {
+        std::vector<float> decoded(static_cast<std::size_t>(*c.length));
+        in_.floats(decoded.data(), *c.length);
+        row[i] = std::move(decoded);
+      }
     }
   }
   if (in_.remaining() != after)
     storage::fail("row length mismatch");
-  validate_row(schema_, decoded);
-  auto key = std::get<std::int64_t>(decoded[schema_.primary_key_index]);
+  if (validation_ == RowValidation::Full) validate_row(schema_, row);
+  auto key = std::get<std::int64_t>(row[schema_.primary_key_index]);
   if (last_key_ && key <= *last_key_)
     storage::fail("unordered table rows");
   last_key_ = key;
-  row = std::move(decoded);
   return true;
 }
 } // namespace minivectordb

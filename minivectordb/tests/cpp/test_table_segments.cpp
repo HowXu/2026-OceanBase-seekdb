@@ -47,6 +47,15 @@ int main() {
   }
   check(keys == std::vector<std::int64_t>({1, 2, 3}));
   check(values == std::vector<std::string>({"a1", "b2", "c3"}));
+  LogicalTableReader trusted(paths, s, RowValidation::StructureOnly);
+  keys.clear();
+  values.clear();
+  while (trusted.next(current)) {
+    keys.push_back(std::get<std::int64_t>(current[s.primary_key_index]));
+    values.push_back(std::get<std::string>(current[0]));
+  }
+  check(keys == std::vector<std::int64_t>({1, 2, 3}));
+  check(values == std::vector<std::string>({"a1", "b2", "c3"}));
   validate_table_objects(paths, s);
   rejects([&] {
     DeltaFileWriter writer(d.path / "bad-order.tbl", s);
@@ -57,6 +66,11 @@ int main() {
   std::filesystem::copy_file(first, truncated);
   std::filesystem::resize_file(truncated, std::filesystem::file_size(truncated) - 1);
   rejects([&] { validate_table_objects({base, truncated}, s); });
+  rejects([&] {
+    LogicalTableReader r({base, truncated}, s, RowValidation::StructureOnly);
+    Row value;
+    while (r.next(value)) {}
+  });
   auto wrong = s;
   wrong.name = "wrong";
   rejects([&] { validate_table_objects(paths, wrong); });

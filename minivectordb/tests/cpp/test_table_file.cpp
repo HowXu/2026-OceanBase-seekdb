@@ -1,6 +1,7 @@
 #include "table_file.hpp"
 #include "test_storage_support.hpp"
 #include <fstream>
+#include <cmath>
 int main(int argc, char **) {
   TestDir d;
   auto s = schema();
@@ -26,6 +27,12 @@ int main(int argc, char **) {
         while (r.next(row)) {
         };
       });
+      rejects([&] {
+        TableFileReader r(q, s, RowValidation::StructureOnly);
+        Row row;
+        while (r.next(row)) {
+        };
+      });
     }
     {
       std::ofstream f(p, std::ios::app | std::ios::binary);
@@ -46,6 +53,21 @@ int main(int argc, char **) {
     check(r.next(row) && row == b);
     check(!r.next(row));
     check(!r.next(row));
+  }
+  {
+    TableFileReader r(p, s, RowValidation::StructureOnly);
+    Row row;
+    check(r.next(row) && row == a);
+    check(r.next(row) && row == b);
+    check(!r.next(row));
+  }
+  {
+    TableFileReader r(p, s, RowValidation::StructureOnly);
+    Row row;
+    check(r.next(row) && row == a);
+    auto* storage = std::get<std::vector<float>>(row[2]).data();
+    check(r.next(row) && row == b);
+    check(std::get<std::vector<float>>(row[2]).data() == storage);
   }
   auto empty = d.path / "empty.tbl";
   {
@@ -108,6 +130,31 @@ int main(int argc, char **) {
     while (r.next(row)) {
     };
   });
+  // Full readers repeat semantic validation; trusted readers rely on the
+  // publication/recovery boundary but still perform structural decoding.
+  {
+    std::ifstream input(p, std::ios::binary);
+    std::string corrupted((std::istreambuf_iterator<char>(input)), {});
+    const auto bits = std::bit_cast<std::uint32_t>(0.1f);
+    std::string needle(4, '\0');
+    for (int i = 0; i < 4; ++i) needle[i] = static_cast<char>(bits >> (8 * i));
+    auto position = corrupted.find(needle);
+    check(position != std::string::npos);
+    corrupted.replace(position, 4, std::string("\0\0\x80\x7f", 4));
+    auto nonfinite = d.path / "nonfinite.tbl";
+    std::ofstream output(nonfinite, std::ios::binary | std::ios::trunc);
+    output.write(corrupted.data(), corrupted.size());
+    output.close();
+    rejects([&] {
+      TableFileReader r(nonfinite, s, RowValidation::Full);
+      Row row;
+      while (r.next(row)) {}
+    });
+    TableFileReader r(nonfinite, s, RowValidation::StructureOnly);
+    Row row;
+    check(r.next(row));
+    check(!std::isfinite(std::get<std::vector<float>>(row[2])[0]));
+  }
   // Large text and float blocks cross the bounded input buffer. The logical
   // remaining count must include buffered bytes and preserve every float bit.
   auto blocks = d.path / "blocks.bin";
@@ -118,7 +165,7 @@ int main(int argc, char **) {
   {
     storage::Output out(blocks);
     out.text(large);
-    for (float value : floats) out.u32(std::bit_cast<std::uint32_t>(value));
+    out.floats(floats.data(), floats.size());
     out.finish();
   }
   {

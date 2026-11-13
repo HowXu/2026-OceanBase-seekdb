@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <cstring>
 #include <filesystem>
@@ -45,16 +46,19 @@ public:
     bytes(&c, 1);
   }
   void u64(std::uint64_t n) {
-    for (int i = 0; i < 8; ++i) {
-      u8(n & 255);
-      n >>= 8;
-    }
+    std::array<char, 8> raw;
+    for (int i = 0; i < 8; ++i) raw[i] = static_cast<char>(n >> (8 * i));
+    bytes(raw.data(), raw.size());
   }
   void u32(std::uint32_t n) {
-    for (int i = 0; i < 4; ++i) {
-      u8(n & 255);
-      n >>= 8;
-    }
+    std::array<char, 4> raw;
+    for (int i = 0; i < 4; ++i) raw[i] = static_cast<char>(n >> (8 * i));
+    bytes(raw.data(), raw.size());
+  }
+  void floats(const float *source, std::uint64_t count) {
+    if (count > UINT64_MAX / sizeof(float)) fail("vector byte size overflow");
+    bytes(reinterpret_cast<const char *>(source),
+          static_cast<std::size_t>(count * sizeof(float)));
   }
   void text(const std::string &s) {
     u64(s.size());
@@ -100,13 +104,7 @@ public:
           left_ -= n;
           return;
         }
-        auto want = static_cast<std::size_t>(std::min<std::uint64_t>(left_, buffer_size));
-        buffer_.resize(buffer_size);
-        stream_.read(buffer_.data(), static_cast<std::streamsize>(want));
-        if (stream_.gcount() != static_cast<std::streamsize>(want))
-          fail("read failed");
-        position_ = 0;
-        available_ = want;
+        fill();
       }
       auto take = std::min(n, available_ - position_);
       std::memcpy(p, buffer_.data() + position_, take);
@@ -123,21 +121,27 @@ public:
           static_cast<std::size_t>(count * sizeof(float)));
   }
   std::uint8_t u8() {
-    char c;
-    bytes(&c, 1);
-    return static_cast<unsigned char>(c);
+    if (left_ == 0) fail("truncated input");
+    if (position_ == available_) fill();
+    auto value = static_cast<unsigned char>(buffer_[position_++]);
+    --left_;
+    return value;
   }
   std::uint64_t u64() {
-    std::uint64_t n = 0;
+    std::array<char, 8> raw;
+    bytes(raw.data(), raw.size());
+    std::uint64_t value = 0;
     for (int i = 0; i < 8; ++i)
-      n |= std::uint64_t(u8()) << (8 * i);
-    return n;
+      value |= std::uint64_t(static_cast<unsigned char>(raw[i])) << (8 * i);
+    return value;
   }
   std::uint32_t u32() {
-    std::uint32_t n = 0;
+    std::array<char, 4> raw;
+    bytes(raw.data(), raw.size());
+    std::uint32_t value = 0;
     for (int i = 0; i < 4; ++i)
-      n |= std::uint32_t(u8()) << (8 * i);
-    return n;
+      value |= std::uint32_t(static_cast<unsigned char>(raw[i])) << (8 * i);
+    return value;
   }
   std::string text() {
     auto n = u64();
@@ -165,6 +169,16 @@ private:
   std::vector<char> buffer_;
   std::size_t position_ = 0;
   std::size_t available_ = 0;
+
+  void fill() {
+    auto want = static_cast<std::size_t>(std::min<std::uint64_t>(left_, buffer_size));
+    buffer_.resize(buffer_size);
+    stream_.read(buffer_.data(), static_cast<std::streamsize>(want));
+    if (stream_.gcount() != static_cast<std::streamsize>(want))
+      fail("read failed");
+    position_ = 0;
+    available_ = want;
+  }
 };
 inline void write_schema(Output &out, const TableSchema &s) {
   out.text(s.name);

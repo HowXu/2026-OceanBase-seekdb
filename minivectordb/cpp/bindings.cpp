@@ -238,5 +238,12 @@ PYBIND11_MODULE(_minivectordb, module) {
         auto statement = bind_statement(ir);
         return result_payload(engine.execute(statement, mode == "exact" ? SearchMode::Exact : SearchMode::Ann));
       }, py::arg("statement"), py::arg("search_mode") = "exact")
+      .def("try_execute_insert", [](Engine& engine, const std::string& sql,
+                                    const std::string& mode) -> py::object {
+        if (mode != "exact" && mode != "ann") throw DbError("invalid_request", "invalid search_mode");
+        auto result = engine.try_execute_insert(sql, mode == "exact" ? SearchMode::Exact : SearchMode::Ann);
+        if (!result) return py::none();
+        return result_payload(*result);
+      }, py::arg("sql"), py::arg("search_mode") = "exact")
       .def("close", &Engine::close);
 }

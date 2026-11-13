@@ -1,6 +1,8 @@
 #include "test_storage_support.hpp"
+#include "exact_search.hpp"
 #include <cmath>
 #include <limits>
+#include <random>
 int main() {
   auto s = schema();
   validate_schema(s);
@@ -50,4 +52,37 @@ int main() {
         s, Row{std::string("a"), INT64_C(1), std::vector<float>{INFINITY, 0}});
   });
   rejects([&] { validate_row(s, Row{}); });
+  // Candidate distance unrolling keeps the exact sequential double additions.
+  auto unrolled = [](const std::vector<float>& stored,
+                     const std::vector<float>& query) {
+    double sum = 0;
+    std::size_t i = 0;
+    for (; i + 4 <= stored.size(); i += 4) {
+      const double a = static_cast<double>(stored[i]) - static_cast<double>(query[i]);
+      sum += a * a;
+      const double b = static_cast<double>(stored[i+1]) - static_cast<double>(query[i+1]);
+      sum += b * b;
+      const double c = static_cast<double>(stored[i+2]) - static_cast<double>(query[i+2]);
+      sum += c * c;
+      const double d = static_cast<double>(stored[i+3]) - static_cast<double>(query[i+3]);
+      sum += d * d;
+    }
+    for (; i < stored.size(); ++i) {
+      const double difference = static_cast<double>(stored[i]) - static_cast<double>(query[i]);
+      sum += difference * difference;
+    }
+    return sum;
+  };
+  std::mt19937_64 random(20261113);
+  std::uniform_real_distribution<double> distribution(-1000.0, 1000.0);
+  for (int trial = 0; trial < 1000; ++trial) {
+    std::vector<float> stored(128), query(128);
+    for (std::size_t i = 0; i < stored.size(); ++i) {
+      stored[i] = static_cast<float>(distribution(random));
+      query[i] = static_cast<float>(distribution(random));
+    }
+    auto expected = std::bit_cast<std::uint64_t>(l2_distance_squared(stored, query));
+    auto actual = std::bit_cast<std::uint64_t>(unrolled(stored, query));
+    check(actual == expected);
+  }
 }

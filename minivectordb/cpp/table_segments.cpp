@@ -31,9 +31,10 @@ void write_row(storage::Output& out, const Row& row) {
       out.u64(std::bit_cast<std::uint64_t>(*number));
     else if (auto text = std::get_if<std::string>(&cell))
       out.text(*text);
-    else
-      for (float value : std::get<std::vector<float>>(cell))
-        out.u32(std::bit_cast<std::uint32_t>(value));
+    else {
+      const auto& vector = std::get<std::vector<float>>(cell);
+      out.floats(vector.data(), vector.size());
+    }
   }
 }
 Row read_row(storage::Input& in, const TableSchema& schema) {
@@ -87,8 +88,9 @@ void DeltaFileWriter::finish() {
 }
 
 DeltaFileReader::DeltaFileReader(const std::filesystem::path& path,
-                                 TableSchema expected_schema)
-    : schema_(std::move(expected_schema)), in_(path) {
+                                 TableSchema expected_schema,
+                                 RowValidation validation)
+    : schema_(std::move(expected_schema)), in_(path), validation_(validation) {
   validate_schema(schema_);
   in_.magic(magic);
   auto actual = storage::read_schema(in_);
@@ -114,7 +116,7 @@ bool DeltaFileReader::next(DeltaRecord& record) {
   } else {
     decoded.row = read_row(in_, schema_);
     if (in_.remaining() != after) storage::fail("delta row length mismatch");
-    validate_row(schema_, decoded.row);
+    if (validation_ == RowValidation::Full) validate_row(schema_, decoded.row);
     if (row_key(decoded.row, schema_) != key) storage::fail("delta key differs from row");
   }
   if (last_key_ && key <= *last_key_) storage::fail("unordered delta keys");
@@ -144,7 +146,8 @@ struct LogicalTableReader::Impl {
   std::vector<Cursor> cursors;
   std::priority_queue<std::size_t, std::vector<std::size_t>, NewestAtSameKey> heap;
 
-  Impl(const std::vector<std::filesystem::path>& paths, TableSchema expected)
+  Impl(const std::vector<std::filesystem::path>& paths, TableSchema expected,
+       RowValidation validation)
       : schema(std::move(expected)), heap(NewestAtSameKey{this}) {
     validate_schema(schema);
     if (paths.empty()) storage::fail("table has no objects");
@@ -152,8 +155,8 @@ struct LogicalTableReader::Impl {
     for (std::size_t i = 0; i < paths.size(); ++i) {
       auto& cursor = cursors[i];
       cursor.order = i;
-      if (i == 0) cursor.base = std::make_unique<TableFileReader>(paths[i], schema);
-      else cursor.delta = std::make_unique<DeltaFileReader>(paths[i], schema);
+      if (i == 0) cursor.base = std::make_unique<TableFileReader>(paths[i], schema, validation);
+      else cursor.delta = std::make_unique<DeltaFileReader>(paths[i], schema, validation);
       advance(i);
     }
   }
@@ -173,8 +176,8 @@ struct LogicalTableReader::Impl {
   }
 };
 LogicalTableReader::LogicalTableReader(const std::vector<std::filesystem::path>& paths,
-                                       TableSchema schema)
-    : impl_(std::make_unique<Impl>(paths, std::move(schema))) {}
+                                       TableSchema schema, RowValidation validation)
+    : impl_(std::make_unique<Impl>(paths, std::move(schema), validation)) {}
 LogicalTableReader::~LogicalTableReader() = default;
 LogicalTableReader::LogicalTableReader(LogicalTableReader&&) noexcept = default;
 LogicalTableReader& LogicalTableReader::operator=(LogicalTableReader&&) noexcept = default;

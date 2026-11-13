@@ -2,8 +2,9 @@
 
 Python 3.12 hosts the JSONL entrypoint and SQLGlot tokenizer/parser/AST only;
 pybind11 calls the handmade C++20 storage, execution, vector and transaction core
-in the same process. Runtime does not launch a parser service or use another
-database engine. Pins: Python 3.12.10, SQLGlot 30.31.0, pybind11 3.1.0,
+in the same process. A strict C++ fast path handles only simple multi-row
+INSERT ... VALUES; every other shape falls back to SQLGlot. Runtime does not
+launch a parser service or use another database engine. Pins: Python 3.12.10, SQLGlot 30.31.0, pybind11 3.1.0,
 pytest 9.2.0 (`requirements*.txt`).
 
 **2026-11-11 LOCAL result: original public driver 20/20 cases (95 SQL), all PASS.**
@@ -129,7 +130,10 @@ must actually be available before container validation can be reported as passin
 **FlatScan** descriptor in the same catalog root as table schemas and immutable
 table references. Index names are catalog-global and must be unique; the table
 and VECTOR column must exist. Multiple distinct declarations may reference the
-same VECTOR column. Failed declarations do not publish metadata.
+same VECTOR column. Failed declarations do not publish metadata. When a table
+has multiple segments, index creation also compacts the candidate table into one
+base using the same PK/newest-segment merge as DML compaction. This moves merge
+work into index preparation; its I/O and memory are still measured.
 
 Both `exact` and `ann` currently execute the exact backend against the same
 visible table root. `ann` is an explicit **exact fallback**, also available without
@@ -194,9 +198,13 @@ formal platform approval.
   table into a new base. Readers merge segments by PK and newest segment wins.
   Catalog/transaction snapshots copy metadata, not whole tables. Input batches
   and a single oversized row still require memory proportional to their sizes.
-  Storage input uses a bounded 64 KiB buffer per open segment and bulk float32
-  vector decoding. Derived PK membership sets use copy-on-write for INSERT and
-  DELETE, so duplicate checks and old-root isolation do not require a full-row scan.
+  Storage input uses a bounded 64 KiB buffer per open segment and block scalar/
+  float32 decoding; integers and vectors use block output encoding. Hot SELECT
+  readers may skip repeated semantic checks after publication/recovery validation,
+  while structural framing and ordering checks remain. Single-base SELECT reads
+  decode into reusable row/vector storage instead of the multi-segment heap.
+  Derived PK membership sets use copy-on-write for INSERT and DELETE, so duplicate
+  checks and old-root isolation do not require a full-row scan.
 - Publication validates/syncs only new segments, writes a new catalog and
   atomically replaces one CURRENT for all tables before success. Recovery
   validates the complete logical tables reachable from CURRENT, syncs CURRENT

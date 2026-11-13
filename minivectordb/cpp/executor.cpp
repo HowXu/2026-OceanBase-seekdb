@@ -324,17 +324,27 @@ ResultSet select_rows(const Select& statement, const TableEntry& entry, RootStor
       std::visit([&](const auto& value) { output.emplace_back(value); }, p.evaluate(row));
     result.rows.push_back(std::move(output));
   };
-  LogicalTableReader reader(table_paths(entry, store), schema);
+  std::unique_ptr<TableFileReader> base_reader;
+  std::optional<LogicalTableReader> logical_reader;
+  if (entry.objects.size() == 1) {
+    base_reader = std::make_unique<TableFileReader>(
+        store.object_path(entry.objects.front()), schema, RowValidation::StructureOnly);
+  } else {
+    logical_reader.emplace(table_paths(entry, store), schema, RowValidation::StructureOnly);
+  }
+  auto next = [&](Row& row) {
+    return base_reader ? base_reader->next(row) : logical_reader->next(row);
+  };
   Row row;
   RowLess less{&order, &schema};
   if (order.empty()) {
-    while (reader.next(row)) if (matches(row, where)) {
+    while (next(row)) if (matches(row, where)) {
       emit(row);
       if (statement.limit && result.rows.size() >= *statement.limit) break;
     }
   } else if (statement.limit) {
     std::priority_queue<Row, std::vector<Row>, RowLess> heap(less);
-    while (reader.next(row)) if (matches(row, where)) {
+    while (next(row)) if (matches(row, where)) {
       if (heap.size() < *statement.limit) heap.push(std::move(row));
       else if (less(row, heap.top())) { heap.pop(); heap.push(std::move(row)); }
     }
@@ -344,7 +354,7 @@ ResultSet select_rows(const Select& statement, const TableEntry& entry, RootStor
     for (const auto& selected : sorted) emit(selected);
   } else {
     ExternalSort sort(store, schema, less);
-    while (reader.next(row)) if (matches(row, where)) sort.add(std::move(row));
+    while (next(row)) if (matches(row, where)) sort.add(std::move(row));
     sort.emit(emit);
   }
   return result;
@@ -363,45 +373,54 @@ QueryResult create_table(const CreateTable& statement, Catalog& candidate, RootS
   owned.release(ref);
   return EmptyResult{};
 }
+void compact_table(const std::string& table,
+                   const std::vector<DeltaRecord>& changes,
+                   Catalog& candidate, RootStore& store) {
+  const auto entry = candidate.find(table);
+  const auto& schema = entry.schema;
+  OwnedObjects owned(store);
+  auto ref = owned.create();
+  TableFileWriter writer(store.object_path(ref), schema);
+  LogicalTableReader reader(table_paths(entry, store), schema);
+  Row row;
+  std::size_t i = 0;
+  auto emit = [&](const DeltaRecord& change) {
+    if (!change.deleted) writer.append(change.row);
+  };
+  while (reader.next(row)) {
+    auto current_key = key(row, schema);
+    while (i < changes.size() && changes[i].key < current_key) emit(changes[i++]);
+    if (i < changes.size() && changes[i].key == current_key) {
+      emit(changes[i++]);
+      continue;
+    }
+    writer.append(row);
+  }
+  while (i < changes.size()) emit(changes[i++]);
+  writer.finish();
+  candidate.replace_object(table, ref);
+  owned.release(ref);
+}
 void append_delta_or_compact(const std::string& table,
                              const std::vector<DeltaRecord>& changes,
                              Catalog& candidate, RootStore& store) {
   if (changes.empty()) return;
   const auto entry = candidate.find(table);
-  const auto& schema = entry.schema;
-  OwnedObjects owned(store);
-  auto ref = owned.create();
   if (entry.objects.size() <= 64) {
-    DeltaFileWriter writer(store.object_path(ref), schema);
+    OwnedObjects owned(store);
+    auto ref = owned.create();
+    DeltaFileWriter writer(store.object_path(ref), entry.schema);
     for (const auto& change : changes) writer.append(change);
     writer.finish();
     auto objects = entry.objects;
     objects.push_back(ref);
     candidate.replace_objects(table, std::move(objects));
+    owned.release(ref);
   } else {
     // One base plus 64 deltas is the read fan-out limit. The next actual
     // modification folds the logical table and this statement into a new base.
-    TableFileWriter writer(store.object_path(ref), schema);
-    LogicalTableReader reader(table_paths(entry, store), schema);
-    Row row;
-    std::size_t i = 0;
-    auto emit = [&](const DeltaRecord& change) {
-      if (!change.deleted) writer.append(change.row);
-    };
-    while (reader.next(row)) {
-      auto current_key = key(row, schema);
-      while (i < changes.size() && changes[i].key < current_key) emit(changes[i++]);
-      if (i < changes.size() && changes[i].key == current_key) {
-        emit(changes[i++]);
-        continue;
-      }
-      writer.append(row);
-    }
-    while (i < changes.size()) emit(changes[i++]);
-    writer.finish();
-    candidate.replace_object(table, ref);
+    compact_table(table, changes, candidate, store);
   }
-  owned.release(ref);
 }
 QueryResult insert_rows(const Insert& statement, Catalog& candidate, RootStore& store) {
   const auto entry = candidate.find(statement.table);
@@ -505,6 +524,8 @@ QueryResult execute_scalar(const Statement& statement, Catalog& statement_candid
     }
     else if constexpr (std::is_same_v<T,CreateVectorIndex>) {
       statement_candidate.add_vector_index({value.index, value.table, value.column});
+      if (statement_candidate.find(value.table).objects.size() > 1)
+        compact_table(value.table, {}, statement_candidate, store);
       return EmptyResult{};
     }
     else if constexpr (std::is_same_v<T,Update> || std::is_same_v<T,Delete>) return rewrite_rows(value, statement_candidate, store);

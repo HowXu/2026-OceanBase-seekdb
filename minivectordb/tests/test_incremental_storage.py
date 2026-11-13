@@ -53,6 +53,33 @@ def test_compaction_reinsert_rollback_and_recovery(tmp_path):
     db.close()
 
 
+def test_create_index_compacts_visible_rows_and_rollback(tmp_path):
+    db = Engine(str(tmp_path))
+    execute(db, 'CREATE TABLE inc (id BIGINT PRIMARY KEY,n BIGINT,v VECTOR(2))')
+    execute(db, 'INSERT INTO inc VALUES ' + ','.join(
+        f"({i},{i},'[{i},1]')" for i in range(128)))
+    execute(db, 'UPDATE inc SET n=1000 WHERE id=3')
+    execute(db, 'DELETE FROM inc WHERE id=4')
+    before = execute(db, 'SELECT id,n FROM inc ORDER BY id')['rows']
+    assert len(list((tmp_path/'objects').iterdir())) == 4
+    execute(db, 'CREATE VECTOR INDEX compacted ON inc(v)')
+    assert len(list((tmp_path/'objects').iterdir())) == 1
+    assert execute(db, 'SELECT id,n FROM inc ORDER BY id')['rows'] == before
+    execute(db, "INSERT INTO inc VALUES (4,4444,'[0,1]')")
+    execute(db, 'BEGIN')
+    execute(db, 'CREATE VECTOR INDEX rolled_back ON inc(v)')
+    assert execute(db, 'SELECT id,n FROM inc ORDER BY id')['rows'] == sorted(before + [[4,4444]])
+    execute(db, 'ROLLBACK')
+    assert len(list((tmp_path/'objects').iterdir())) == 2
+    execute(db, 'DELETE FROM inc WHERE id=4')
+    execute(db, "INSERT INTO inc VALUES (4,5555,'[0,2]')")
+    assert execute(db, 'SELECT n FROM inc WHERE id=4')['rows'] == [[5555]]
+    db.close()
+    db = Engine(str(tmp_path))
+    assert execute(db, 'SELECT n FROM inc WHERE id=4')['rows'] == [[5555]]
+    db.close()
+
+
 def test_noop_and_failed_insert_leave_object_set_unchanged(tmp_path):
     db = Engine(str(tmp_path))
     execute(db, 'CREATE TABLE inc (id BIGINT PRIMARY KEY,n BIGINT)')

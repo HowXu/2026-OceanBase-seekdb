@@ -1,5 +1,6 @@
 #include "engine.hpp"
 #include "executor.hpp"
+#include "sql_fast_path.hpp"
 #include <type_traits>
 
 namespace minivectordb {
@@ -61,6 +62,12 @@ QueryResult Engine::execute(const Statement& statement, SearchMode mode) {
     collect_garbage();
   }
   return result;
+}
+
+std::optional<QueryResult> Engine::try_execute_insert(std::string_view sql, SearchMode mode) {
+  auto statement = try_parse_insert_values(sql);
+  if (!statement) return std::nullopt;
+  return execute(std::move(*statement), mode);
 }
 
 void Engine::close() {

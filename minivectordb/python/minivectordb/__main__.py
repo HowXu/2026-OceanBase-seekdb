@@ -39,7 +39,17 @@ def execute_request(engine, request):
         raise DatabaseError("invalid_request", "sql must be a string")
     if request.get("search_mode", "exact") not in ("exact", "ann"):
         raise DatabaseError("invalid_request", "invalid search_mode")
-    return engine.execute(parse_statement(request["sql"]), request.get("search_mode", "exact"))
+    sql = request["sql"]
+    try:
+        sql.encode("utf-8")
+    except UnicodeError as error:
+        raise DatabaseError("unsupported_sql", str(error)) from error
+    mode = request.get("search_mode", "exact")
+    fast_insert = getattr(engine, 'try_execute_insert', None)
+    result = fast_insert(sql, mode) if fast_insert is not None else None
+    if result is not None:
+        return result
+    return engine.execute(parse_statement(sql), mode)
 
 
 def main():
