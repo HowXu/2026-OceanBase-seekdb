@@ -95,10 +95,8 @@ bool TableFileReader::next(Row &row) {
     else {
       if (*c.length > in_.remaining() / 4)
         storage::fail("truncated vector");
-      std::vector<float> v;
-      v.reserve(static_cast<std::size_t>(*c.length));
-      for (std::uint64_t i = 0; i < *c.length; ++i)
-        v.push_back(std::bit_cast<float>(in_.u32()));
+      std::vector<float> v(static_cast<std::size_t>(*c.length));
+      in_.floats(v.data(), *c.length);
       decoded.emplace_back(std::move(v));
     }
   }

@@ -1,10 +1,13 @@
 #pragma once
 
 #include "types.hpp"
+#include <algorithm>
 #include <bit>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <vector>
 
 // Internal format primitives. All integers and IEEE float bits are little
 // endian.
@@ -86,10 +89,38 @@ public:
   void bytes(char *p, std::size_t n) {
     if (n > left_)
       fail("truncated input");
-    stream_.read(p, n);
-    if (!stream_)
-      fail("read failed");
-    left_ -= n;
+    while (n > 0) {
+      if (position_ == available_) {
+        if (n >= buffer_size) {
+          if (n > static_cast<std::uint64_t>(std::numeric_limits<std::streamsize>::max()))
+            fail("input read too large");
+          stream_.read(p, static_cast<std::streamsize>(n));
+          if (stream_.gcount() != static_cast<std::streamsize>(n))
+            fail("read failed");
+          left_ -= n;
+          return;
+        }
+        auto want = static_cast<std::size_t>(std::min<std::uint64_t>(left_, buffer_size));
+        buffer_.resize(buffer_size);
+        stream_.read(buffer_.data(), static_cast<std::streamsize>(want));
+        if (stream_.gcount() != static_cast<std::streamsize>(want))
+          fail("read failed");
+        position_ = 0;
+        available_ = want;
+      }
+      auto take = std::min(n, available_ - position_);
+      std::memcpy(p, buffer_.data() + position_, take);
+      p += take;
+      n -= take;
+      position_ += take;
+      left_ -= take;
+    }
+  }
+  void floats(float *destination, std::uint64_t count) {
+    if (count > UINT64_MAX / sizeof(float))
+      fail("vector byte size overflow");
+    bytes(reinterpret_cast<char *>(destination),
+          static_cast<std::size_t>(count * sizeof(float)));
   }
   std::uint8_t u8() {
     char c;
@@ -128,8 +159,12 @@ public:
   }
 
 private:
+  static constexpr std::size_t buffer_size = 64 * 1024;
   std::ifstream stream_;
   std::uint64_t left_ = 0;
+  std::vector<char> buffer_;
+  std::size_t position_ = 0;
+  std::size_t available_ = 0;
 };
 inline void write_schema(Output &out, const TableSchema &s) {
   out.text(s.name);

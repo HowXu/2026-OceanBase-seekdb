@@ -194,6 +194,9 @@ formal platform approval.
   table into a new base. Readers merge segments by PK and newest segment wins.
   Catalog/transaction snapshots copy metadata, not whole tables. Input batches
   and a single oversized row still require memory proportional to their sizes.
+  Storage input uses a bounded 64 KiB buffer per open segment and bulk float32
+  vector decoding. Derived PK membership sets use copy-on-write for INSERT and
+  DELETE, so duplicate checks and old-root isolation do not require a full-row scan.
 - Publication validates/syncs only new segments, writes a new catalog and
   atomically replaces one CURRENT for all tables before success. Recovery
   validates the complete logical tables reachable from CURRENT, syncs CURRENT

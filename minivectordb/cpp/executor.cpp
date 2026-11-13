@@ -29,6 +29,17 @@ std::vector<std::filesystem::path> table_paths(const TableEntry& entry, RootStor
   for (const auto& object : entry.objects) paths.push_back(store.object_path(object));
   return paths;
 }
+std::shared_ptr<std::unordered_set<std::int64_t>> primary_keys(const TableEntry& entry,
+                                                                RootStore& store) {
+  if (!entry.primary_keys) {
+    auto keys = std::make_shared<std::unordered_set<std::int64_t>>();
+    LogicalTableReader reader(table_paths(entry, store), entry.schema);
+    Row row;
+    while (reader.next(row)) keys->insert(key(row, entry.schema));
+    entry.primary_keys = std::move(keys);
+  }
+  return entry.primary_keys;
+}
 struct BoundExpression {
   std::optional<std::size_t> column;
   Cell literal = std::int64_t{0};
@@ -418,19 +429,19 @@ QueryResult insert_rows(const Insert& statement, Catalog& candidate, RootStore& 
   for (std::size_t i = 1; i < additions.size(); ++i)
     if (key(additions[i-1],schema) == key(additions[i],schema))
       semantic("duplicate_key", "duplicate primary key in insert request");
-  LogicalTableReader reader(table_paths(entry, store), schema);
-  Row row;
-  std::size_t i = 0;
-  while (reader.next(row)) {
-    while (i < additions.size() && less(additions[i], row)) ++i;
-    if (i < additions.size() && key(additions[i],schema) == key(row,schema))
+  auto existing_keys = primary_keys(entry, store);
+  for (const auto& addition : additions)
+    if (existing_keys->contains(key(addition, schema)))
       semantic("duplicate_key", "duplicate primary key");
-  }
+  auto next_keys = std::make_shared<std::unordered_set<std::int64_t>>(*existing_keys);
+  next_keys->reserve(existing_keys->size() + additions.size());
+  for (const auto& addition : additions) next_keys->insert(key(addition, schema));
   std::vector<DeltaRecord> changes;
   changes.reserve(additions.size());
   for (const auto& addition : additions)
     changes.push_back({key(addition, schema), false, addition});
   append_delta_or_compact(statement.table, changes, candidate, store);
+  candidate.find(statement.table).primary_keys = std::move(next_keys);
   return AffectedRows{static_cast<std::uint64_t>(additions.size())};
 }
 template<class Mutation>
@@ -465,6 +476,14 @@ QueryResult rewrite_rows(const Mutation& statement, Catalog& candidate, RootStor
     }
   }
   append_delta_or_compact(statement.table, changes, candidate, store);
+  if constexpr (std::is_same_v<Mutation,Delete>) {
+    if (!changes.empty()) {
+      auto next_keys = std::make_shared<std::unordered_set<std::int64_t>>(
+          *primary_keys(entry, store));
+      for (const auto& change : changes) next_keys->erase(change.key);
+      candidate.find(statement.table).primary_keys = std::move(next_keys);
+    }
+  }
   return AffectedRows{count};
 }
 }  // namespace

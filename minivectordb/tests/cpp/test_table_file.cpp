@@ -108,4 +108,27 @@ int main(int argc, char **) {
     while (r.next(row)) {
     };
   });
+  // Large text and float blocks cross the bounded input buffer. The logical
+  // remaining count must include buffered bytes and preserve every float bit.
+  auto blocks = d.path / "blocks.bin";
+  std::string large(70000, 'x');
+  std::vector<float> floats(65536);
+  for (std::size_t i = 0; i < floats.size(); ++i)
+    floats[i] = i == 0 ? -0.f : std::bit_cast<float>(static_cast<std::uint32_t>(i));
+  {
+    storage::Output out(blocks);
+    out.text(large);
+    for (float value : floats) out.u32(std::bit_cast<std::uint32_t>(value));
+    out.finish();
+  }
+  {
+    storage::Input in(blocks);
+    check(in.text() == large);
+    std::vector<float> decoded(floats.size());
+    in.floats(decoded.data(), decoded.size());
+    in.end();
+    for (std::size_t i = 0; i < floats.size(); ++i)
+      check(std::bit_cast<std::uint32_t>(decoded[i]) ==
+            std::bit_cast<std::uint32_t>(floats[i]));
+  }
 }

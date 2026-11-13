@@ -1,12 +1,16 @@
 #pragma once
 #include "types.hpp"
 #include <map>
+#include <memory>
+#include <unordered_set>
 
 namespace minivectordb {
 struct TableEntry {
   TableSchema schema;
   // Ordered immutable objects: base segment first, then oldest-to-newest deltas.
   std::vector<std::string> objects;
+  // Derived PK membership, copied on INSERT so old roots remain unchanged.
+  mutable std::shared_ptr<std::unordered_set<std::int64_t>> primary_keys;
 };
 enum class VectorIndexBackend { FlatScan = 1 };
 struct VectorIndexDescriptor {

@@ -45,10 +45,8 @@ Row read_row(storage::Input& in, const TableSchema& schema) {
       row.emplace_back(in.text());
     else {
       if (*column.length > in.remaining() / 4) storage::fail("truncated vector");
-      std::vector<float> vector;
-      vector.reserve(static_cast<std::size_t>(*column.length));
-      for (std::uint64_t i = 0; i < *column.length; ++i)
-        vector.push_back(std::bit_cast<float>(in.u32()));
+      std::vector<float> vector(static_cast<std::size_t>(*column.length));
+      in.floats(vector.data(), *column.length);
       row.emplace_back(std::move(vector));
     }
   }

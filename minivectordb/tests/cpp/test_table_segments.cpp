@@ -1,4 +1,5 @@
 #include "table_segments.hpp"
+#include "catalog.hpp"
 #include "test_storage_support.hpp"
 #include <algorithm>
 
@@ -60,4 +61,16 @@ int main() {
   wrong.name = "wrong";
   rejects([&] { validate_table_objects(paths, wrong); });
   rejects([&] { validate_table_objects({}, s); });
+  // Primary-key indexes use copy-on-write across Catalog roots.
+  Catalog catalog;
+  catalog.add(s, "objects/base.tbl");
+  auto& entry = catalog.find("docs");
+  entry.primary_keys = std::make_shared<std::unordered_set<std::int64_t>>(
+      std::initializer_list<std::int64_t>{1, 2});
+  Catalog old_root = catalog;
+  auto changed = std::make_shared<std::unordered_set<std::int64_t>>(*entry.primary_keys);
+  changed->insert(3);
+  entry.primary_keys = std::move(changed);
+  check(entry.primary_keys->contains(3));
+  check(!old_root.find("docs").primary_keys->contains(3));
 }
