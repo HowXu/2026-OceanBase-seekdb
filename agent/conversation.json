@@ -1,0 +1,825 @@
+{
+  "rule_version": "agent-learning-evidence-v3-unbounded",
+  "material_type": "real_development_session_selection",
+  "synthetic": false,
+  "source": {
+    "session_id": "01a1cf1a-2f89-72b4-927d-c7288cfe0547",
+    "through_session_line": 1427,
+    "selection": "Only visible user/assistant text. Tool results, compaction records and thinking fields are excluded.",
+    "student_text_policy": "Student messages are verbatim. No historical student statements were added or rewritten.",
+    "agent_result_policy": "Agent visible result summaries are included as results and are not attributed to the student."
+  },
+  "conversations": [
+    {
+      "id": "u03-initial-decomposition",
+      "source": "student",
+      "session_line": 29,
+      "content": "出文档吧 在这个仓库有相关的测试集可以用 通过那个就行了 压力测试后面再说\n\n语言用cpp+python\n\ncases里面有标准的result和test文件\n\n首先设计接口，用以接入测试体系，按照要求应该是标准mysql语法系统\n然后接入语法解析，这个就用现成的 SQLGlot 只需要解析能力就行了\n然后先让测试能跑过，全部输出false都行\n再设计需要的精确查询 存储、语句原子性、事务与恢复\n最后性能优化部分\n\n出一份plan"
+    },
+    {
+      "id": "u04-test-strategy",
+      "source": "student",
+      "session_line": 55,
+      "content": "pybind可以\n\n对于12个任务 每个任务应该有少量的测试来固定表现 总的case是用于赛题提交的\n\n允许使用至多3个subagent并行实现\n\n更新一下文档"
+    },
+    {
+      "id": "u19-scope-correction",
+      "source": "student",
+      "session_line": 395,
+      "content": "撤除本轮 NULL 扩展，恢复原来的明确拒绝行为。\n\n没有失败报告 只能我们自己摸索到底是哪里不符合测试了\n这个准入测试其实还是有队伍通过了的，参考/home/howxu/Projects/2026-OceanBase-seekdb/chores/加赛赛题一：完成一个轻量向量数据库_files 这是赛题网页的文档，再看看还有哪些提到的要求没有做到"
+    },
+    {
+      "id": "u20-delivery-flow-question",
+      "source": "student",
+      "session_line": 418,
+      "content": "着重再看一下判题流程 也有可能是按照标准判题流程根本判不了导致的不通过"
+    },
+    {
+      "id": "u24-delivery-decision",
+      "source": "student",
+      "session_line": 436,
+      "content": "它是强制必须这个2026-round2那个分支吗 如果这样的话把这个分支的内容merge到要求的分支 推送到origin"
+    },
+    {
+      "id": "u29-protocol-audit-request",
+      "source": "student",
+      "session_line": 509,
+      "content": "依旧0分未通过 我还是认为问题出在流程上而非当前实现上\n\n首先，赛题内容再次检查2.1 2.2和2.3是否已经按照要求实现规整\n其次，再次根据3.1 3.2的测试要求进行完整检查，测试需求是要求了stdin和stdout 已经stderr进行的，并非其它接口\n再者，根据4.2.1 Dockerfile的要求，再次检查提交问题。当前环境已经可以使用docker，我们可以完全模拟测试机进行一次流程。\n最后，必须检查STDIO_PROTOCOL.md和protocol_check/README.md的要求，其中提到了一些特殊步骤 比如主动输出等等，STDIO_PROTOCOL.md声明了判题器流程。这两个文档的要求必须一个一个的满足，你必须检查完成后按条给出报告给我看"
+    },
+    {
+      "id": "u34-protocol-challenge",
+      "source": "student",
+      "session_line": 607,
+      "content": "不再采用此前示例中的 JSON 请求／响应封装 这个应该是说的另外一些题目的问题\n\n再按照公开题包和公开检查驱动看一下"
+    },
+    {
+      "id": "u35-formal-boundaries",
+      "source": "student",
+      "session_line": 625,
+      "content": "还有一些要求再复查一遍:\n\nmysqltest/README.md\n\n以下功能仍属于正式要求，不能因本包没有相应完整用例而省略：\n\n- 拒绝 NaN、Infinity、维度错误、float32 溢出等非法向量。\n- 失败语句不能部分生效；显式事务之前的成功修改仍可提交或回滚。\n- 已确认提交在进程强杀后保留，未提交修改不部分生效；恢复途中再次退出仍能恢复。\n- 能处理超过内存限额的数据，不能只依赖全量常驻内存。\n- ANN 必须满足过滤、有效 ID、无重复及题包规定的召回率，索引更新不能破坏事务语义。\n\n隐藏的是测试数据，而非功能要求。正式题目的完整语法、资源预算和冻结配置以统一题包为准。"
+    },
+    {
+      "id": "u37-external-reference-context",
+      "source": "student",
+      "session_line": 672,
+      "content": "没招了 只能剑走偏锋了 我要到了和我同时参赛愿意提供一些帮助的teammate的仓库\n\nhttps://github.com/Dline666/seekdb-2026\n\n他们有四个分支是相关round2的，其中pef分支有60+commit应该是在做性能优化，大概率是已经通过了正确性部分的。参考我们的实现在6000+行以内，去掉perf分支还有3个分支在2w行以内。我需要你参照赛题标准，研究一下这三个分支额外做了什么工作使其通过了正确性测试，包括输入输出格式，包括dockerfile构建，包括某些sql错误处理等等"
+    },
+    {
+      "id": "u41-known-good-baseline",
+      "source": "student",
+      "session_line": 721,
+      "content": "现在可以完全确定correct的实现是完全正确的 可以通过测试的 以b410e23ac01bcbf1df342faa6030034ab1d05e6c的测试结果为准\n\n现在可以完全把目标指向origin的correct-test分支的b410e23ac01bcbf1df342faa6030034ab1d05e6c 探究为什么这个实现可以通过正确性测试"
+    },
+    {
+      "id": "u49-performance-baseline-request",
+      "source": "student",
+      "session_line": 1127,
+      "content": "不用管这些了 已经通过了 接下来进行性能优化部分\n\n按照赛题我们自己先做出一套压测出来，然后拿perf跑一下。压测把每个环节的计时也留下来，然后得到一份基准。当前实现性能有点差的只有200分"
+    },
+    {
+      "id": "u53-performance-hypotheses",
+      "source": "student",
+      "session_line": 1261,
+      "content": "本地压测作为基准线进行保存，性能测试脚本保留，接下来进行性能优化\n\n首先对于逐字节解码应该是比较容易处理的\n查询的多段打开通过某些hold方法应该就可以解决(或者其它方法也可以)\nINSERT重复键位用PK集合应该就可以处理"
+    },
+    {
+      "id": "u01-prompt-purpose",
+      "source": "student",
+      "session_line": 5,
+      "content": "https://oceanbase.yuque.com/org-wiki-obtech-vh7w9r/hc3pio/lg8enxlmwg69unt6 这是第二轮的题目 我们主要做的是数据库部分 但是我没懂这个prompt题是什么意思 你先fetch这个网页看一下"
+    },
+    {
+      "id": "u02-library-and-difficulty",
+      "source": "student",
+      "session_line": 23,
+      "content": "理解了\n\n关于这个向量数据库的设计和实现 难度高吗\n\nSQL语法解析应该是可以直接用已有的优良实现的 向量数据库部分有好的参考吗"
+    },
+    {
+      "id": "u08-initial-completeness-audit",
+      "source": "student",
+      "session_line": 235,
+      "content": "先暂停这一部分\n\n我需要你确定以下内容:\n\n1. 按照比赛流程的测试流程 我们的docker文件和项目设置是否可以在不进行额外干预的情况下完全符合比赛测试流程\n2. 比赛已有的sqltests cases是如何进行测试的\n3. 我注意到我们的实现似乎有些不完整 你确定除掉性能优化环节的内容都已经做了初版吗"
+    },
+    {
+      "id": "u09-case-command",
+      "source": "student",
+      "session_line": 257,
+      "content": "按照比赛流程 它们会怎么进行cases测试 python3 protocol_check/run.py --image <镜像名> --output <新目录> 是这个命令吗 还是说要进行服务端客户端通信"
+    },
+    {
+      "id": "u10-stdio-design",
+      "source": "student",
+      "session_line": 259,
+      "content": "STDIO_PROTOCOL.md 对于标准输入输出协议 我们的设计符合吗"
+    },
+    {
+      "id": "u12-formal-gate",
+      "source": "student",
+      "session_line": 292,
+      "content": "MySQL 正式用例    —    —    \n\n未通过；此项为准入条件，不计排名分"
+    },
+    {
+      "id": "u13-boundary-question",
+      "source": "student",
+      "session_line": 294,
+      "content": "考虑边界值和持续写入问题了吗"
+    },
+    {
+      "id": "u18-requirements-recheck",
+      "source": "student",
+      "session_line": 385,
+      "content": "本题不要求 NULL、JOIN、聚合、子查询、ALTER TABLE、外键、嵌套事务或主键更新。不支持的语句须返回约定错误，不能静默执行为其他含义。\n主键不可重复。VARCHAR 长度按 Unicode 字符数计算，字符串比较按 Unicode 码点顺序，不做语言相关排序。向量为固定维度 float32 数组，输入必须是可表示为有限 float32 的数值，拒绝 NaN、Infinity、维度不符及转换溢出。距离按存储后的向量计算，输出允许统一的浮点误差。\n\n这些考虑了吗\n\n2.4 得分机制\n总分 80 分，按第 3 章的测试方法依次完成 MySQL case 功能准入、性能 benchmark 和 Agent prompt 评价。功能测试不单独计分；性能与 Agent prompt 各占 40 分，分别排名后换算得分。\n评测环节    测试方法与计分依据    计入总分\nMySQL case 功能准入    配套测试驱动通过 stdin/stdout 执行 SQL，校验 SQL、存储、向量检索、事务、恢复与资源约束；全部正式用例通过后才具备计分资格，详见第 3.2 节    不单独计分\n小型性能 benchmark    对批量写入和向量 TopK 查询测量耗时 T、磁盘 I/O B、峰值内存 M，按综合性能指标独立排名，详见第 3.3 节    最高 40 分\nAgent prompt 评价    对问题理解与自主拆解、技术理解与迁移、独立验证与质疑、实验与反馈迭代、取舍与反思五个维度，累计独立证据实例得分；原始评价分不设上限，独立排名，详见第 3.4 节    最高 40 分\n\n这些考虑了吗"
+    },
+    {
+      "id": "u21-runtime-requirements",
+      "source": "student",
+      "session_line": 421,
+      "content": "开发语言和本地操作系统不限，正式运行环境统一为 Linux x86_64 容器。选手提交 Dockerfile，由平台构建并锁定镜像；正式执行时禁止联网，依赖须在构建阶段安装完成并锁定版本。\n容器启动后直接以前台方式运行数据库程序，通过标准输入（stdin）接收 MySQL 测试驱动提供的 SQL，通过标准输出（stdout）返回查询结果和执行状态。程序保持运行，支持同一进程内连续执行多条语句及事务，不启动网络监听服务。\nSQL 的语句边界、结果集格式、错误码、就绪标识、精确／近似模式切换及正常退出方式，统一遵循 2026-competition-round2 分支配套测试驱动和题包约定，不再采用此前示例中的 JSON 请求／响应封装。日志及调试信息写入标准错误（stderr），不得混入标准输出中的评测结果。\n程序须及时刷新标准输出缓冲区，避免测试驱动因等待结果而超时。正常关闭时回滚未提交事务并完成必要落盘；异常恢复测试直接强制终止进程，重启时复用 /data 数据目录。正常关闭信号或命令以题包为准。\n运行环境、基础镜像、可用依赖、CPU、内存、磁盘、启动及查询超时、数据规模、向量维度和 K 的范围，须在首日开始前随题包冻结发布，赛中不临时增加语言或环境限制。预检与正式评测采用同一运行协议。"
+    },
+    {
+      "id": "u22-public-package-scope",
+      "source": "student",
+      "session_line": 424,
+      "content": "题包提供公开样例、协议检查工具和故障测试示例，选手可自行重复运行"
+    },
+    {
+      "id": "u23-dockerfile-requirements",
+      "source": "student",
+      "session_line": 429,
+      "content": "再注意看4.2.1的dockerfile要求和示例"
+    },
+    {
+      "id": "u26-sql-docker-validation",
+      "source": "student",
+      "session_line": 453,
+      "content": "SQL 缺陷需要处理\n\n我已经在本机安装了docker 你现在可以用docker验证了"
+    },
+    {
+      "id": "u27-docker-user",
+      "source": "student",
+      "session_line": 464,
+      "content": "使用我的用户看一下能不能连"
+    },
+    {
+      "id": "u30-web-vs-implementation",
+      "source": "student",
+      "session_line": 595,
+      "content": "STDIO_PROTOCOL.md 明确要求 JSONL；\n - mysqltest/README.md 明确要求 JSONL；\n - 原始驱动实际发送 id/op/sql/search_mode JSON；\n - 原始驱动明确不转换裸 SQL 或文本 READY\n\n网页上怎么说的 当前是什么实现"
+    },
+    {
+      "id": "u31-bare-sql-output",
+      "source": "student",
+      "session_line": 597,
+      "content": "如果它的正式测试不是JSON 直接是裸的SQL语句 上述一系列文档有说需求它输出什么吗"
+    },
+    {
+      "id": "u32-case-transport-format",
+      "source": "student",
+      "session_line": 599,
+      "content": "cases比较的脚本里面有写从stdin输入和stdout拿东西的格式吗"
+    },
+    {
+      "id": "u33-branch-protocol-source",
+      "source": "student",
+      "session_line": 603,
+      "content": "SQL 的语句边界、结果集格式、错误码、就绪标识、精确／近似模式切换及正常退出方式，统一遵循 2026-competition-round2 分支配套测试驱动和题包约定，不再采用此前示例中的 JSON 请求／响应封装。日志及调试信息写入标准错误（stderr），不得混入标准输出中的评测结果。\n\n测试驱动和题包约这个分支有吗"
+    },
+    {
+      "id": "u36-error-response",
+      "source": "student",
+      "session_line": 657,
+      "content": "报错返回符合要求吗"
+    },
+    {
+      "id": "u38-reference-correctness",
+      "source": "student",
+      "session_line": 679,
+      "content": "我就这么说 这个仓库百分百已经通过了正确性测试"
+    },
+    {
+      "id": "u39-index-permission",
+      "source": "student",
+      "session_line": 686,
+      "content": "允许自行开启索引"
+    },
+    {
+      "id": "u42-five-fixes-approval",
+      "source": "student",
+      "session_line": 767,
+      "content": "这五个问题都要修复"
+    },
+    {
+      "id": "u43-storage-choice",
+      "source": "student",
+      "session_line": 786,
+      "content": "可以 A应该是最优选"
+    },
+    {
+      "id": "u48-second-sql-audit",
+      "source": "student",
+      "session_line": 1075,
+      "content": "继续核对确定通过的版本和当前版本的差异 看看还有没有某些遗漏会导致准入测试不通过的\n\n从表现上来看SQL相关部分的出错概率会更高 着重排查这一点\n\n在结构上我们和teammate的版本只是语言不同，从输入输出协议和docker上基本已经可以排除问题了，大概率还是在SQL实现和某些边界问题上"
+    },
+    {
+      "id": "u50-perf-availability",
+      "source": "student",
+      "session_line": 1136,
+      "content": "可以 本地有perf的吧 没安装你自己下载一个也可以"
+    }
+  ],
+  "experiments": [
+    {
+      "id": "r01-implementation-plan",
+      "title": "Initial twelve-task implementation plan",
+      "source": "agent_visible_result_summary",
+      "session_line": 54,
+      "output": "计划已写入仓库：\n\n**[docs/superpowers/plans/2026-11-11-minivectordb-cpp-python.md](docs/superpowers/plans/2026-11-11-minivectordb-cpp-python.md)**\n\n按你的顺序拆成了 12 个任务，每项都有文件路径、接口、验收命令和完成标准：\n\n1. **接口与通信骨架**：先打通 ready、execute、shutdown，SQL 暂时允许全部返回 `ok:false`。\n2. **SQLGlot 解析接入**：只解析成受控 IR，不使用其执行能力。\n3. **全量测试诊断**：能尝试全部 95 条 SQL、收集失败；明确区分“链路跑通”和“断言通过”。\n4. **类型、存储与精确查询**：实现标量 CRUD、float32 向量、过滤后 TopK、排序。\n5. **原子性、事务与恢复**：失败语句不部分生效，支持提交、回滚、正常重启与强杀恢复。\n6. **公开功能验收与容器交付**：以原驱动 **20/20 PASS** 为阶段目标。\n7. **性能优化**：单列最后阶段，本轮不执行压测或 ANN 加速。\n\n### 核对后确定的几个关键点\n\n- **接入协议不是 MySQL 网络协议，而是 stdin/stdout JSONL**，仓库已有驱动可以直接复用。\n- SQLGlot `30.31.0` 已实测全部公开 SQL；`CREATE VECTOR INDEX` 会退化成 `Command`，计划明确安排窄语法扩展。\n- C++/Python 建议通过 **pybind11 同进程连接**。\n- 存储初版建议采用 **不可变表文件 + 原子提交根切换**：逐行处理数据，先接受修改时的重写 I/O，换取清晰的原子性与恢复逻辑，性能后续再优化。\n\n已检查文档的测试集覆盖、Python 示例语法与 Shell 命令语法。**本轮只新增计划，没有修改实现、公开测试或你已有的改动，也没有提交 Git。**\n\n你可以先重点看文档第 **2 节路线取舍**和第 **5 节存储设计**；确认后再按任务开始实现。"
+    },
+    {
+      "id": "r02-task-tests",
+      "title": "Task-level regression result",
+      "source": "agent_visible_result_summary",
+      "session_line": 853,
+      "output": "Task 1 已完成：117项通过。修正了一处测试预期：`ORDER BY 2 DESC` 应按 id 降序，参考结果为我们已确认的 `id=3,2,1`，不是实现迁就测试。现在开始名称与表级主键的 RED。"
+    },
+    {
+      "id": "r03-null-withdrawal",
+      "title": "NULL scope correction result",
+      "source": "agent_visible_result_summary",
+      "session_line": 408,
+      "output": "NULL 源码和测试已恢复到第一版，原来的 NULL 拒绝测试已重新通过；撤除前的补丁和日志只保留在忽略目录中，作为历史记录。\n\n网页正文位于同名 `.html` 文件，`_files` 目录主要是样式和脚本。我已读完整正文。接下来重点检查两类公开样例覆盖不足的要求：超过内存预算的数据处理与恢复，以及普通 SQL 在边界写法下的语义。网页与当前题包的协议措辞有出入，但网页明确让题包决定协议，因此不会据此把 JSONL 改成裸 SQL。"
+    },
+    {
+      "id": "r04-branch-delivery",
+      "title": "Required branch delivery result",
+      "source": "agent_visible_result_summary",
+      "session_line": 439,
+      "output": "按赛题第 4.1 节，要求的准确分支名是 **`2026-competition-round2`**。已完成合入并推送到 `origin`。\n\n### 当前状态\n- 使用**快进合并**，没有新增合并提交、没有强推。\n- `kernel/round2` 保持不变。\n- 当前位于 `2026-competition-round2`，工作区干净。\n- NULL 扩展已撤除，恢复明确拒绝行为。\n\n### 提测信息\n```text\n仓库：https://github.com/HowXu/2026-OceanBase-seekdb\n分支：2026-competition-round2\nCommit：3e6792da48a533ee09160c8f9677ab02bb42ca09\n```\n\n已查询远端，确认目标分支指向上述完整 SHA。\n\n### 推送前验证\n- CTest：**10/10 通过**\n- pytest：**124/124 通过**，包含 Podman 容器测试\n- 从该提交的纯源码归档进行无缓存 Podman 构建：成功，不依赖本地预编译文件\n\n这消除了“要求的分支上没有实现”的交付风险，**但尚不能断定此前失败就是这个原因，也不代表正式准入通过**。`conversation.json` 仍为空，Agent 材料尚未处理。"
+    },
+    {
+      "id": "r05-protocol-recheck",
+      "title": "Protocol challenge and original-driver result",
+      "source": "agent_visible_result_summary",
+      "session_line": 624,
+      "output": "已按**官方分支的公开题包和实际检查驱动**重新核对并复测。\n\n**结论：按这套明确可执行的标准，JSONL 就是正确协议，当前实现不应该改成裸 SQL。** 我此前仅凭“此前示例”就将其判为当前协议冲突，判断过强，已修正报告。\n\n## 逐项对照\n\n| 公开驱动实际要求 | 当前实现 | 结果 |\n|---|---|---|\n| 启动后先等精确 `{\"type\":\"ready\"}`，不先发 SQL | 初始化、恢复完成后主动输出，随后才读 stdin | 符合 |\n| 一行 JSON 请求，含 `id/op/sql/search_mode` | 逐行解 JSON，再执行 `sql` | 符合 |\n| stdout 每条响应一行 JSON、换行并及时 flush | `emit()` 序列化并显式 flush | 符合 |\n| 原样返回 id，保持类型；ok 必须为 bool | 成功、错误和关闭响应均按要求返回 | 符合 |\n| 比较 columns、rows、affected_rows | 当前返回相应字段，按原断言比较通过 | 符合 |\n| 无序结果按多重集合比较，不能丢重复行 | 未对输出去重，原比较器检查通过 | 符合 |\n| 错误返回 `ok:false` 和非空 error.code，随后继续 | 当前按此处理 | 符合 |\n| `--mode ann` 由驱动转成请求参数，不作为 SQL | 支持 exact/ann 参数 | 符合 |\n| `--restart` 正常关闭后同卷启动，再等 ready | 提交保留、未提交回滚，同卷恢复 | 符合 |\n| shutdown 响应后退出 0，不再输出任何内容 | 当前先关闭引擎、回复，再退出 | 符合 |\n| stderr 单独收集，不参与结果比较 | 日志写 stderr | 符合 |\n| 默认 Docker 入口、只读根、可写 `/data`，不补私参 | 实际 `--image` 路径可运行 | 符合 |\n\n## 本次重新运行结果\n\n使用当前提交 `c4a54ebef06bf7ab5686b2c4866b53c658782b62` 对应的实际 Docker 镜像，运行干净克隆中的**原始驱动**：\n\n| 检查 | 结果 |\n|---|---|\n| `--image … --handshake-only` | **PASS** |\n| `--image … --case sql_crud` | **PASS** |\n| `--image …` 全部公开用例 | **20/20 PASS，95 条 SQL** |\n\n没有使用 `--command`、没有覆盖 config、没有修改用例或断言，所有公开用例的 stderr 均为 **0 字节**。\n\n最新证据：\n`.superpowers/sdd/public-package-recheck/run-eKPRnTY8/summary.json`\n\n修正后的逐条报告：\n[`docs/superpowers/experiments/2026-11-11-minivectordb-flow-compliance.md`](docs/superpowers/experiments/2026-11-11-minivectordb-flow-compliance.md)\n\n**所以，这次没有在公开题包规定的启动、通信、比较、重启或退出流程中找到对接错误。后续不应继续围绕“是否改裸 SQL”打转，应排查公开包未覆盖的正式场景或平台任务实际锁定的版本和失败阶段。**\n\n本轮未改生产代码、驱动、题包或配置，也未提交、推送。"
+    },
+    {
+      "id": "r06-formal-boundary-results",
+      "title": "Vector, transaction, recovery, resource and ANN checks",
+      "source": "agent_visible_result_summary",
+      "session_line": 642,
+      "output": "五条定向检查已完成，本轮没有复现失败：\n\n- 21 种非法向量 × 5 条入口路径，共 **105 项拒绝检查通过**，每次失败后都核对了完整表状态。\n- 已验证失败语句后仍可 COMMIT 或 ROLLBACK，以及已确认提交、未提交修改在实际容器强杀后的状态。\n- 3 个固定种子、8/16/128 维、24 个索引/事务/恢复状态，共 **1,728 次 exact/ann 查询**通过独立真值核验。ANN 的有过滤、无过滤非空组平均 Recall 均为 **1.0**，空集不计入均值。\n- 新空卷复跑了 2 GiB 限额下的 2,112 MiB 数据及恢复中再次强杀检查，约 **97.6 秒**完成，无 OOM。\n- 最后原始公开驱动仍为 **20/20 通过**。\n\n我会把这轮证据按五条要求写入单独记录，并明确区分“这些定向检查通过”和“正式全部用例通过”。",
+      "later_correction": "See r07-differential-findings: the later comparison withdrew 10 checks involving [+1,0] and [01,0] from formal-compliance evidence."
+    },
+    {
+      "id": "r07-differential-findings",
+      "title": "Known-good differential findings",
+      "source": "agent_visible_result_summary",
+      "session_line": 765,
+      "output": "已按你的要求，**只以 `origin/correct-test@b410e23` 已通过正式正确性为基准**，与我们的 `c4a54eb` 做了源码和实际 Docker 差分。\n\n现在有具体结论了：**主要差距不是 JSONL 外壳，而是 SQL 语义绑定、输入边界，以及持续小批写入的成本。** 不需要先推翻 Python+C++ 架构，也不应该继续只靠公开 20/20 判断完整性。\n\n## 1. 找到了确定的错误：ORDER BY 序号被静默执行成常量\n\n数据为：\n\n```text\nid  n\n1   20\n2   10\n3   20\n```\n\n执行：\n\n```sql\nSELECT n,id FROM t ORDER BY 1,id;\n```\n\n| 实现 | 实际结果 |\n|---|---|\n| 已通过基准 | `[[10,2],[20,1],[20,3]]` |\n| 我们 | `[[20,1],[10,2],[20,3]]` |\n\n基准将 `1` 绑定到第一个投影列；我们把它当整数常量，所有行排序键相同，最后退化为按主键排序。\n\n此外：\n\n```sql\nSELECT id FROM t ORDER BY 0;\nSELECT id FROM t ORDER BY 2;\n```\n\n只有一个输出列，基准均报错，我们却返回成功。\n\n**这不是单纯“少支持一个可选语法”：即使决定不支持，也必须明确拒绝，不能成功执行另一种含义。**\n\n## 2. 我们把一部分常规 SQL 写法限制得过窄\n\n以下都已实际复现：\n\n| 写法 | 已通过基准 | 我们 |\n|---|---|---|\n| 定义 `id`，查询 `ID`，包括反引号形式 | 成功 | `unknown_column` |\n| `n AS Score ... ORDER BY SCORE` | 成功 | `unknown_column` |\n| INSERT/UPDATE/DELETE 使用大写列名 | 成功 | 报错 |\n| 表级 `PRIMARY KEY(id)` | 成功 | 拒绝 `PrimaryKey` 节点 |\n| `SELECT t.id FROM t` | 成功 | 拒绝限定名 |\n| `SELECT a.id FROM t AS a` | 成功 | 拒绝限定名/别名 |\n| 同时定义 `N BIGINT,n BIGINT` | 拒绝重复列 | 错误接受 |\n\n源码上的区别很直接：\n\n- 基准有专门的名称解析、大小写匹配、序号绑定、限定名验证。\n- 我们的 SQLGlot→IR 白名单对这些形式直接拒绝，或者没有建立对应的绑定规则。\n\n这也解释了之前“错误返回符合协议”为什么不足以证明正确性：\n\n> **错误 JSON 的格式可以完全正确，但这条合法 SQL 本来就不应该报错。**\n\n表名大小写策略、部分其他扩展没有完全冻结，报告里单独标为兼容差异，没有一概认定必须照搬。\n\n## 3. 向量策略需要纠正，不能把“拒绝得严格”当作正确\n\n基准接受，而我们拒绝：\n\n```text\n[+1,0]   [01,0]   [.5,0]   [1.,0]\n[1e-46,0] [1e-50,0] [1e-320,0] [1e-999,0]\n```\n\n后四种在基准中实际存成有限 float32 零，已经回读验证，不是只检查 INSERT 成功。\n\n我们的差异有两层：\n\n- 词法采用了更接近 JSON number 的限制，但向量本身是 SQL 字符串，题面没有明确规定必须使用这套数字词法。\n- `from_chars<float>` 的范围错误被统一拒绝，没有区分**溢出**与**下溢到零**。\n\n因此我已纠正之前的报告：\n\n**原“105 项非法向量拒绝”中，`[+1,0]`、`[01,0]` 两种格式×5路径，共10项，不再作为“拒绝即正式合规”的证据。** 原始结果保留，NaN/Infinity、维度错误等独立验证不受影响。\n\n## 4. JSON 协议相同，但输出列名确实存在差异\n\n例如：\n\n```sql\nSELECT L2_DISTANCE(v,'[0,0]') FROM t ORDER BY id;\n```\n\n两边距离值相同，但默认列名是：\n\n```text\n基准：L2_DISTANCE(v,'[0,0]')\n我们：L2_DISTANCE(v, '[0,0]')\n```\n\n小写函数输入也会被我们统一成大写列名。\n\n**这不是 JSON 排版空白，而是 `columns` 字符串的实际内容不同。** 原驱动精确比较列名，因此不能只检查 rows。默认表达式列名的完整冻结规则尚未取得，所以这里标为明确差异，而不是冒称已经知道隐藏断言。\n\n反过来，下列方向没有证据支持：\n\n- 改成裸 SQL/TSV；\n- 换 MySQL TCP 协议；\n- 仅把错误 message 改成 `ERROR 1062...`；\n- 因为基准使用 Ubuntu，就认为 Python 基镜像被禁止。\n\n基准使用的仍是同一套官方 JSONL 协议和原始公开题包。\n\n## 5. 小批写入成本差距非常明显，不能只视为排名优化\n\n实际 Docker 对照条件：\n\n- 8,000行、128维，约5MB数据；\n- 同样的2 CPU、2GiB限制；\n- 加载后建索引，再做64次单行 UPDATE；\n- 检查数据、exact/ann查询，并实际强杀重启。\n\n| 指标 | 已通过基准 | 我们 |\n|---|---:|---:|\n| 64次 UPDATE 的设备写入 | **296 KiB** | **298 MiB** |\n| 写入量比值 | 1 | **约1,031倍** |\n| 最终数据文件 | 约4.95MB | 约4.87MB |\n| 结果与强杀恢复 | PASS | PASS |\n\n原因不是猜测：\n\n- **基准：**追加变更行日志，维护主键→行偏移，提交后同步日志。\n- **我们：**每次修改流式重写整表，发布时还扫描、同步候选根中的表。\n\n最终文件大小相近，说明不是简单的永久文件泄漏，而是反复重写已有数据。\n\n本轮两边都没有超出诊断预算，**没有据此宣称复现了正式超时**。但这个差距会消耗功能用例的时间和I/O预算。此前“大字段、少数大批次、总量超过内存”通过，不能覆盖“大量普通行、持续小批修改”的数据形状。\n\n## 为什么它能过，应该怎样借鉴\n\n从这次对照看，最值得借鉴的是：\n\n1. **解析之后仍有完整的语义绑定**，不是只把 AST 转成有限 IR。\n2. 对最小 SQL 子集中的常规表达方式更包容，同时验证名称和位置是否合法。\n3. 存储按变更量追加，避免每次小修改都支付整表成本。\n4. 有内存预算与扫描回退；ANN 也不是所有场景都强行近似。\n\n所以，**不需要因为它通过了，就复制全部额外语法、恢复 NULL，或者立即迁移整套 IVF。**\n\n建议下一步顺序是：\n\n**ORDER BY 静默错误 → 名称解析/主键/限定名 → 向量策略与列名元数据 → 单独设计持续小批写入改进。**\n\n完整报告已写入：\n\n[docs/superpowers/experiments/2026-11-12-minivectordb-known-good-comparison.md](docs/superpowers/experiments/2026-11-12-minivectordb-known-good-comparison.md)\n\n本轮没有修改生产代码、Dockerfile、公开用例或断言，也没有提交、推送。以上已经解释了具体实现差距，但不把其中任何一条冒称为当时正式0分的唯一触发点。"
+    },
+    {
+      "id": "r08-five-fixes-results",
+      "title": "Five fixes and independent regression results",
+      "source": "agent_visible_result_summary",
+      "session_line": 1063,
+      "output": "五项修复均已在当前工作区实现并验证：\n\n- **SQL：**序号排序、名称绑定、表级主键、限定名、括号和原始列名已修复。\n- **向量：**支持基准中的数字格式及 float32 下溢，继续拒绝 NaN/Inf 和溢出。\n- **存储：**基础段＋最多64个增量段，DML 只写变更，超限后确定性合并。\n- **回归：**11/11 CTest、188/188 pytest、原公开20/20（95 SQL）通过。\n- **差分：**五个目标组的24项原有差异全部通过独立预期。\n- **写入：**64次 UPDATE 从 **312,475,648** 降至 **5,656,576字节**，减少 **98.19%**。\n- **资源：**2,112MiB 数据在2GiB限制下通过查询、重复恢复和 ready 前强杀测试，无 OOM。\n- **镜像：**`sha256:58cd76b9a7a4998c71060f24f535b2331d8be9c39e4273ee7d4d070642a9aed0`\n\n验证报告：\n\n[docs/superpowers/experiments/2026-11-12-minivectordb-five-fixes-verification.md](docs/superpowers/experiments/2026-11-12-minivectordb-five-fixes-verification.md)\n\n未修改官方题包、协议或断言；未 stage、commit、push；测试容器和卷已清理。这些结果不冒充正式隐藏用例通过。\n\nImplementation complete. What would you like to do?\n\n1. Merge back to `kernel/round2` locally\n2. Push and create a Pull Request\n3. Keep the branch as-is (I'll handle it later)\n4. Discard this work\n\nWhich option?"
+    },
+    {
+      "id": "r09-performance-baseline",
+      "title": "Three-round baseline and perf findings",
+      "source": "agent_visible_result_summary",
+      "session_line": 1260,
+      "output": "本地三轮压测和 perf 采样已完成，生产实现未改动。\n\n## 基线结果（三轮中位数）\n\n| 项目 | T | B | M |\n|---|---:|---:|---:|\n| 写入：10,000行、100批 | **6.732秒** | 11,284,480 B | 42,348,544 B |\n| 查询：1,000次 exact TopK | **58.800秒** | 11,288,576 B | 42,373,120 B |\n\n查询分位点：\n\n- p50：58.39ms\n- p95：62.84ms\n- p99：65.71ms\n- 有过滤/无过滤 Recall@10：均为 **1.0**\n\n每批、每次查询的原始计时均已保存。写入后重启并分页核对了全部10,000行和1,280,000个向量分量的 float32 bits。\n\n## perf 结论\n\n查询 cpu_core 样本中：\n\n- 四个 iostream 读取函数合计 **72.36%** 自耗时；\n- `l2_distance_squared` 仅 **1.33%**。\n\n写入样本中，同类读取函数合计约 **58.62%**。\n\n因此当前主要瓶颈是：\n\n1. `Input::u8/u32` 驱动的逐字节 ifstream 解码；\n2. 每次查询的多段文件打开、路径检查和逻辑归并；\n3. INSERT 为重复键检查而扫描完整逻辑表。\n\n**不是欧氏距离数学计算本身。**\n\n建议下一轮优先验证：\n\n- 用有界块读取/pread 或 mmap 替代逐字节流读取；\n- 在索引准备阶段合并段，或为 TopK 提供只读必要列的扫描路径；\n- 用内存 PK 集合减少 INSERT 全表重复键扫描。\n\n完整报告：\n\n[docs/superpowers/experiments/2026-11-12-minivectordb-performance-baseline.md](docs/superpowers/experiments/2026-11-12-minivectordb-performance-baseline.md)\n\n工具位于 `tools/benchmark/`；原始三轮数据、响应、perf.data 和调用图位于 `.superpowers/sdd/performance-baseline/`。工具测试5项通过，无遗留容器、卷或 perf 进程。本地结果不冒充平台分数。\n\nImplementation complete. What would you like to do?\n\n1. Merge back to `kernel/round2` locally\n2. Push and create a Pull Request\n3. Keep the branch as-is (I'll handle it later)\n4. Discard this work\n\nWhich option?"
+    },
+    {
+      "id": "r10-performance-optimization",
+      "title": "Final optimization, regression and rollback results",
+      "source": "agent_visible_result_summary",
+      "session_line": 1409,
+      "output": "首轮性能优化已完成，基线和压测脚本均已保存。\n\n## 最终三轮中位数对比\n\n| 项目 | 指标 | 基线 | 优化后 | 变化 |\n|---|---|---:|---:|---:|\n| 写入 | T | 6.732秒 | **4.089秒** | **减少39.26%** |\n| 查询 | T | 58.800秒 | **7.600秒** | **减少87.07%** |\n| 写入 | B | 11,284,480 B | 11,280,384 B | 基本持平 |\n| 查询 | B | 11,288,576 B | 11,288,576 B | 相同 |\n| 写入 | M | 42.35 MB | 46.02 MB | **增加8.68%** |\n| 查询 | M | 42.37 MB | 45.78 MB | **增加8.04%** |\n\n## 保留与回退\n\n- **保留：**64KiB有界输入缓冲、float32整块解码、INSERT/DELETE 的 COW 主键集合。\n- **回退：**reader 持有没有收益，查询单轮从6.93升至7.58秒，相关生产改动已全部移除，不利证据保留。\n- DELETE 后重插入的 PK 集合问题被回归测试发现并已修复。\n\n## 验证\n\n- 11/11 CTest、188/188 pytest；\n- 原公开20/20、95 SQL；\n- 三轮全量内容、精确 TopK、Recall@10=1.0；\n- 2GiB 超内存诊断从47.40降至 **33.14秒**，重复恢复和 ready 前强杀通过；\n- 最终 perf 中，查询热点已从 iostream 逐字节调用转移到缓冲复制、行校验和距离计算。\n\n报告：\n\n- [性能基线](docs/superpowers/experiments/2026-11-12-minivectordb-performance-baseline.md)\n- [首轮优化结果](docs/superpowers/experiments/2026-11-12-minivectordb-performance-optimization.md)\n\n脚本位于 `tools/benchmark/`，全部原始数据位于 `.superpowers/sdd/performance-baseline/` 和 `.superpowers/sdd/performance-optimization/`。\n\n**提测边界：**当前优化镜像通过本地派生构建验证；正式提交前仍应从原 Dockerfile 做一次干净构建。本轮尚未 commit/push。\n\nImplementation complete. What would you like to do?\n\n1. Merge back to `kernel/round2` locally\n2. Push and create a Pull Request\n3. Keep the branch as-is (I'll handle it later)\n4. Discard this work\n\nWhich option?"
+    },
+    {
+      "id": "r11-initial-local-baseline",
+      "title": "Initial local implementation baseline",
+      "source": "agent_visible_result_summary",
+      "session_line": 202,
+      "output": "**本地功能基线已完成，并在当前 `kernel/round2` 分支工作目录中复验通过。** 未提交代码、未正式提测，也未执行性能优化。\n\n### 验证结果\n\n| 检查 | 结果 |\n|---|---|\n| C++ 构建 | 通过 |\n| CTest | **10/10 通过** |\n| 本地 Python 测试 | **122 项通过**，明确不含 2 项 Docker 用例 |\n| 原驱动握手 | PASS |\n| 原赛题公开 cases | **20/20 PASS，覆盖 95 条 SQL** |\n| 交付报告校验 | 20 个唯一 case 全 PASS，无 SKIPPED |\n\n以上已由我在子代理完成后重新运行确认；公开测试、断言和配置未修改。\n\n### 交付位置\n\n- 实现与运行说明：[`minivectordb/README.md`](minivectordb/README.md)\n- 源码：`minivectordb/python/`、`minivectordb/cpp/`\n- 容器构建文件：`Dockerfile`\n- 验证记录：[`docs/superpowers/experiments/2026-11-11-minivectordb-public-baseline.md`](docs/superpowers/experiments/2026-11-11-minivectordb-public-baseline.md)\n- 最终交接：`.superpowers/sdd/handoff.md`\n- 本次复验报告：`.superpowers/sdd/parent-final-local-result.json`\n\n### 尚未完成的验收\n\n**本机没有 Docker，完整 Task 10/11 与 M3 仍为 BLOCKED。** Dockerfile 和容器测试已实现，但镜像构建、运行时链接、只读根目录以及 Docker 模式下的赛题测试尚未验证，不能用本地通过替代。\n\n整体审查未发现 Important/Critical 问题，保留了 3 项非阻塞备注：损坏记录的行内边界检查、重复投影下的 ORDER BY 歧义、事务测试读取超时，均记录在进度文件中。\n\n当前 `ann` 仍为明确的精确扫描回退；整表重写、性能优化、隐藏用例及大数据资源准入不在此次通过结论内。"
+    },
+    {
+      "id": "r12-initial-requirements-gap-analysis",
+      "title": "Initial requirements and delivery gap analysis",
+      "source": "agent_visible_result_summary",
+      "session_line": 256,
+      "output": "先直接回答核心结论：\n\n1. **目前不能确认“完全符合正式比赛流程，无需任何额外干预”**。Podman 下容器、只读根目录和公开用例已跑通，但正式入口是 Docker，且还有隐藏用例、提交分支等门槛。\n2. 已有 SQL cases 是由 `protocol_check/run.py` 把 `.test` 转成 JSONL 请求，再按 `.result` 的断言逐项检查，并非直接运行 MySQL 客户端。\n3. **按我们批准的 12 个任务，Task 1–11 的初版代码路径已经做了，但这不等于比赛规定的全部功能都已实现或验证。** 特别是真实 ANN、超过内存的数据处理、隐藏用例以及资源准入，都还不能打勾。\n\n下面按依据分开说明。\n\n## 1. Docker 与项目设置能否无干预跑通比赛测试\n\n### 从当前仓库公开驱动看，可以确认的条件\n\n当前 `Dockerfile` 已具备以下行为：\n\n- 默认 `ENTRYPOINT` 是 Python JSONL 程序，**不需要判题器额外补参数**。\n- Python 和 C++ 扩展均包含在最终镜像中；镜像不需要源码目录。\n- 不依赖运行时 `pip install`、测试文件、TCP 服务或端口。\n- 使用 `/data`，禁用 Python 字节码写入；`TMPDIR=/data`。\n- 生产构建显式关闭故障注入。\n- Podman 已实际验证：\n  - 镜像构建成功。\n  - 普通容器和 `--read-only` 根文件系统均能完成 CRUD、shutdown。\n  - 原驱动的握手及公开 20 个 cases 均 PASS。\n  - 无网络，2 CPU、2 GiB、128 PID 等限制下能够运行。\n\n所以，**以现有公开驱动的输入输出接口看，当前项目的入口和数据目录配置是匹配的。**\n\n### 但正式流程仍有以下不能省略的事项\n\n| 事项 | 当前结论 |\n|---|---|\n| 原驱动的 `--image` 模式 | 会在 `docker run` 中创建数据卷、加资源限制；不需要我们写启动脚本，但镜像必须已构建 |\n| 实际 Docker 验证 | **未做**；本机使用的是 Podman，不应记成 Docker 已通过 |\n| 正式提测的 Git 提交与目标分支 | **尚未做**；现在仍是 `kernel/round2` 的未提交工作区 |\n| 公开 20 + 隐藏 9 个 cases | 只验证了公开的 20 个 |\n| 超过内存的数据、正式 ANN/召回率等 | 未验收，不能凭公开用例推断通过 |\n| 完整 SQL 功能要求 | 需要按完整题目规则再核对，而非只看公开 95 条 SQL |\n\n还有一点值得注意：公开驱动是通过 `mount` 把 `/data` 绑定到容器，因此 **镜像中 `/data` 不需要预先可写**；实际测试时该挂载点来自外部可写数据目录。这一点已由 Podman 只读根目录测试验证。\n\n**所以准确说法是：公开协议、容器入口和公开 case 流程基本已经对上，但还不能承诺正式比赛“完全符合且无需额外干预”。** 不需要的是私有启动参数或数据库初始化脚本；仍然需要正常的构建、Git 提测，以及隐藏功能和资源门槛的验证。\n\n## 2. 已有的 SQL test cases 是怎样测试的\n\n### 文件组织\n\n`mysqltest/manifest.json` 中按顺序列出 20 个 case；每个 case 指定：\n\n- 一个 `cases/<id>.test`：SQL 和驱动指令。\n- 一个同名 `.result`：JSON 预期断言数组。\n- 声明的 SQL 数量。\n\n合计 **20 个 cases、95 条 SQL**。\n\n### 执行流程\n\n实际入口是：\n\n```bash\npython3 protocol_check/run.py --image <镜像名> --output <新目录>\n```\n\n本地可信进程也支持 `--command`；这正是我用来驱动 Podman 容器的方式。二者的 JSONL 通信和结果断言相同，但容器运行方式不同。\n\n每个 case 的执行过程如下：\n\n1. **创建独立空数据目录**，不与其他 case 共用。\n2. 启动程序，先等待主动输出且 flush 的：\n\n   ```json\n   {\"type\":\"ready\"}\n   ```\n\n3. 逐行读取 `.test`：\n   - 空行、注释跳过。\n   - 普通 SQL 增加断言索引，包装为：\n\n     ```json\n     {\"id\":1,\"op\":\"execute\",\"sql\":\"SQL内容\",\"search_mode\":\"exact\"}\n     ```\n\n   - `--restart`：正常 shutdown、确认退出，再用相同数据目录启动。\n   - `--mode ann`：修改后续请求的 `search_mode`，不发送 SQL，不占断言下标。\n4. 将实际响应与 `.result` 中对应元素交给 `assert_response()` 比较。\n5. case 末尾 shutdown，检查退出码为 0、没有额外 stdout。\n6. 输出 `result.json`，所有选中 cases PASS 才 `passed=true`、进程退出码为 0。\n\n### `.result` 的含义\n\n- `{}`：语句必须成功；不代表允许失败或空响应。\n- `{\"error\":\"duplicate_key\"}`：必须失败，并含非空错误码；当前配置若没有映射，具体码名不被严格限定。\n- `affected_rows`：精确比较。\n- `columns`：列名和顺序精确比较。\n- `rows`：按序精确比较；`unordered:true` 时按多重集合比较，重复行不能丢。\n- 浮点容差是绝对和相对各 `1e-5`；BIGINT 是整数类型且不能丢精度。\n\n**因此，20/20 是通过了公开样例断言，不是完整隐藏功能或资源验证。**\n\n## 3. 非性能部分是否真的做完了初版\n\n### 按我们计划，已实现的主要部分\n\n| 模块 | 当前实现状态 |\n|---|---|\n| JSONL、握手、错误、shutdown | 已实现并测试 |\n| SQLGlot 到受控 IR | 已实现；严格白名单，无执行交给 SQLGlot |\n| C++ 标量 CRUD、过滤、排序、LIMIT | 已实现；LIMIT 用堆，无界排序走磁盘归并 |\n| 类型与精度 | int64、UTF-8/VARCHAR、float32、有限向量值校验 |\n| 精确向量查询 | 过滤后 TopK、float32 存储/查询、double 距离计算、欧氏输出、主键并列 |\n| 存储与恢复 | 不可变表文件、Catalog、原子 CURRENT、fsync、文件回收 |\n| 语句和事务原子性 | 候选根、事务工作根、失败语句不覆盖此前修改 |\n| 正常关闭/回滚/进程强杀恢复 | 已实现，并做了确定性故障测试 |\n| `CREATE VECTOR INDEX` | 持久化 FlatScan 描述符，支持维护/回滚/重启 |\n| 交付报告校验 | 已实现，严格检查公开 case ID 和状态 |\n\n### 但比赛要求尚未完整覆盖的部分\n\n1. **真实 ANN 尚未实现**  \n   当前 `exact` 和 `ann` 都走精确 FlatScan。它满足公开样例结果，但没有实现近似索引、召回率评估或正式 ANN 的完整性能/结构验证。\n\n2. **超过内存的数据场景没有验证**  \n   实现不是简单把整张表都加载到内存：表扫描是流式的，普通排序也有磁盘归并。  \n   但仍会：\n   - 重写整张受影响表；\n   - 缓存一个 INSERT 请求的行批次；\n   - 将最终返回行和 JSON 响应全部物化。\n\n   这些不是绝对不允许，但**没有做过超过内存规模的正式功能验证，因此不能宣称该项已完成验收**。\n\n3. **正式隐藏 9 个 cases 未测**  \n   具体输入无法从公开仓库知道，不能推断已覆盖。\n\n4. **非功能性提测步骤尚未完成**  \n   代码还未提交，目标分支未切换，实际 Docker 流程未跑，`conversation.json` 也没有按正式入口确认/整理。\n\n5. **审查保留了三个非阻塞问题**\n   - 损坏文件中的行边界约束更严格一些；\n   - 重复等价投影时 ORDER BY 会误报歧义；\n   - 两项事务测试的读取没有截止时间。\n\n   前两项可以作为小型健壮性/语义修复；第三项主要是测试工具可靠性，不属于核心功能缺失。\n\n**结论：公开样例驱动的功能初版已经形成；除性能优化外，我们批准的任务内容已基本落地。但不能把这句话理解成“比赛所有非性能要求已完备”。真实 ANN、大数据资源场景和隐藏用例仍是明确的未验收风险。**"
+    },
+    {
+      "id": "r13-case-driver-mechanics",
+      "title": "Public case command and process transport",
+      "source": "agent_visible_result_summary",
+      "session_line": 258,
+      "output": "**是的，这就是仓库提供的公开 cases 自测命令：**\n\n```bash\npython3 protocol_check/run.py --image <镜像名> --output <新目录>\n```\n\n但**不是传统 MySQL 的客户端—服务端网络通信**。\n\n## 实际执行方式\n\n```text\nprotocol_check/run.py\n        │ 启动 Docker 容器\n        ▼\n判题器 ── JSONL execute 请求 ──> 容器内数据库进程的 stdin\n判题器 <── JSONL 响应 ───────── 容器内数据库进程的 stdout\n```\n\n具体过程：\n\n1. 驱动通过类似下面的方式启动镜像，不额外传程序参数：\n   ```bash\n   docker run -i --network=none --read-only \\\n     --cpus=2 --memory=2g --memory-swap=2g --pids-limit=128 \\\n     --mount type=volume,src=<独立数据卷>,dst=/data \\\n     <镜像名>\n   ```\n2. 等待程序主动输出：\n   ```json\n   {\"type\":\"ready\"}\n   ```\n3. 从 `mysqltest/manifest.json` 读取公开 cases，每个 case 使用独立数据卷。\n4. 逐条读取 `.test` 中的 SQL，包装为 JSON 请求：\n   ```json\n   {\"id\":1,\"op\":\"execute\",\"sql\":\"SELECT id FROM docs;\",\"search_mode\":\"exact\"}\n   ```\n5. 把实际响应与 `.result` 中对应断言比较。\n6. 处理 `--restart` 和 `--mode ann` 指令。\n7. 最后发送 `shutdown`，检查退出码、stdout 是否干净。\n8. 所有选中的 cases 都 PASS 才输出 `passed=true`，退出码为 0。\n\n## 本地自测和正式比赛的区别\n\n- **本地公开自测**：可以直接使用上述 `run.py --image` 命令。\n- **正式比赛**：根据仓库说明，应包含公开 20 个加隐藏 9 个，共 29 个功能 cases。平台可能调用自己的判题程序，**不一定字面上执行这个仓库的 `run.py`**，但公开文档要求遵循同一套 JSONL 协议和结果语义。\n- **不需要**：启动 TCP 服务、开放端口、运行 MySQL Server、使用 mysqlclient、监听 HTTP 接口。\n- **需要**：镜像默认入口直接启动能处理 JSONL 的数据库进程。\n\n当前项目的 `Dockerfile` 入口就是直接运行该数据库进程，没有启动网络服务。\n\n正式流程会构建并启动你提交分支中的镜像，判题器自行处理数据卷、重启、隐藏用例和资源限制；你不需要提供一个常驻服务端或额外启动脚本。"
+    },
+    {
+      "id": "r14-stdio-mapping",
+      "title": "STDIO protocol mapping",
+      "source": "agent_visible_result_summary",
+      "session_line": 262,
+      "output": "**符合当前 `STDIO_PROTOCOL.md` 的公开协议约定。** 我的实现不是网络客户端—服务端模式，而是单个数据库进程通过 stdin/stdout 收发 JSONL。\n\n关键对应关系如下：\n\n| 协议要求 | 当前实现 |\n|---|---|\n| 恢复完成后主动输出一次 `ready` | 先构造 `Engine` 并恢复，再 `emit({\"type\":\"ready\"})` |\n| 每条响应单行 JSON 并立即 flush | `emit()` 序列化后写换行并 `stdout.flush()` |\n| stdout 只输出协议消息 | 诊断、致命错误写 stderr |\n| 原样返回 `id`，保持 JSON 类型 | Python 层保存并回传，不经过 C++ 数值转换 |\n| 严格 JSON | 拒绝重复键、NaN、Infinity 和浮点溢出 |\n| 查询响应含 `columns`、`rows` | 由 C++ `QueryResult` 经 pybind11 返回 |\n| 修改响应含精确 `affected_rows` | 原生执行器统计并返回 |\n| 错误含 `ok:false` 和非空错误码 | `DatabaseError` 转成 `{code,message}` |\n| 预期 SQL 错误后继续处理请求 | 普通错误返回响应，不终止循环 |\n| BIGINT 不丢精度 | 字面量直接转 int64，不经过 double |\n| shutdown 前回滚并清理 | `engine.close()` 丢弃事务根后才确认 |\n| EOF 不额外发送响应 | `finally` 中关闭引擎，不输出新消息 |\n| 默认写 `/data` | 参数默认 `/data`，容器也使用该目录 |\n| 镜像无需额外参数 | `ENTRYPOINT` 直接启动 JSONL 程序 |\n\n实现位置主要是：\n\n- `minivectordb/python/minivectordb/__main__.py`\n- `minivectordb/cpp/bindings.cpp`\n- `minivectordb/cpp/engine.cpp`\n- 根目录 `Dockerfile`\n\n实际验证也支持这个结论：\n\n- 原驱动握手 PASS。\n- 本地原驱动公开 **20/20 cases PASS**。\n- Podman 容器中的普通及只读根目录测试 PASS。\n- 容器内原驱动公开 **20/20 cases PASS**。\n- 包含容器测试的 **124 项 pytest 全部通过**。\n\n需要保留的边界：这证明的是**公开 JSONL 协议及公开 cases**；还没有实际执行 Docker 的 `--image` 流程，也不据此推断隐藏用例、正式 ANN、超大数据资源准入已经通过。"
+    },
+    {
+      "id": "r15-boundary-coverage-caveat",
+      "title": "Boundary and sustained-write coverage caveat",
+      "source": "agent_visible_result_summary",
+      "session_line": 295,
+      "output": "**考虑了，但不能说覆盖充分；尤其持续写入目前只验证了正确性，没有验证长期运行的吞吐和资源稳定性。** 这可能与正式用例失败有关，但没有失败日志还不能下结论。\n\n## 已处理的边界值\n\n- **BIGINT**：包括超过 JavaScript 安全整数、int64 正负边界、溢出拒绝，转换不经过 double。\n- **字符串**：UTF-8、Unicode 码点长度、转义、字符串内分号；重复主键和空结果也有测试。\n- **向量**：维度错误、NaN、Infinity、float32 溢出、非法文本、float32 舍入及距离并列。\n- **失败语句**：多行 INSERT 后半行出错时整句撤销，事务此前的成功修改仍可继续提交。\n- **关闭与重启**：已提交保留、未提交回滚，shutdown 和 EOF 都会清理事务。\n- **进程故障**：已测试多个提交边界强杀、恢复清理途中再次强杀、缺失文件和 CURRENT 替换失败。\n\n仍有边界风险：\n\n- 重复等价投影下的 `ORDER BY` 会误报歧义。\n- 损坏文件的行内边界检查还不够严格。\n- 协议文档提到 SQL NULL，但当前 SQL 前端只接受整数和字符串字面量；**如果正式 SQL 子集要求 NULL，这里需要补实现**。\n- 隐藏用例可能使用其他合法语法组合，公开 95 条 SQL 覆盖不到。\n\n## 持续写入的现状\n\n正确性方面已有这些机制：\n\n- 每次修改写入新的不可变对象，不直接覆盖正在读取的表文件。\n- 成功发布后才切换 `CURRENT`。\n- 失败语句删除候选文件。\n- 旧文件通过 GC 回收，不是无限保留所有历史版本。\n- 进程强杀留下的不可达文件会在恢复时回收。\n- 多行写入、UPDATE、DELETE、重启及事务路径都有小规模测试。\n\n但当前写入代价很高：\n\n1. 每条 INSERT/UPDATE/DELETE 都可能**重写整张受影响表**。\n2. 发布会扫描并 fsync 所有相关表对象。\n3. 每次成功修改都要写 Catalog、替换 CURRENT、同步目录，再执行 GC。\n4. 多行 INSERT 会先在内存中保存本批输入。\n5. 没有 WAL、增量页写入或批量 compaction。\n\n因此连续逐行插入的数据量增长时，写入量可能接近平方级增长；即使结果正确，也可能在正式数据规模下触发超时或资源问题。**公开 cases 太小，无法排除这种情况。**\n\n所以准确结论是：**边界和持续写入的正确性机制做了不少，但持续写入规模、耗时和磁盘占用尚未充分验证。** 正式结果已经失败，下一步应先拿失败日志定位；如果失败表现为写入超时或资源耗尽，这一部分需要优先调整，而不是继续只跑公开样例。"
+    },
+    {
+      "id": "r16-requirements-scope-reassessment",
+      "title": "Requirements scope reassessment",
+      "source": "agent_visible_result_summary",
+      "session_line": 394,
+      "output": "**有考虑其中的大部分实现约束和计分规则，但我此前对需求范围和优先级的把握有偏差，尤其是 NULL。** 你贴出的原文明确说明 NULL 不要求，我不应该仅凭协议能够表示 JSON `null`，就把 SQL NULL 推断为正式准入可能缺失的功能，再引导你投入实现。\n\n## 1. 这些语义约束，目前覆盖到什么程度\n\n我刚重新核对了实现，并重跑相关测试：**解析、标量语义、向量、事务共 71 项通过**。另单独检查了 JOIN、聚合、子查询、ALTER TABLE、外键，均返回 `unsupported_sql`。\n\n| 要求 | 当前实现与证据 |\n|---|---|\n| 不支持的语句不能被静默解释成其他含义 | SQLGlot AST 严格白名单检查，未表示的节点和字段拒绝；不是提取“能执行的部分”后继续运行 |\n| 不支持嵌套事务 | 已有事务中再次 BEGIN 返回 `transaction_active`，不隐式提交或覆盖原事务 |\n| 不支持主键更新 | 返回 `primary_key_update`，不执行修改 |\n| 主键不可重复 | 同一 INSERT 批次内部、与已有数据冲突均检查；失败不留下部分写入 |\n| VARCHAR 按 Unicode 字符数计长 | C++ 解码并统计 Unicode 码点，不按 UTF-8 字节数；有中文、emoji、组合字符测试 |\n| 字符串按 Unicode 码点比较 | 对已验证的合法 UTF-8 按字节序比较，与 Unicode 码点顺序一致；不做语言排序或规范化 |\n| 固定维度 float32 向量 | 输入转换为 `float` 后存储，检查维度与有限性 |\n| 拒绝 NaN、Infinity、维度不符和转换溢出 | INSERT、UPDATE、查询向量均有拒绝与失败原子性测试 |\n| 距离按存储后的向量计算 | 使用存储的 float32 和转换后的 float32 查询向量，以 double 做差、累计和开方；有 float32 舍入及大数距离测试 |\n\n**这些是实现和有限测试证据，不等于已覆盖所有正式边界，也不能替代正式准入。** 错误码是否与正式评测的精确约定完全一致，同样不能只凭公开用例通过就下结论。\n\n### NULL 需要纠正\n\n当前未提交的工作区确实已经支持 NULL；它不是被静默执行成零或空字符串，但属于**题目不要求的额外扩展**。本轮还因此增加了类型、存储编码和测试维护成本。\n\n“不要求”不一定等于“禁止支持”，但既然比赛强调受控子集和明确拒绝，**更稳妥的竞赛实现是收紧范围，而不是继续补通用 SQL 功能**。这轮 NULL 工作不能当作推进正式准入的必要成果。我不会未经你确认就撤回，但建议撤除本轮 NULL 扩展，恢复原来的明确拒绝行为。\n\n## 2. 得分机制有考虑，但此前执行优先级不够准确\n\n正确关系是：\n\n> **全部正式功能用例通过 → 获得计分资格 → 性能与 Agent prompt 分别排名，各最高 40 分。**\n\n因此：\n\n- **公开 20/20 只是本地回归基线**，不是正式准入成功。\n- **正式准入未通过时，不能说“只剩性能优化”。** SQL、恢复、资源约束等仍可能存在硬性缺口。\n- 性能要按题目定义检查批量写入、TopK 的 **T、B、M**，不能用几个小用例的运行时间代替。目前仍未完成这部分 benchmark。\n- 当前整表重写的写入路径，以及 `ann` 的 exact fallback，都必须对照正式要求判断，不能简单归入“不影响功能的后续优化”。\n- Agent prompt 的五个维度需要真实、独立的证据实例。测试日志、质疑和迭代可以提供材料，但不能把重复验证或不必要扩展包装成高分证据，更不能虚构提交材料。\n\n## 3. 现在应当怎么排优先级\n\n我建议修正为：\n\n1. **收紧题目范围**，处理本轮额外 NULL 改动。\n2. **优先定位正式准入失败**：拿失败报告，或按第 3.2 节逐项检查 SQL、存储、检索、事务、恢复、资源约束，而不是继续猜测缺少可选语法。\n3. 正式准入满足后，再按第 3.3 节做针对性的性能测量与优化。\n4. 全程保留真实的理解、实验、反证、取舍记录，服务 Agent 评价，但不为“凑证据”制造工作。\n\n**结论：不少具体约束已经实现并测试，但我此前将 NULL 当作潜在必需项、对正式准入完成度表达得过于乐观，这两点需要纠正。** 本次回复只核查和运行了小测试，没有继续修改代码。"
+    },
+    {
+      "id": "r17-dockerfile-and-lifecycle-audit",
+      "title": "Dockerfile and container lifecycle audit",
+      "source": "agent_visible_result_summary",
+      "session_line": 451,
+      "output": "刚才确实漏交了核验结果。现在已补完，并记录在：\n\n[`docs/superpowers/experiments/2026-11-11-minivectordb-admission-audit.md`](docs/superpowers/experiments/2026-11-11-minivectordb-admission-audit.md)\n\n## 一、判题流程核验\n\n### 1. 确实存在过“取不到正确实现”的交付风险\n检查时发现：\n- `origin` 没有要求的 `2026-competition-round2` 分支。\n- 本地该分支停在题包基线，**Dockerfile 为 0 字节，也没有数据库实现**。\n\n如果此前平台取的是这个分支或基线，就根本运行不到我们的数据库。现在已按你的授权修正并推送，但**不能据此认定之前失败就是这个原因**；平台已锁定的旧提交不会随推送自动更新，提测页面仍需核对 SHA。\n\n### 2. 当前官方题包实际仍使用 JSONL\n我查询了官方远端，目标分支仍为：\n```text\nf4d4e26653af823a7601668802f80e374ad6643c\n```\n\n其协议文档和驱动与本地一致。驱动实际发送 JSON 请求、等待 JSON ready、校验 JSON 响应。因此网页那段文字确实与题包冲突，但**目前不能改成裸 SQL，否则反而无法通过当前官方检查工具**。\n\n### 3. 不依赖宿主文件的构建已验证\n我从提交 `3e6792da...` 做了纯 `git archive`，仅包含已提交文件，没有本地 `.venv`、build 或预编译扩展，再进行了**无缓存 Podman 构建**，成功。\n\n这排除了“本地能构建只是因为有未交付文件”的问题。\n\n## 二、4.2.1 Dockerfile 逐项核验\n\n| 要求 | 结果 |\n|---|---|\n| 从提交源码构建或多阶段构建 | **满足**，实际在构建阶段编译 C++ |\n| Linux x86_64 | 镜像实测为 **linux/amd64** |\n| 默认前台启动，不需额外启动参数 | **满足**，默认 ENTRYPOINT 直接运行数据库 |\n| 不需端口、TTY、后台服务 | **满足当前实现方式** |\n| 运行时禁网，依赖提前安装 | **禁网运行通过** |\n| 所需动态库齐全 | 最终镜像 `ldd` 无缺失，Python/native 模块导入成功 |\n| 数据写入 `/data` | **只读根＋独立数据卷验证通过** |\n| 版本锁定 | Python、SQLGlot、pybind11 已固定；apt 工具包及镜像摘要尚未完全固定 |\n\n**Ubuntu 24.04 是该节的示例，不是我找到的硬性指定基础镜像要求。**\n\n另一个限制必须说明：本地保存的网页中，4.2.1 的三个代码块是空容器，没有保存示例代码正文。因此我核对的是该节文字要求，不能声称已逐字核对缺失的示例代码。\n\n## 三、这次补做的实际验证\n\n对纯源码镜像，使用默认入口和受限 Podman 容器完成了：\n\n- 禁网、只读根、2 CPU、2 GiB、禁 swap、128 PID。\n- 独立 **named volume** 挂载 `/data`。\n- 连续请求、事务、正常关闭与同卷重启。\n- **实际强杀数据库容器**，不是只杀容器 CLI。\n- 未提交修改强杀后回滚。\n- 已确认 COMMIT 强杀后保留。\n- 恢复后的标量与向量结果一致。\n\n此外：\n- CTest：**10/10**\n- pytest：**124/124**\n- 纯源码镜像经原公开驱动：握手和 **20/20 公开用例通过**\n\n**实际 Docker 仍未验证。** 我也运行了原始 `--image` 命令，它明确失败于本机缺少 `docker` 可执行文件。上述结果是 Podman 证据，不能换名为 Docker 验收成功。\n\n## 四、除流程之外，已经查到的缺口\n\n1. **已复现 SQL 缺陷**\n   ```sql\n   SELECT id,id FROM t ORDER BY id;\n   SELECT *,id FROM t ORDER BY id;\n   ```\n   会错误返回 `ambiguous_column`。排序解析把重复的同源投影误判为歧义；本轮尚未修改。\n\n2. **超内存资源准入仍未建立证据**\n   表扫描虽流式，但每次修改仍可能整表重写，提交还会扫描验证所有候选表。持续批次写入、跨表提交、恢复时间可能撞正式资源限制。**这是功能准入风险，不能全部留到性能优化阶段。**\n\n3. **Agent 材料未完成**\n   网页默认路径 `agent/conversation.json` 不存在；根目录文件为零字节。这影响 Agent 评价，不能混同为 SQL 测试失败原因。\n\n**当前结论：分支交付问题已修正，尚未发现镜像默认入口必然无法运行的问题；但正式失败根因仍未确定，而且已有一个可复现 SQL 缺陷及一项重要资源验证缺口。** 审计文档尚未提交，未擅自修复或再次推送。"
+    },
+    {
+      "id": "r18-sql-fix-docker-result",
+      "title": "Duplicate projection fix and Docker result",
+      "source": "agent_visible_result_summary",
+      "session_line": 500,
+      "output": "SQL 缺陷已修复，并已用你的用户 **`howxu`** 完成实际 Docker 验证，没有切到 root。\n\n### SQL 修复\n修改 `minivectordb/cpp/executor.cpp`：\n- 重复引用同一表达式，如 `SELECT id,id ... ORDER BY id`、`SELECT *,id ... ORDER BY id`，现在正常执行。\n- 同名投影指向不同表达式时，仍返回 `ambiguous_column`，不会随意选择一个。\n\n新增 45 个回归组合，覆盖升降序、LIMIT、重复列/别名/距离表达式，以及真正歧义、空表和 LIMIT 0。\n\n### 验证结果\n\n| 检查 | 结果 |\n|---|---|\n| SQL 语义测试 | **49/49 通过** |\n| CTest | **10/10 通过** |\n| 全量 pytest，含实际 Docker 容器测试 | **169/169 通过** |\n| 纯提交源码加本轮改动，无缓存 Docker 构建 | **通过** |\n| 原始 `--image` 握手 | **通过** |\n| 原始 `--image` 公开用例 | **20/20 通过** |\n| 实际 Docker 强杀、同卷恢复、提交保留、关闭回滚 | **通过** |\n\n这次不是 Podman，也没有使用 `--command` 替代标准镜像路径。公开协议、用例、断言和配置未修改。\n\n详细记录：\n[`docs/superpowers/experiments/2026-11-11-minivectordb-sql-order-docker.md`](docs/superpowers/experiments/2026-11-11-minivectordb-sql-order-docker.md)\n\n**本轮修改尚未提交或推送，远端仍是第一版。** 当前证据排除了这些已测的 Docker 构建和入口问题，但仍不能代表正式隐藏用例或超内存资源准入通过。"
+    },
+    {
+      "id": "r19-full-flow-checklist",
+      "title": "Full 130-item flow checklist",
+      "source": "agent_visible_result_summary",
+      "session_line": 594,
+      "output": "逐条报告已写入：\n\n**[`docs/superpowers/experiments/2026-11-11-minivectordb-flow-compliance.md`](docs/superpowers/experiments/2026-11-11-minivectordb-flow-compliance.md)**\n\n共 **130 个检查项**，分别列出要求、实现/实测依据、结果及未验证边界。下面是本轮主要结论。报告另有一次只读复核正在运行；若发现事实或表述问题，我会补充修正。\n\n## 一、这次按什么版本、什么流程检查\n\n从公开 HTTPS 地址重新克隆，不使用本地补丁或编译产物：\n\n```text\n仓库：https://github.com/HowXu/2026-OceanBase-seekdb.git\n分支：2026-competition-round2\n提交：c4a54ebef06bf7ab5686b2c4866b53c658782b62\n```\n\n直接从干净克隆进行 **Docker 无缓存构建**，然后执行：\n\n1. 原始 `--image` 握手检查。\n2. 原始 `--image --case sql_crud`。\n3. 原始 `--image` 全部公开用例。\n4. `STDIO_PROTOCOL.md` §7 原样 Bash 管道示例。\n5. 独立实时 stdin/stdout/stderr 检查。\n6. 实际容器强杀、跨表事务恢复、恢复途中再次强杀。\n7. 公开内存限额下的超内存数据检查。\n\n**所有验收 SQL 都通过容器 stdin 输入，从 stdout 读取结果，stderr 单独保存。没有用 native Engine API、HTTP、TCP 或 `docker exec` 执行验收 SQL。** 环境检查命令只用于查看镜像、cgroup、文件大小和恢复阶段。\n\n## 二、赛题 §2.1、§2.2、§2.3\n\n| 要求 | 本轮检查结果 |\n|---|---|\n| 单进程、单客户端、至多一个显式事务 | 核对通过；嵌套 BEGIN 明确拒绝，原事务仍可继续 |\n| CREATE TABLE、三种数据类型、主键及向量列约束 | 管道实测通过；非法表结构明确拒绝 |\n| CRUD、多行 INSERT、按主键和普通条件更新/删除 | 管道实测通过 |\n| 投影、SELECT *、比较运算、AND、ORDER BY、LIMIT | 管道实测通过 |\n| 主键唯一、失败多行 INSERT 原子性 | 通过，失败前缀未留下部分记录 |\n| Unicode 字符长度及码点排序 | 通过所测边界，包括 emoji、组合附加符 |\n| float32、非法向量、欧氏距离 | 所测边界通过；极小值下溢策略仍缺明确冻结说明 |\n| §2.2 原始多行 SQL 示例 | **已从网页正文取回，逐条经 JSONL stdin 执行通过** |\n| 过滤后 TopK、不足 K、空集、距离并列主键排序 | 通过独立样本 |\n| exact、ann、建索引后仍可 exact | 显式两种模式及省略模式参数均通过 |\n| 索引后插入、更新、删除与事务可见性 | 所测序列通过；ann 目前为 exact fallback，不是近似加速 |\n| `/data` 持久化、正常关闭与同目录重启 | 通过 |\n| 已确认提交后强杀、未提交事务强杀 | 所测标量、向量及跨表序列通过 |\n| 恢复途中再次终止，再次恢复 | **已实际执行通过**，不是只测正常重启 |\n| 大于内存限额的数据处理 | **已实际执行通过一组公开限额下的数据**，细节见下 |\n\n### 超内存检查不再只是“源码看起来支持”\n\n本轮使用实际：\n\n```text\n2 CPU / 2 GiB / 禁 swap / 128 PID\n只读根文件系统 / 独立可写 /data / 禁网\n```\n\n通过 stdin 写入 **2,112 MiB 有效负载**，实际数据文件约 **2.063 GiB**，超过 2 GiB 内存上限。\n\n核验了全部主键、内容样本、带过滤的向量查询及故障恢复：\n\n- 整轮约 **102.89 秒**。\n- 内存峰值达到 2 GiB 上限，**没有 OOM**。\n- 第一次故障恢复到 ready 约 **1.369 秒**。\n- 另一次在确认恢复正在读表、尚未输出 ready 时强杀；再启动约 **1.253 秒** ready，结果核验通过。\n\n但这仍不能覆盖未知正式数据规模、磁盘/带宽限制或全部大字段排序场景。\n\n## 三、§3.1、§3.2：发现了真实的发布文档冲突\n\n网页 §3.1 当前正文仍写：\n\n> 不再采用此前示例中的 JSON 请求／响应封装。\n\n但当前官方分支：\n\n- `STDIO_PROTOCOL.md` 明确要求 JSONL；\n- `mysqltest/README.md` 明确要求 JSONL；\n- 原始驱动实际发送 `id/op/sql/search_mode` JSON；\n- 原始驱动明确不转换裸 SQL 或文本 READY。\n\n**这两种描述不能同时记为满足。**\n\n当前实现满足的是**目标分支实际驱动的 JSONL 流程**。独立检查中，发送裸 SQL 会得到 `invalid_request`；因此，如果正式平台采用的是网页所指的另一版协议，就确实会失败。但目前没有平台交互证据，不能断言它就是此次 0 分根因。\n\n| 测试要求 | 结果 |\n|---|---|\n| Linux x86_64、源码构建、运行禁网 | 实际 Docker 通过 |\n| 前台常驻、连续多条请求及事务 | 通过 |\n| stdin/stdout 通信，stderr 独立 | 通过 |\n| 及时 flush | 实时逐请求检查通过 |\n| 原始握手→单用例→全部公开用例 | **全部通过，公开 20/20** |\n| 实际强杀与重复恢复 | 所测序列通过 |\n| 全部正式 29 个用例 | **未验证，不能宣布准入通过** |\n| 正式磁盘容量、带宽及全部数据参数 | 当前公开配置不足以完整还原 |\n| 平台预检与正式是否使用同一协议 | **未确认** |\n\n## 四、§4.2.1：这次已拿到完整原始代码块\n\n此前保存的 HTML 缺失代码块。这次通过公开文档正文 API，已取回完整 Dockerfile、build、run 示例，并逐条对照。\n\n| 示例内容 | 当前提交与实测结果 |\n|---|---|\n| Ubuntu 24.04 | 正文是“下面以……为基础镜像”，未写强制 Ubuntu；当前 Python slim 的 Linux/amd64 构建和运行通过 |\n| 从源码构建 | 当前采用多阶段 CMake 构建，不依赖宿主预编译文件 |\n| `/data` 目录 | 镜像构建时创建，运行时显式挂载 |\n| `VOLUME [\"/data\"]` | 当前没有该声明，但原驱动和网页运行命令均显式挂载 `/data`，已实测可用 |\n| ENTRYPOINT | 默认直接启动数据库，不进入提示符或网络服务 |\n| CMD `--data-dir /data` | 当前程序默认路径就是 `/data`，不需判题器补参数 |\n| `docker build ... .` | 从干净克隆无缓存构建成功 |\n| `docker run --rm -i -v ... --cpus=2 --memory=2g ...` | 已按该方式复跑，仅换唯一卷名/镜像标识并加清理用容器名，交互通过 |\n| 运行库完整 | native/SQLGlot 导入成功，ldd 无缺失库 |\n| 版本锁定 | **不完全满足严格版本锁定**：Python/SQLGlot/pybind11 已固定，基础镜像 digest 和 apt 工具版本未精确固定 |\n\n另外做了反向检查：**只读根且不挂可写 `/data` 时，程序确实启动失败，只在 stderr 报错，不输出假 ready。** 所以平台实际挂载方式仍是需要核对的流程边界，不能笼统说任何启动方式都可用。\n\n## 五、两份协议文档中的特殊步骤\n\n| 协议要求 | 本轮证据 |\n|---|---|\n| **收到任何请求前主动输出 ready** | 通过；first stdout 早于 first stdin，没有预发 SQL |\n| ready 精确为 `{\"type\":\"ready\"}` | 通过，无额外字段 |\n| 恢复完成后才 ready | 通过，恢复中再强杀时确认尚无 ready |\n| 每条报文 UTF-8、单行 JSON、实际 LF 结束 | 严格解析检查通过 |\n| 每次输出立即 flush | stdin 保持打开，一发一等，逐次收到响应 |\n| stdout 不混提示符、日志、空行、心跳、颜色 | 通过 |\n| stderr 独立 | 正向检查无日志污染；启动失败负向检查仅 stderr 有错误 |\n| id 保持原值和 JSON 类型 | 数字、大整数、负数、字符串及其他 JSON 类型检查通过 |\n| ok 必须为 JSON bool | 通过 |\n| 空结果仍有 columns，rows 为 `[]` | 通过 |\n| 修改返回整数 affected_rows | 多行、零匹配和值未变更新均核验 |\n| SQL 错误后继续接收请求 | 通过，事务此前成功修改未被清空 |\n| `{}` 断言不是输出 `{}` | 建表/事务仍返回 id、ok:true，检查通过 |\n| `--restart` 由驱动执行，不当 SQL 发送 | 原驱动核对及公开用例通过 |\n| `--mode ann` 不占 SQL 响应 | 原驱动核对及索引用例通过 |\n| shutdown 先回滚，再响应并退出 0 | 通过 |\n| shutdown 后不得有任何额外 stdout | 剩余字节检查通过 |\n| README 的三步顺序、新输出目录、exit0 与 passed=true | 均按原文执行并核对 |\n| 不能只验证批量预输入示例 | 已另行执行实时交互检查，不以批量示例证明主动 ready |\n\n## 六、目前明确存在的交付缺口\n\n1. **`agent/conversation.json` 不存在；根 `conversation.json` 是 0 字节非法 JSON。**  \n   这是实际交付缺口，但没有证据说明平台是否在 SQL 测试前因此拦截。不能直接认定它导致 MySQL 未通过。\n\n2. **依赖锁定不完整。**  \n   已列入报告，不因本机构建成功而算作完全满足。\n\n3. **平台实际锁定版本未知。**  \n   远端已有 `c4a54eb…`，不代表失败任务采用的就是它；推送不会更新已锁定任务。\n\n4. **网页与实际题包协议冲突。**  \n   这是目前最需要确认的平台流程问题，而不是继续猜测性修改 ready 或裸 SQL 支持。\n\n此外，首轮资源诊断暴露了大字段无界排序的真实 I/O 放大；诊断脚本也曾漏算查询阶段预算。我保留了原始记录、修正宿主校验脚本后复测，没有隐藏这段过程或修改数据库实现。\n\n**结论：公开可还原的构建、入口、stdin/stdout/stderr、主动握手与退出流程，已经逐条执行检查，没有复现失败；但提交整体仍有缺口，且正式 0 分的原因尚未定位。** 下一步应核对平台任务的实际 SHA、启动挂载和协议版本，而不是再无依据地补 SQL 功能。\n\n本轮只新增报告，**没有改生产代码，也没有提交或推送**。"
+    },
+    {
+      "id": "r20-web-protocol-wording",
+      "title": "Web protocol wording versus implementation",
+      "source": "agent_visible_result_summary",
+      "session_line": 596,
+      "output": "**直接说：网页写的是“不再采用 JSON 封装”，而当前实现就是 JSONL。两者存在明确冲突。**\n\n## 1. 网页 §3.1 怎么说\n\n网页原文先说：\n\n> 容器启动后直接以前台方式运行数据库程序，通过标准输入（stdin）接收 MySQL 测试驱动提供的 SQL，通过标准输出（stdout）返回查询结果和执行状态。\n\n随后又说：\n\n> SQL 的语句边界、结果集格式、错误码、就绪标识、精确／近似模式切换及正常退出方式，统一遵循 `2026-competition-round2` 分支配套测试驱动和题包约定，**不再采用此前示例中的 JSON 请求／响应封装**。\n\n因此，网页本身有两层要求：\n- 具体通信细节以目标分支题包为准；\n- 同时明确写了“不再采用 JSON 封装”。\n\n**而现在目标分支题包恰好要求 JSONL，这就是矛盾所在。** 网页没有另外给出一份完整的非 JSON 报文格式，不能据此自行猜测该输出文本表格还是其他格式。\n\n## 2. 当前实际是什么实现\n\n当前 `minivectordb/python/minivectordb/__main__.py` 实现的是：\n\n### 启动后主动输出\n```json\n{\"type\":\"ready\"}\n```\n\n### stdin 接收一行 JSON\n```json\n{\"id\":1,\"op\":\"execute\",\"sql\":\"SELECT id FROM docs;\",\"search_mode\":\"exact\"}\n```\n\n程序先执行 `json.loads()`，再取出 `sql`，交给 SQLGlot 和 C++ 核心执行。\n\n### stdout 返回一行 JSON，并立即 flush\n```json\n{\"id\":1,\"ok\":true,\"columns\":[\"id\"],\"rows\":[[1]]}\n```\n\n### 关闭也接收 JSON\n```json\n{\"id\":2,\"op\":\"shutdown\"}\n```\n\n返回：\n```json\n{\"id\":2,\"ok\":true}\n```\n\n然后退出。日志写 stderr。\n\n**当前没有裸 SQL 通信模式，也没有自动识别、切换两种协议。** 直接往 stdin 输入：\n\n```sql\nSELECT id FROM docs;\n```\n\n会被当作非法 JSON，返回 `invalid_request`，不会执行 SQL。\n\n## 3. 准确结论\n\n| 对照对象 | 当前实现 |\n|---|---|\n| 网页“stdin/stdout、前台运行、stderr 日志” | 满足 |\n| 网页“不再采用 JSON 请求／响应封装” | **不满足这句话的字面要求** |\n| 当前官方分支的协议文档及实际驱动 | **采用其要求的 JSONL，公开检查通过** |\n| 正式平台究竟采用哪一种 | **尚未证实** |\n\n所以此前不能概括成“协议要求已全部满足”。准确说法应该是：**当前实现遵循了公开题包，但没有遵循网页“不再采用 JSON 封装”这句话；如果正式平台确实改用了非 JSON 协议，当前实现会在通信阶段失败。**"
+    },
+    {
+      "id": "r21-no-bare-sql-protocol",
+      "title": "No complete bare-SQL output protocol",
+      "source": "agent_visible_result_summary",
+      "session_line": 598,
+      "output": "**没有。现有材料没有定义一套“裸 SQL 输入”所配套的完整输出协议。** 明确到可以实现和自动校验的输出格式，只有题包中的 JSONL。\n\n逐份看：\n\n| 文档 | 对输出的规定 |\n|---|---|\n| 网页 §3.1 | 只说 stdout 返回“查询结果和执行状态”、及时 flush，日志写 stderr；**具体格式、错误码、就绪标识、退出方式交给题包约定** |\n| 网页 §3.2 | 说驱动统一比较输出，不通过 TCP；**没有提供另一种结果集或错误输出格式** |\n| 网页 §4.2.1 | 规定 Docker 前台、`-i`、管道和 `/data`，**没有定义通信报文** |\n| `STDIO_PROTOCOL.md` | 明确规定 JSONL：ready、查询结果、affected_rows、错误、shutdown 响应 |\n| `protocol_check/README.md` | 沿用上述 JSONL，不定义裸 SQL 的替代格式 |\n| `mysqltest/*.result` | 是**预期断言**，不是让数据库直接照着输出的通信报文 |\n\n网页 §3.1 的关键原文是：\n\n> SQL 的语句边界、结果集格式、错误码、就绪标识、精确／近似模式切换及正常退出方式，统一遵循 `2026-competition-round2` 分支配套测试驱动和题包约定……\n\n所以，**如果正式测试真的直接发送裸 SQL，当前公开材料仍不足以确定以下问题：**\n\n- 查询结果输出 JSON、TSV、CSV，还是文本表格？\n- 多行结果怎样结束？怎样区分下一个结果集？\n- 成功的建表、BEGIN、COMMIT 输出什么？\n- 错误的格式和边界是什么？\n- 启动就绪应输出什么？**不能自行认定是文本 `READY`。**\n- 正常关闭接收什么命令，返回什么？\n- 裸 SQL 没有 `id`，是否还要求响应 `id`，又怎样生成？\n\n还有一个区别：**裸 SQL 输入不必然意味着非 JSON 输出**，理论上可以是“裸 SQL 输入、JSON 结果输出”。但现有文档同样没有定义这种混合协议，不能据此猜实现。\n\n因此，准确结论是：\n\n> **网页否定了此前的 JSON 请求／响应封装，却没有给出替代格式；它指向的题包又仍然定义 JSONL。假如正式平台使用裸 SQL，那么公开的通信契约存在缺失或版本不一致，而不只是当前实现少支持了一种输入形式。**\n\n在不知道输出契约的情况下，单纯把输入改成裸 SQL，并不能保证通过，也可能连 ready 和第一条结果都无法被判题器识别。"
+    },
+    {
+      "id": "r22-driver-jsonl-source",
+      "title": "Case driver JSONL source path",
+      "source": "agent_visible_result_summary",
+      "session_line": 602,
+      "output": "**有，而且不是含糊描述：当前 round2 公开用例执行脚本，直接在代码里写死了 JSONL 的收发格式。**\n\n调用链是：\n\n```text\nprotocol_check/run.py\n  → _transport.py：向数据库 stdin 写请求、从 stdout 读响应\n  → _assertions.py：比较解析后的结果\n```\n\n## 1. 用例中的 SQL 怎么发送\n\n[`protocol_check/run.py:41`](protocol_check/run.py#L41)：\n\n```python\nresponse = session.request(sql, mode)\nassert_response(response, expectations[index], config)\n```\n\n它**没有直接把 SQL 文本写进 stdin**，而是调用 `session.request()`。\n\n[`protocol_check/_transport.py:123–128`](protocol_check/_transport.py#L123) 将 SQL 包装成对象：\n\n```python\nself.sequence += 1\nrequest = {\"id\": self.sequence if ident is None else ident, \"op\": op}\nif sql is not None:\n    request.update(sql=sql, search_mode=mode)\nself.send(request)\n```\n\n随后在 [`_transport.py:113`](protocol_check/_transport.py#L113) 序列化：\n\n```python\ndata = memoryview(\n    (json.dumps(request, ensure_ascii=False, allow_nan=False) + \"\\n\").encode()\n)\n```\n\n再通过 `os.write(self.proc.stdin.fileno(), data)` 写入数据库 stdin。\n\n**因此，数据库实际收到的是：**\n\n```json\n{\"id\":1,\"op\":\"execute\",\"sql\":\"SELECT id FROM docs;\",\"search_mode\":\"exact\"}\n```\n\n不是裸的 `SELECT id FROM docs;`。\n\n## 2. stdout 必须是什么格式\n\n[`protocol_check/_transport.py:89–108`](protocol_check/_transport.py#L89)：\n\n```python\n# 从 stdout 读取，直到一个实际换行\nline, self.buffer = self.buffer.split(b\"\\n\", 1)\n\n# 按 UTF-8 解码，再按 JSON 解析\nvalue = strict_json(line.decode(\"utf-8\"))\n\nif not isinstance(value, dict):\n    raise ProtocolError(\"response must be an object\")\n```\n\n然后还会检查：\n\n```python\nif type(response.get(\"id\")) is not type(request[\"id\"]) or response[\"id\"] != request[\"id\"]:\n    raise ProtocolError(\"response id differs from request\")\n\nif type(response.get(\"ok\")) is not bool:\n    raise ProtocolError(\"missing boolean ok\")\n```\n\n所以它要求的查询响应类似：\n\n```json\n{\"id\":1,\"ok\":true,\"columns\":[\"id\"],\"rows\":[[1],[2]]}\n```\n\n**裸文本、TSV、MySQL 表格、文本 READY 都不会被这段脚本当作有效响应。**\n\n## 3. cases 的结果怎么比较\n\n[`protocol_check/_assertions.py:14`](protocol_check/_assertions.py#L14) 比较的是**已经从 JSON 解析出来的对象字段**：\n\n| 预期内容 | 检查方式 |\n|---|---|\n| 成功 | `ok is True` |\n| 错误 | `ok is False`，且 `error.code` 是非空字符串；配置指定映射时再比较错误码 |\n| `affected_rows` | 类型和值精确比较 |\n| `columns` | 列名与顺序精确比较 |\n| `rows` | 按数组比较；浮点使用配置容差 |\n| `unordered: true` | 按多重集合比较，不丢重复行 |\n| `{}` | 仍检查 `ok:true`，只是没有额外字段断言 |\n\n因此，`.result` 文件不是数据库应该直接照搬输出的完整报文。\n\n## 4. ready 和 stderr 也写在脚本中\n\n启动时，脚本先读取 stdout，并准确要求：\n\n```python\nmessage == {\"type\": \"ready\"}\n```\n\n此时还没发送 SQL。\n\n启动进程使用：\n\n```python\nsubprocess.Popen(\n    argv,\n    stdin=subprocess.PIPE,\n    stdout=subprocess.PIPE,\n    stderr=self.log,\n    ...\n)\n```\n\n**stderr 单独保存为日志，不拿来解析或比较查询结果。**\n\n---\n\n**结论：如果正式测试使用的就是这套脚本，输入和输出必须是 JSONL，当前通信实现方向是对的；改成裸 SQL 反而无法通过它。**\n\n目前不确定的不是“这个脚本要求什么”，而是：**正式平台是否真的运行了这套公开脚本及同一版本。**"
+    },
+    {
+      "id": "r23-official-branch-package",
+      "title": "Official branch package verification",
+      "source": "agent_visible_result_summary",
+      "session_line": 606,
+      "output": "**有。刚才重新查了官方 `oceanbase/seekdb` 的 `2026-competition-round2` 分支，不只是检查我们自己的仓库。**\n\n官方分支当前提交为：\n\n```text\nf4d4e26653af823a7601668802f80e374ad6643c\n```\n\n里面确实包含：\n\n```text\nSTDIO_PROTOCOL.md                 # 通信协议约定\n\nprotocol_check/\n├── README.md                    # 驱动使用说明\n├── run.py                       # 公开用例执行入口\n├── _transport.py                # stdin/stdout 收发、ready、shutdown\n├── _assertions.py               # 结果比较规则\n├── config.json                  # 资源、超时、容差配置\n└── example_stdio.py             # 通信骨架\n\nmysqltest/\n├── README.md                    # 题包约定\n├── manifest.json                # 公开用例清单\n└── cases/\n    ├── *.test                   # SQL 与驱动指令\n    └── *.result                 # 预期断言\n```\n\n官方链接：\n\n- [分支根目录](https://github.com/oceanbase/seekdb/tree/2026-competition-round2)\n- [STDIO_PROTOCOL.md](https://github.com/oceanbase/seekdb/blob/2026-competition-round2/STDIO_PROTOCOL.md)\n- [测试驱动 protocol_check](https://github.com/oceanbase/seekdb/tree/2026-competition-round2/protocol_check)\n- [题包 mysqltest](https://github.com/oceanbase/seekdb/tree/2026-competition-round2/mysqltest)\n\n我还比较了**官方分支与我们当前提交**的这些文件：\n\n```bash\ngit diff remote/2026-competition-round2 HEAD -- \\\n  STDIO_PROTOCOL.md protocol_check mysqltest\n```\n\n**结果没有差异。它们不是我们自行编写或修改出来的协议。**\n\n因此，对你引用的这段话，准确判断是：\n\n1. **“遵循该分支配套测试驱动和题包约定”——分支中确实有对应材料，可以照着实现。**\n2. **这些现有材料规定并实际使用 JSONL。**\n3. **“不再采用此前示例中的 JSON 请求／响应封装”——与这些材料不一致。**\n\n还要区分：该分支提供的是 **20 个公开用例和公开检查驱动**，不是完整的正式平台评测源码；另外 9 个正式用例输入未公开。因此，我们能确认公开分支要求 JSONL，但还不能由此证明正式平台没有使用其他版本。"
+    },
+    {
+      "id": "r24-formal-check-details",
+      "title": "Detailed formal boundary check results",
+      "source": "agent_visible_result_summary",
+      "session_line": 656,
+      "output": "已按这 **5 项正式要求**重新做了定向验证，不只是重跑公开用例。这轮没有发现漏实现或失败，但结论仅限下面列出的数据和操作序列。\n\n## 1. 拒绝非法向量：通过\n\n测试了 **21 种非法输入 × 5 条入口路径，共 105 项检查**：\n\n- NaN、Infinity、正负 float32 溢出。\n- 维度不足、超出、空数组。\n- 非数值元素及错误向量语法。\n- 入口覆盖多行 INSERT、UPDATE、exact 查询、ann 查询，以及空集加 LIMIT 0。\n\n全部明确报错，且**每次失败后完整表状态都保持不变**。\n\n另外，最大有限 float32、最小正 subnormal、负零不仅接受成功，还核对了返回值的 float32 位模式。\n\n## 2. 失败语句原子性及事务可继续：通过\n\n分别验证了两条完整路径：\n\n- **此前成功修改 → 后续语句失败 → COMMIT**：此前成功修改保留，失败语句的有效前缀没有残留。\n- **此前成功修改 → 后续语句失败 → ROLLBACK**：记录内容、可见集合、第二张表和向量结果恢复。\n\n失败类型包括多行主键冲突、非法向量、超长字符串和失败 UPDATE。不是只检查错误响应，也比较了失败后的实际数据。\n\n## 3. 强杀、提交保留及重复恢复：通过所测序列\n\n实际执行的是 **`docker kill --signal=KILL` 数据库容器**，不是只终止 Docker CLI。\n\n已检查：\n\n- 读到 COMMIT 成功响应后强杀，普通数据、向量和跨表修改保留。\n- 未发送 COMMIT 就强杀，未提交修改不生效。\n- **恢复中已观察到正在读表、尚未输出 ready 时再次强杀**，再启动仍恢复正确。\n\n大数据两次成功恢复到 ready 分别约 **1.329 秒、1.241 秒**。没有据此声称穷举了全部内部持久化切点。\n\n## 4. 超过内存限额的数据：新空卷复测通过\n\n| 项目 | 本轮结果 |\n|---|---:|\n| 容器限额 | 2 CPU、2 GiB、禁 swap、128 PID |\n| 经 SQL 写入的有效负载 | **2,112 MiB** |\n| 实际数据文件 | **2,214,679,401 字节，大于内存上限** |\n| 内存峰值 | 达到 2 GiB 上限 |\n| OOM / OOM kill | **0 / 0** |\n| 写入、查询、故障与重复恢复整轮 | **97.60 秒** |\n\n核对了全部主键、内容样本和向量查询。没有向 `/data` 注入预制表文件，也没有只看进程 RSS。\n\n## 5. ANN 正确性、召回率和索引事务语义：通过所测数据\n\n这次补了**独立真值验证**：\n\n- 3 个固定种子，分别为 **8、16、128 维**，每组初始 128 行。\n- 覆盖 **24 个状态**：建索引前后、事务内修改、语句失败后、回滚、提交、强杀恢复等。\n- 合计 **1,728 次 exact/ann 查询**，检查数量、有效 ID、无重复、过滤、距离、排序和事务可见性。\n- 空集合检查已执行，**不纳入 Recall 均值**。\n\n单独统计 ANN 的 Recall@10：\n\n| 分组 | 非空查询数 | 平均 Recall@10 | 最低值 |\n|---|---:|---:|---:|\n| 无过滤 | 72 | **1.0** | **1.0** |\n| 有过滤 | 144 | **1.0** | **1.0** |\n\n真值由宿主端标准库独立进行 float32 量化和距离计算，**没有拿数据库返回结果当答案**。\n\n需明确：当前 ann 仍是 **FlatScan exact fallback**，这些结果证明所测正确性，不代表已实现近似加速或性能达标。\n\n---\n\n最后，原始公开驱动回归仍为 **20/20 用例、95 条 SQL 全部通过**。\n\n详细记录：\n[`docs/superpowers/experiments/2026-11-12-minivectordb-formal-requirements.md`](docs/superpowers/experiments/2026-11-12-minivectordb-formal-requirements.md)\n\n**本轮没有修改实现、Dockerfile、公开驱动、用例或配置，也没有提交、推送。** 目前这五项都有实现和对应实测证据，但尚未复现能够解释平台 0 分的反例；仍不能将有限定向检查通过等同于正式 29 个用例全部通过。"
+    },
+    {
+      "id": "r25-error-response-result",
+      "title": "Error response verification",
+      "source": "agent_visible_result_summary",
+      "session_line": 671,
+      "output": "**正常 SQL 执行错误的返回，符合当前发布题包的检查要求。** 我刚用实际 Docker、未修改的原始 transport 和断言器补测了 8 项，全部通过。\n\n### 实际返回格式\n\n重复主键实际返回：\n\n```json\n{\"id\":3,\"ok\":false,\"error\":{\"code\":\"duplicate_key\",\"message\":\"duplicate primary key\"}}\n```\n\n非法向量实际返回：\n\n```json\n{\"id\":\"nan\",\"ok\":false,\"error\":{\"code\":\"type_error\",\"message\":\"invalid vector number\"}}\n```\n\n符合 `STDIO_PROTOCOL.md` 的要求：\n\n- `id` 的值和 JSON 类型原样回传，包含字符串、超出 JS 安全范围的大整数。\n- `ok` 是布尔值 `false`，不是数字或字符串。\n- `error.code` 是非空字符串，提供了 `message`。\n- 通过 **stdout 单行 JSONL** 返回，换行并 flush，没有混入日志。\n- **每次报错后都成功执行下一条查询**，进程没有退出，数据也未被错误修改。\n- 最后正常 shutdown，退出码 0；本次 stderr 为 0 字节。\n\n**注意：SQL 执行失败本身也是协议响应，应该写 stdout JSON；诊断日志和错误堆栈才写 stderr。**\n\n### `type_error` 会不会因为名字不对而失败？\n\n按目前发布配置，不会。`protocol_check/config.json` 中是：\n\n```json\n\"error_codes\": {}\n```\n\n原比较器目前要求失败响应的 `error.code` **非空**；只有配置发布了具体映射，才要求精确匹配。协议也明确说，`duplicate_key` 是示例，`message` 的具体措辞不参与判题。\n\n因此，非法向量统一返回 `type_error`，**不能据此认定不符合当前要求**。目前语法错误也归为 `unsupported_sql`，同样通过当前检查；若以后冻结映射，则需要按映射核对。\n\n### 一个文案细节\n\n语法错误的 `message` 中仍保留 SQLGlot 的高亮转义，例如 `\\u001b[4m`。它已被 JSON 正确转义，**没有产生裸 ANSI 字节或额外物理行，不影响当前解析和比较**，但错误文案可以进一步清理。这次没有修改源码。\n\n本轮证据：\n`.superpowers/sdd/error-response-check/run-e36SqC4h/result.json`\n\n**结论：目前没有复现“错误返回格式或错误码不被现有驱动接受”的问题；不能把它认定为此次 0 分的原因。**"
+    },
+    {
+      "id": "r26-five-fixes-design",
+      "title": "Five-fixes design and storage tradeoff",
+      "source": "agent_visible_result_summary",
+      "session_line": 794,
+      "output": "设计收敛如下，重点是**保留原有提交协议，只改变 SQL 绑定和表的物理布局**。\n\n### 1. ORDER BY 与名称解析\n\n- `ORDER BY <非负整数>` 作为 **1-based 投影序号**，在 `*` 展开后绑定。\n- `0`、越界、超出 `uint64` 均明确报错；空表和 `LIMIT 0` 同样检查。\n- 普通投影中的整数仍是常量，不全局改写数字语义。\n- 表名、列名、索引名、别名采用大小写不敏感查找；**保存原始拼写用于结果输出**。\n- `N` 与 `n` 重复定义、重复 INSERT 列、重复 UPDATE 赋值均拒绝。\n- 支持表级单列 `PRIMARY KEY(id)`，与列内主键重复定义时拒绝。\n- 支持单表限定名和表别名；限定名必须匹配当前表或别名，不能直接忽略。\n- 支持已有表达式的冗余括号，不扩展到算术、JOIN 等语法。\n\n### 2. 默认输出列名\n\n- 显式 `AS` 仍优先。\n- 无别名的普通表达式使用 SQL 原始表达式文本，保留函数大小写、空格和括号。\n- `*` 展开后使用建表时保存的列名。\n- 排序别名按大小写不敏感匹配；同名但表达式不同仍报歧义。\n\n例如：\n\n```sql\nSELECT l2_distance(v,'[0,0]') FROM t;\n```\n\n输出列名保持：\n\n```text\nl2_distance(v,'[0,0]')\n```\n\n### 3. 向量转换\n\n接受：\n\n```text\n[+1,0] [01,0] [.5,0] [1.,0]\n[1e-46,0] [1e-50,0] [1e-999,0]\n```\n\n转换规则：\n\n1. 先按十进制语法解析为 `double`。\n2. 非有限 `double` 或转换为 float32 后溢出，继续拒绝。\n3. 有限值下溢为 float32 零，允许并实际存成零。\n4. NaN、Infinity、维度错误、缺失数字、尾随逗号和额外内容继续拒绝。\n5. INSERT、UPDATE、精确距离、ANN 距离共用同一转换函数。\n\n### 4. 增量段存储\n\n表目录项改为：\n\n```text\n基础段 + 按提交顺序排列的增量段\n```\n\n- 基础段：按主键排序的完整行。\n- 增量段：按主键排序的完整新行或删除墓碑。\n- INSERT 只写新增行；UPDATE 写修改后的完整行；DELETE 只写墓碑。\n- 查询按主键归并所有段，同一主键由最新段决定。\n- 语句失败不发布候选段；事务继续使用 Catalog 快照，COMMIT 仍只原子替换一次 `CURRENT`。\n- `RootStore::publish` 只验证并同步候选中的**新段**，不再每次扫描、同步所有旧表文件。\n- 增量段达到确定阈值后，在下一次修改中同步合并成新基础段，避免文件数无限增长。\n- Catalog 升级版本号；按刚才确认，不承担旧数据卷格式兼容。\n- 保留现有故障注入边界、GC 保护根和强杀恢复语义。\n\n### 5. 验收标准\n\n每项先写 RED 测试，再实现：\n\n- 本轮 53 项探针中属于这五个问题的差异逐项转回归测试。\n- 现有 C++/Python 测试及原始公开 20/20 全部重跑。\n- 现有事务、语句原子性、CURRENT 各阶段强杀测试继续通过。\n- 增加跨越多次段合并后的查询、事务、回滚和重启测试。\n- 用同一 **8,000行、64次单行 UPDATE** 实验复测：更新阶段设备写入量至少比当前 **312,475,648 字节降低90%**，且结果和恢复正确。\n- 最后做干净 Docker 构建、只读根/禁网/2GiB 验证。\n\n不会顺带增加 SELECT 1、NULL、OFFSET、DROP、浮点标量等未要求扩展，也不提交或推送。\n\n这个设计是否可以按此实施？"
+    },
+    {
+      "id": "r27-second-sql-gap-results",
+      "title": "Second SQL differential audit",
+      "source": "agent_visible_result_summary",
+      "session_line": 1126,
+      "output": "继续核对后，**确实还发现了几组可能影响 SQL 准入的遗漏**。其中一些比剩余的可选语法差异更危险，因为涉及**返回成功但结果错误**，以及**非法语句实际修改数据**。\n\n完整报告：\n\n[docs/superpowers/experiments/2026-11-12-minivectordb-sql-gap-audit.md](docs/superpowers/experiments/2026-11-12-minivectordb-sql-gap-audit.md)\n\n## 高优先级发现\n\n### 1. 普通列的默认输出列名仍不符合基准\n\n例如：\n\n| SQL | 已通过基准 | 当前版本 |\n|---|---|---|\n| `SELECT \\`ID\\` FROM t` | `ID` | `` `ID` `` |\n| `SELECT t.id FROM t` | `id` | `t.id` |\n| `SELECT (id) FROM t` | `id` | `(id)` |\n| `SELECT ((ID)) FROM t` | `ID` | `((ID))` |\n\n正确规则是：\n\n- 普通列：去掉限定名、括号和反引号，保留列名原始大小写；\n- 函数表达式：保留原始 SQL 文本；\n- 显式 AS：使用别名。\n\n我此前把“所有表达式都保留原始文本”作为统一规则，范围过宽。\n\n### 2. SQLGlot 宽松解析导致非法语句成功执行\n\n以下都是**基准报错、当前成功**：\n\n```sql\nSELECT id FROM t WHERE id==1;\nSELECT id FROM t ORDER BY id,;\nCREATE TABLE bad (id BIGINT PRIMARY KEY,);\nINSERT INTO bad VALUES (1,2),;\nINSERT INTO bad VALUES (1,2,);\nINSERT INTO bad (id,n,) VALUES (1,2);\nUPDATE t SET n=3,;\n```\n\n最严重的是尾随逗号 INSERT：\n\n```text\n基准：返回错误，之后表仍为空\n当前：affected_rows=1，之后实际存在 [1,2]\n```\n\n这直接涉及题面要求的“不支持的语句须返回错误，不能静默执行为其他含义”。\n\n### 3. 带符号的 ORDER BY 数字处理错误\n\n```sql\nSELECT n,id FROM t ORDER BY +1,id;\n```\n\n- 基准：`+1` 是普通常量，之后按 id 排序。\n- 当前：错误地将 `+1` 当成第一列序号，返回顺序不同。\n\n同时：\n\n- `ORDER BY -1/-0/-2`：基准按常量处理，当前拒绝。\n- `ORDER BY +0`：基准按常量处理，当前报序号0错误。\n- `ORDER BY 1.0/2.0`：基准按常量处理，当前拒绝。\n\n根因是 SQLGlot 去掉了正号，而当前降级器只看 AST，无法区分 `1` 与 `+1`。\n\n### 4. 限定星号和重复别名仍有差异\n\n基准支持：\n\n```sql\nSELECT t.* FROM t;\nSELECT T.* FROM T;\n```\n\n当前拒绝。\n\n重复显式别名：\n\n```sql\nSELECT id AS k,n AS k FROM t ORDER BY k;\n```\n\n- 基准选择**第一个显式别名**，按 id 排序。\n- 当前返回 `ambiguous_column`。\n\n交换投影顺序后，基准按第一个 k，即 n 排序。这说明之前的“同名不同表达式必须报歧义”是我们的自设规则，不是已通过基准的行为。\n\n## 次级差异\n\n还发现以下真实差异，但题面没有完整冻结相应规则，建议单独决定是否对齐：\n\n- `!=`、`<>`；\n- BIGINT 与数字字符串比较、INSERT/UPDATE 类型转换；\n- 重复 UPDATE 赋值最后一个生效；\n- VARCHAR/VECTOR 的65535上限；\n- 超大 LIMIT 截断；\n- 多个末尾分号；\n- 索引 WITH 选项。\n\n不建议为了消除差异而盲目复制所有参考行为。例如参考会接受 `wrong.*` 并忽略错误限定名，也会忽略索引 WITH 选项，这些不应直接照搬。\n\n本轮共保存了 **127＋58＋18项**差分/优先级探针及实际响应。没有修改生产代码、公开材料，也没有提交或推送；容器和卷均已清理。"
+    },
+    {
+      "id": "r28-frozen-benchmark-parameters",
+      "title": "Frozen local benchmark parameters",
+      "source": "agent_visible_result_summary",
+      "session_line": 1135,
+      "output": "已确认赛题默认性能负载为：\n\n- **10,000条、128维、每批100条写入并提交**；\n- **1,000次 TopK，K=10，一半带普通列等值过滤**；\n- 查询默认 **exact**；\n- 三轮独立容器，统计端到端 T、cgroup I/O B、`memory.peak` M；\n- 查询的装载、索引准备和预热不计入查询 T，但计入 B/M；\n- 本地没有官方基线值，因此只建立我们的原始基线和后续相对提升，不伪造 E 或赛事分数。\n\n有三种做法：\n\n**A. 官方形状的 Docker 端到端压测＋独立 perf 采样（推荐）**  \n包含 JSONL、SQL 解析、C++ 执行和 fsync，结果最接近正式评测。\n\n**B. 直接压 native Engine**  \n速度快、适合细分微基准，但会漏掉协议和持久化成本，不能替代 A。\n\n**C. 直接复用队友 perf 分支压测**  \n可节省工作，但生成器、指标口径和当前代码不同，不适合作为我们的独立基线。\n\n我建议按 A 实施，设计如下：\n\n- 固定公开形状和本地种子，100个写入批次、1,000个查询；\n- 保存每批及每次查询耗时，汇总各阶段总耗时和 p50/p95/p99/max；\n- 三轮独立容器和卷，使用2 CPU、2GiB、禁 swap、只读根、禁网；\n- 查询前单独记录建索引和预热；事后独立校验内容、持久化、过滤和 Recall@10；\n- `perf` 使用单独采样运行，不污染正式基线计时；\n- 当前系统未安装 `perf`，且 sudo 需要密码。建议将 `linux-perf` 包**下载并解压到本地审计目录**，不修改系统安装。\n\n是否按方案 A 执行，并允许本地解压 `linux-perf` 工具？"
+    },
+    {
+      "id": "r29-optimization-recommendations",
+      "title": "Optimization recommendations from perf",
+      "source": "agent_visible_result_summary",
+      "session_line": 1262,
+      "output": "基线已保存在：\n\n- 压测脚本：`tools/benchmark/`\n- 三轮原始数据：`.superpowers/sdd/performance-baseline/rounds/`\n- perf 数据与报告：`.superpowers/sdd/performance-baseline/profile-*`\n\n根据 perf，我建议先做三个相互独立、可分别复测的改动：\n\n### 方案 A：有界缓冲 + 持有 reader + COW 主键集合（推荐）\n\n1. **解码**\n   - `storage::Input` 增加64KiB有界缓冲区；\n   - 大字符串直接读入目标内存；\n   - 向量由逐分量 `u32()` 改为整块读入 `float[]`；\n   - 不使用全表常驻，不改变文件格式和恢复边界。\n\n2. **查询段持有**\n   - 为 TableEntry 惰性持有 `LogicalTableReader`；\n   - 查询前 `reset()`，复用已打开的文件和路径，不重复 open/stat；\n   - 表发生修改时使 reader 失效，事务/回滚仍通过 Catalog 根决定可见段；\n   - 保留归并逻辑，单客户端下无并发读写 reader。\n\n3. **INSERT 主键集合**\n   - 每表惰性建立 `unordered_set<int64>`；\n   - INSERT 直接查集合，不再为重复键扫描全部向量行；\n   - 修改时使用 copy-on-write，避免失败语句、回滚或发布失败污染旧根；\n   - UPDATE/DELETE 不改主键，因此复用原集合。\n\n### 方案 B：mmap + 建索引时合并 + Engine 管理 PK 索引\n\n潜在收益更高，但同时改变更多资源和生命周期路径，首轮优化风险较大。\n\n### 方案 C：只做建索引时合并\n\n实现最少，但不能解决写入读取和日常多段查询开销。\n\n我建议按 A 分三个 RED→基准复测循环执行：每一步先跑原测试和单轮同一压测，最后做完整三轮比较。若某项没有收益或指标退化，就保留证据并回退该项，而不是继续叠加。\n\n是否按方案 A 实施？"
+    },
+    {
+      "id": "r30-buffer-single-round",
+      "title": "Buffered decoding single-round result",
+      "source": "agent_visible_result_summary",
+      "session_line": 1319,
+      "output": "缓冲优化效果显著：单轮查询 **58.80→6.93秒**，写入 **6.73→4.06秒**，正确性与 Recall 全通过。B/M 有上升，会在最终三轮中保留并分析，不隐藏。\n\n现在进入 reader 持有/reset 的 RED。"
+    },
+    {
+      "id": "r31-reader-hold-negative",
+      "title": "Reader-hold negative result and rollback",
+      "source": "agent_visible_result_summary",
+      "session_line": 1351,
+      "output": "reader 持有的单轮结果没有收益：\n\n- 查询：6.93→7.58秒；\n- 写入：4.06→4.15秒；\n- M 基本不变。\n\n按已确认规则，我会保留这次不利证据并回退“持有 reader”改动，只保留已明确有效的缓冲解码。接下来在缓冲版本上实现 PK 集合。"
+    },
+    {
+      "id": "r32-pk-delete-bug",
+      "title": "Primary-key set DELETE regression",
+      "source": "agent_visible_result_summary",
+      "session_line": 1377,
+      "output": "回归抓到一个实际语义错误：DELETE 后重插入被 PK 集合误报重复。根因清楚：DELETE 必须从候选集合删除键，不能简单复用。将在 tombstone 成功写入后 COW 删除，旧根仍不变。"
+    },
+    {
+      "id": "r33-pk-delete-fix",
+      "title": "Primary-key DELETE fix regression",
+      "source": "agent_visible_result_summary",
+      "session_line": 1383,
+      "output": "DELETE 修复后，188项测试全部通过。现在测量缓冲+PK集合版本，reader 持有已排除。"
+    },
+    {
+      "id": "r34-final-hotspot-shift",
+      "title": "Final perf hotspot shift",
+      "source": "agent_visible_result_summary",
+      "session_line": 1395,
+      "output": "最终 perf 显示热点已移动：查询中 `Input::bytes` 约16.84%、`validate_row` 约13.05%、距离计算升至约12.90%，原来的 iostream 逐字节函数已不再占主导。写入样本较少（137个 cpu_core），只作定性参考。\n\n我再做一次新镜像全量测试和超内存复测，然后保存优化报告。"
+    },
+    {
+      "id": "r35-performance-delivery",
+      "title": "Performance optimization commit delivery",
+      "source": "agent_visible_result_summary",
+      "session_line": 1427,
+      "output": "已提交并成功推送到 `origin/2026-competition-round2`。\n\n- **提交：**`299538bf4efc922ec01978229b019d5eae60c3bf`\n- **信息：**`perf(minivectordb): buffer storage decoding and index primary keys`\n- **远端 SHA：**已核对一致\n- **提交内容：**性能优化、压测/perf 脚本、基线与优化报告\n- **验证：**11/11 CTest、188/188 pytest、压测工具5/5测试\n\n性能基线对比：\n\n- 写入 T：**6.732→4.089秒**\n- 查询 T：**58.800→7.600秒**\n- Recall@10 两组均为1.0\n\n原 Dockerfile 的干净构建仍受 Docker Hub 连接超时阻塞；当前源码已通过派生镜像验证，该限制已保留在报告中。SQL 差分审计报告按约定未纳入本次提交，仍保持未跟踪。"
+    },
+    {
+      "id": "r38-handshake-and-pipe-checks",
+      "title": "Handshake and raw pipe checks",
+      "source": "agent_visible_result_summary",
+      "session_line": 542,
+      "output": "目前按 README 规定的顺序，握手、单个用例和全部公开用例均已通过；文档 §7 的原样 Bash 管道示例也通过。独立管道检查确认：程序在收到任何输入前主动输出并 flush ready，日志没有混入 stdout，shutdown 后没有多余输出。\n\n§3.2 还明确要求超内存处理和“恢复途中再次终止”。我会补一个有限诊断：容器限内存 256 MiB，经 SQL 写入约 320 MiB 数据，总时限 10 分钟、数据写入量设上限。它用于检查出内存与重复恢复机制，会与正式 2 GiB 配置下的测试分开报告，不冒充正式规模验证。"
+    },
+    {
+      "id": "r39-small-memory-recovery",
+      "title": "256 MiB data and interrupted recovery",
+      "source": "agent_visible_result_summary",
+      "session_line": 554,
+      "output": "256 MiB 容器处理并恢复了约 320 MiB 数据；在观察到恢复过程正在读取表文件、且尚未输出 ready 时再次强杀，第三次启动也成功恢复。\n\n为避免只用较小诊断配置说明问题，我再补一轮题包原定的 **2 CPU / 2 GiB / 禁 swap / 128 PID**：通过 stdin 写入 2,112 MiB 数据后复验查询和重复恢复。仍限时 10 分钟，单设备写入预算上限 48 GiB；这是自造验收数据，不是隐藏用例或性能计分。"
+    },
+    {
+      "id": "r40-diagnostic-budget-correction",
+      "title": "Diagnostic write-budget correction",
+      "source": "agent_visible_result_summary",
+      "session_line": 560,
+      "output": "2 GiB 这一轮的查询和重复恢复已通过，但复核原始计数时发现了诊断脚本的问题：写入预算只在插入批次后检查，漏算了后续无界排序的外排写入，所以这一轮不能记为“预算内通过”。\n\n我会保留该轮日志，把“核对全部 ID”改为题目允许的无序多重集合校验，并核对各次启动的累计写入预算后复测。数据库源码不改。原始记录中大字段排序造成的 I/O 放大，也会作为实现风险写入报告，而不是忽略。"
+    },
+    {
+      "id": "r41-original-docker-examples",
+      "title": "Original Dockerfile examples recovered",
+      "source": "agent_visible_result_summary",
+      "session_line": 584,
+      "output": "补到了之前缺失的 §4.2.1 原始代码块：普通网页没有渲染它们，但通过该公开文档的正文 API，已取得并解码完整示例。此前“无法逐字比对”的限制现在可以解除。\n\n示例确实包含 Ubuntu 24.04、`VOLUME [\"/data\"]`、ENTRYPOINT/CMD 和 `docker run --rm -i -v ...`。我会逐项对照当前 Dockerfile，并用唯一空卷复跑该启动方式；不会覆盖你的已有镜像标签或数据卷。"
+    },
+    {
+      "id": "r42-name-binding-tests",
+      "title": "Name binding and table-level PK tests",
+      "source": "agent_visible_result_summary",
+      "session_line": 881,
+      "output": "Task 2 已完成：124项通过。另一处测试数据也已纠正：两个 BIGINT 列中选择任一列作主键都合法，非 BIGINT 主键反例应使用 VARCHAR。现在开始向量转换 RED。"
+    },
+    {
+      "id": "r43-vector-conversion-tests",
+      "title": "Vector conversion regression",
+      "source": "agent_visible_result_summary",
+      "session_line": 907,
+      "output": "Task 3 已完成：C++ 数值测试及67项 Python 测试通过；`+1` 和 `01` 已从旧非法列表移到合法覆盖，NaN/Inf/溢出仍拒绝。接下来进入存储改造，这是本轮风险最高的部分。"
+    },
+    {
+      "id": "r45-new-object-model-green",
+      "title": "New catalog object model GREEN",
+      "source": "agent_visible_result_summary",
+      "session_line": 949,
+      "output": "Task 4 已完成：11项 CTest、184项 pytest 通过，旧 DML 已在 `MVDBC003` 对象列表上保持原行为。按已确认设计，旧 Catalog 读取兼容测试已改为新格式，不保留旧卷升级承诺。现在为真正的增量 DML 写 RED。"
+    },
+    {
+      "id": "r46-incremental-dml-red",
+      "title": "Incremental DML RED",
+      "source": "agent_visible_result_summary",
+      "session_line": 959,
+      "output": "增量 RED 已确认：64次 UPDATE 后仍只有1个整表对象；无匹配 UPDATE 也更换了表对象。补充了对象数断言，因为只看最终文件总大小无法测出反复重写和 GC 的累计成本。现在切换 DML。"
+    },
+    {
+      "id": "r47-compaction-test-correction",
+      "title": "Compaction boundary test correction",
+      "source": "agent_visible_result_summary",
+      "session_line": 971,
+      "output": "实现后发现测试把初始 INSERT 的增量段漏算了：建表后先有1个 INSERT delta，所以第64次 UPDATE 正好触发设计中的合并，而不是保留64个 UPDATE delta。这不是实现回退；我会把“纯追加”测试改为63次，跨合并正确性继续由70次修改测试覆盖。"
+    },
+    {
+      "id": "r48-stale-format-assertions",
+      "title": "Stale single-file assertions corrected",
+      "source": "agent_visible_result_summary",
+      "session_line": 979,
+      "output": "增量功能测试已通过；事务/恢复回归发现6处旧断言仍假设“每表只有1个文件”。现在每表合法持有基础段和增量段，这些失败是格式断言过期，不是事务状态错误。会按实际段数更新，并增加“缺失已提交增量段不得 ready”的覆盖。"
+    },
+    {
+      "id": "r49-incremental-transaction-tests",
+      "title": "Incremental transaction and recovery tests",
+      "source": "agent_visible_result_summary",
+      "session_line": 991,
+      "output": "Task 5 的定向验证已通过：90项 pytest、11项 CTest，包括跨合并、重插入、回滚、缺增量段拒绝启动及 CURRENT 故障点。接下来做完整回归和干净 Docker 验收；旧镜像不会用于证明新实现。"
+    },
+    {
+      "id": "r50-target-differential-recheck",
+      "title": "Target differential and write amplification recheck",
+      "source": "agent_visible_result_summary",
+      "session_line": 1021,
+      "output": "53项差分中，五个目标组的24项原有预期差异已全部消除；剩余17项是自设的别名歧义预期及未纳入范围的额外语法。新镜像64次 UPDATE 写入为 **5,656,576字节**，低于31,247,565字节目标。接着验证默认列名和超内存恢复。"
+    },
+    {
+      "id": "r51-incremental-resource-check",
+      "title": "Incremental storage resource check",
+      "source": "agent_visible_result_summary",
+      "session_line": 1037,
+      "output": "2GiB 超内存诊断也已通过：2,112MiB 数据、33批加载、完整 ID/样本/ANN 校验、两次恢复及一次 ready 前强杀均成功，耗时约47.4秒。默认列名的4项实际 Docker 检查通过。现在做最终代码审查、文档和全量复验。"
+    },
+    {
+      "id": "r52-final-storage-measurement",
+      "title": "Final incremental storage measurements",
+      "source": "agent_visible_result_summary",
+      "session_line": 1045,
+      "output": "最终测量结果：更新阶段写入从 **312,475,648** 降到 **5,656,576字节**，减少 **98.19%**（旧值为新值约55.24倍）；超过90%目标。2GiB 诊断数据文件为 **2,214,701,020字节**，无 OOM，ready 前强杀及后续恢复均通过。"
+    },
+    {
+      "id": "r53-wide-sql-matrix",
+      "title": "First 127-item SQL matrix",
+      "source": "agent_visible_result_summary",
+      "session_line": 1090,
+      "output": "首轮127项矩阵发现23项差异，其中有几类比之前更值得警惕：\n\n- 默认列名不能一律保留原始表达式：普通列应去掉限定、括号和反引号，函数表达式才保留原文。\n- 限定星号 `t.*` 基准支持，我们仍拒绝。\n- `ORDER BY +1/-1` 基准按常量处理，我们分别误作序号和直接拒绝。\n- SQLGlot 让我们额外接受了基准拒绝的 `==`、`LIMIT +1`、CREATE 尾随逗号。\n- 另有混合类型比较、大小写重复赋值等语义差异，需要继续区分题面要求与参考扩展。\n\n我会继续追源码并补第二轮边界，暂不改产品。"
+    },
+    {
+      "id": "r54-parser-leniency-matrix",
+      "title": "Second 58-item parser leniency matrix",
+      "source": "agent_visible_result_summary",
+      "session_line": 1112,
+      "output": "第二轮58项又发现25项差异。最明确的新风险是 SQLGlot 的宽松解析：ORDER BY、CREATE、INSERT 列/行/值、UPDATE 的尾随逗号都会在我方成功执行，基准均报错；这些不是“多支持功能”，而是错误处理边界不一致。还需要确认重复别名和重复赋值的最终状态。"
+    },
+    {
+      "id": "r55-sql-risk-priorities",
+      "title": "SQL differential risk priorities",
+      "source": "agent_visible_result_summary",
+      "session_line": 1116,
+      "output": "优先级结果已经明确：重复别名并不是基准报错，而是选择第一个显式别名；重复 UPDATE 则是最后一个赋值生效。更重要的是，尾随逗号 INSERT 在我方实际写入了一行，基准保持空表。这足以作为下一轮修复的高优先级证据。"
+    },
+    {
+      "id": "r56-independent-oracle",
+      "title": "Independent C++ oracle cross-check",
+      "source": "agent_visible_result_summary",
+      "session_line": 1176,
+      "output": "Task 1 完成：3项通过，包括独立 C++ oracle 与 Python 小样交叉验证。修正了统计测试自身的加法错误（1+2+3+4=10）。现在实现 Docker 计时和指标校验。"
+    },
+    {
+      "id": "r57-benchmark-tool-tests",
+      "title": "Benchmark tool unit tests",
+      "source": "agent_visible_result_summary",
+      "session_line": 1195,
+      "output": "工具单元测试5项通过。精确 TopK 校验测试最初把“顺序相同”和“仅集合相同”写反了，已修正并保留失败记录。现在运行第一轮完整10,000行/1,000查询联调。"
+    },
+    {
+      "id": "r58-benchmark-race-fix",
+      "title": "Benchmark container inspection race fix",
+      "source": "agent_visible_result_summary",
+      "session_line": 1197,
+      "output": "单轮联调暴露的是压测器竞态，不是数据库性能失败：`ready=False` 时 `docker run` 进程刚启动，立即 `docker inspect` 尚找不到容器。将改为有条件等待容器/cgroup出现后再采样，同时让失败结果直接落盘退出，避免汇总阶段 KeyError 掩盖原始错误。"
+    },
+    {
+      "id": "r59-benchmark-single-round",
+      "title": "Benchmark full single-round rehearsal",
+      "source": "agent_visible_result_summary",
+      "session_line": 1203,
+      "output": "单轮完整联调已通过：\n\n- 写入：6.760秒，100批；\n- 查询：58.628秒，1,000次 exact，约58.1ms/查询；\n- 两组 Recall@10 均为1.0；\n- 全量写入内容和重启恢复校验通过。\n\n首次运行的物理读取包含镜像冷加载；后续三轮将复用已预热的镜像环境，并在报告中明确本地缓存口径。现在执行三轮基线。"
+    },
+    {
+      "id": "r60-perf-sigint-handling",
+      "title": "Perf normal SIGINT handling",
+      "source": "agent_visible_result_summary",
+      "session_line": 1231,
+      "output": "首次写入采样实际生成了726个样本，但 perf 进程以 `-SIGINT` 结束，被采样器误当失败。日志明确显示数据已完整写入；我会接受 perf 的正常 SIGINT 终止码并重新跑，不丢弃这份原始记录。"
+    },
+    {
+      "id": "r63-buffer-green",
+      "title": "Buffered input GREEN and fault tests",
+      "source": "agent_visible_result_summary",
+      "session_line": 1297,
+      "output": "缓冲解码 GREEN：11 CTest、188 pytest，并用更新后的 fault build 重跑20项事务/恢复通过。现在构建 `opt-buffer` 并做第一轮同口径复测。"
+    },
+    {
+      "id": "r64-derived-build-boundary",
+      "title": "Docker Hub failure and derived-build boundary",
+      "source": "agent_visible_result_summary",
+      "session_line": 1305,
+      "output": "Docker Hub 当前连接超时，本地又没有保留 `python:3.12.10-slim` 标签。为不中断优化，我会用已固定的 `five-fixes` 镜像作为本地构建基底，仅在临时构建上下文中安装编译器并替换新 extension/Python；生产 Dockerfile 不改，最终仍保留干净构建复验要求。"
+    }
+  ],
+  "evidence_units": [
+    {
+      "id": "unit-01-decomposition",
+      "dimension_suggestion": "问题理解与自主拆解",
+      "student_evidence": {
+        "pointer": "/conversations/0/content",
+        "quote": "首先设计接口，用以接入测试体系，按照要求应该是标准mysql语法系统\n然后接入语法解析，这个就用现成的 SQLGlot 只需要解析能力就行了"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/0/output",
+        "quote": "计划已写入仓库："
+      },
+      "rationale": "学生给出接口、解析、测试和后续优化的实施顺序；Agent 产出对应计划。"
+    },
+    {
+      "id": "unit-02-test-strategy",
+      "dimension_suggestion": "独立验证与质疑",
+      "student_evidence": {
+        "pointer": "/conversations/1/content",
+        "quote": "对于12个任务 每个任务应该有少量的测试来固定表现 总的case是用于赛题提交的"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/1/output",
+        "quote": "Task 1 已完成：117项通过。"
+      },
+      "rationale": "学生区分任务级回归测试与最终赛题验收，后续任务留下实际测试结果。"
+    },
+    {
+      "id": "unit-03-scope-correction",
+      "dimension_suggestion": "实验与反馈迭代",
+      "student_evidence": {
+        "pointer": "/conversations/2/content",
+        "quote": "撤除本轮 NULL 扩展，恢复原来的明确拒绝行为。"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/2/output",
+        "quote": "NULL 源码和测试已恢复到第一版，原来的 NULL 拒绝测试已重新通过；"
+      },
+      "rationale": "学生根据题面纠正此前的扩展方向，撤回实现并复测，而非继续堆叠功能。"
+    },
+    {
+      "id": "unit-04-delivery-flow",
+      "dimension_suggestion": "问题理解与自主拆解",
+      "student_evidence": {
+        "pointer": "/conversations/3/content",
+        "quote": "着重再看一下判题流程 也有可能是按照标准判题流程根本判不了导致的不通过"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/3/output",
+        "quote": "已完成合入并推送到 `origin`。"
+      },
+      "rationale": "学生要求检查平台取码、构建和启动链路，最终修正了目标分支交付。"
+    },
+    {
+      "id": "unit-05-protocol-challenge",
+      "dimension_suggestion": "独立验证与质疑",
+      "student_evidence": {
+        "pointer": "/conversations/6/content",
+        "quote": "不再采用此前示例中的 JSON 请求／响应封装 这个应该是说的另外一些题目的问题\n\n再按照公开题包和公开检查驱动看一下"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/4/output",
+        "quote": "我此前仅凭“此前示例”就将其判为当前协议冲突，判断过强，已修正报告。"
+      },
+      "rationale": "学生质疑网页措辞的适用范围，促使重新以公开题包和真实驱动核验，纠正 Agent 判断。"
+    },
+    {
+      "id": "unit-06-formal-boundaries",
+      "dimension_suggestion": "技术理解与迁移",
+      "student_evidence": {
+        "pointer": "/conversations/7/content",
+        "quote": "隐藏的是测试数据，而非功能要求。正式题目的完整语法、资源预算和冻结配置以统一题包为准。"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/5/output",
+        "quote": "共 **1,728 次 exact/ann 查询**通过独立真值核验。ANN 的有过滤、无过滤非空组平均 Recall 均为 **1.0**"
+      },
+      "rationale": "学生把公开包说明迁移为非法向量、事务、恢复、超内存和 ANN 的定向验证。"
+    },
+    {
+      "id": "unit-07-known-good-differential",
+      "dimension_suggestion": "独立验证与质疑",
+      "student_evidence": {
+        "pointer": "/conversations/9/content",
+        "quote": "现在可以完全把目标指向origin的correct-test分支的b410e23ac01bcbf1df342faa6030034ab1d05e6c 探究为什么这个实现可以通过正确性测试"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/7/output",
+        "quote": "**差分：**五个目标组的24项原有差异全部通过独立预期。"
+      },
+      "rationale": "学生指定已确认正确性的固定版本作为差分基准；teammate 仅作外部参考，结果为本地修复与复测。"
+    },
+    {
+      "id": "unit-08-performance-baseline",
+      "dimension_suggestion": "实验与反馈迭代",
+      "student_evidence": {
+        "pointer": "/conversations/10/content",
+        "quote": "按照赛题我们自己先做出一套压测出来，然后拿perf跑一下。压测把每个环节的计时也留下来，然后得到一份基准。"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/8/output",
+        "quote": "四个 iostream 读取函数合计 **72.36%** 自耗时；"
+      },
+      "rationale": "学生要求先建立同口径基准再用 perf 定位，实际结果发现主要开销并非距离数学循环。"
+    },
+    {
+      "id": "unit-09-performance-iteration",
+      "dimension_suggestion": "取舍与反思",
+      "student_evidence": {
+        "pointer": "/conversations/11/content",
+        "quote": "首先对于逐字节解码应该是比较容易处理的\n查询的多段打开通过某些hold方法应该就可以解决(或者其它方法也可以)\nINSERT重复键位用PK集合应该就可以处理"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/9/output",
+        "quote": "reader 持有没有收益，查询单轮从6.93升至7.58秒，相关生产改动已全部移除，不利证据保留。"
+      },
+      "rationale": "学生提出三个可独立验证的优化假设；实际结果保留有效项、回退退化项，并记录内存代价。"
+    },
+    {
+      "id": "unit-10-container-admission",
+      "dimension_suggestion": "独立验证与质疑",
+      "student_evidence": {
+        "pointer": "/conversations/22/content",
+        "quote": "再注意看4.2.1的dockerfile要求和示例"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/16/output",
+        "quote": "对纯源码镜像，使用默认入口和受限 Podman 容器完成了："
+      },
+      "rationale": "学生要求专项核对 Dockerfile 示例；实际从提交源码构建并检查默认入口、只读根、独立数据卷、强杀与重启。"
+    },
+    {
+      "id": "unit-11-error-response",
+      "dimension_suggestion": "独立验证与质疑",
+      "student_evidence": {
+        "pointer": "/conversations/29/content",
+        "quote": "报错返回符合要求吗"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/24/output",
+        "quote": "我刚用实际 Docker、未修改的原始 transport 和断言器补测了 8 项，全部通过。"
+      },
+      "rationale": "学生把错误响应单独列为验证对象；实际使用原 transport 和断言器检查八类错误及错误后的会话连续性。"
+    },
+    {
+      "id": "unit-12-second-sql-audit",
+      "dimension_suggestion": "实验与反馈迭代",
+      "student_evidence": {
+        "pointer": "/conversations/34/content",
+        "quote": "从表现上来看SQL相关部分的出错概率会更高 着重排查这一点"
+      },
+      "result_evidence": {
+        "pointer": "/experiments/26/output",
+        "quote": "其中一些比剩余的可选语法差异更危险，因为涉及**返回成功但结果错误**，以及**非法语句实际修改数据**。"
+      },
+      "rationale": "五项修复后，学生要求继续以 SQL 为重点做第二轮差分；新矩阵发现普通列名、宽松解析和非法写入等后续风险。"
+    }
+  ],
+  "related_context": {
+    "external_reference_pointer": "/conversations/8/content",
+    "protocol_audit_request_pointer": "/conversations/5/content",
+    "delivery_decision_pointer": "/conversations/4/content",
+    "differential_findings_pointer": "/experiments/6/output",
+    "initial_gap_analysis_pointer": "/experiments/11/output",
+    "full_flow_checklist_pointer": "/experiments/18/output",
+    "storage_design_pointer": "/experiments/25/output",
+    "buffer_single_round_pointer": "/experiments/29/output",
+    "reader_negative_result_pointer": "/experiments/30/output",
+    "pk_delete_regression_pointer": "/experiments/31/output",
+    "final_hotspot_pointer": "/experiments/33/output"
+  },
+  "retrospective": [],
+  "limitations": [
+    "Public 20/20 results are not presented as proof of hidden formal cases.",
+    "Local T/B/M measurements are not official platform scores; no official E or ranking is claimed.",
+    "The final local optimization image used a derived build because Docker Hub timed out; clean original-Dockerfile build remained unverified at that point.",
+    "No retrospective student answers have been added in this first version.",
+    "Additional real messages supply context; they are not assumed to be independent scoring units, and file size alone does not imply a higher score."
+  ]
+}
